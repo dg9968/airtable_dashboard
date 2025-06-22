@@ -1,6 +1,6 @@
 // app/api/diagnostic/route.ts
 import { NextResponse } from 'next/server';
-import { fetchTableData, testConnection } from '@/lib/airtable';
+import { fetchAllTableData, testConnection } from '@/lib/airtable';
 
 export async function GET() {
   try {
@@ -16,8 +16,8 @@ export async function GET() {
       );
     }
 
-    // Get data from Subscriptions Corporate table
-    const records = await fetchTableData('Subscriptions Corporate');
+    // Get ALL data from Subscriptions Corporate table
+    const records = await fetchAllTableData('Subscriptions Corporate');
     
     // Get the first 3 records and show ALL their fields
     const diagnosticData = records.slice(0, 3).map(record => ({

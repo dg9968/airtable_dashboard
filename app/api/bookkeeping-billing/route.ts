@@ -28,7 +28,7 @@ export async function GET(request: Request) {
     // Get query parameters
     const { searchParams } = new URL(request.url);
     const tableName = searchParams.get('table') || 'Subscriptions Corporate';
-    const viewName = searchParams.get('view') || 'Grid view';
+    const viewName = searchParams.get('view') || 'Bookkeeping Billing';
     const maxRecords = searchParams.get('maxRecords') ? parseInt(searchParams.get('maxRecords')!) : undefined;
     const sortField = searchParams.get('sortField');
     const sortDirection = searchParams.get('sortDirection') as 'asc' | 'desc' || 'asc';
