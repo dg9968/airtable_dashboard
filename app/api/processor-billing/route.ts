@@ -1,4 +1,4 @@
-// app/api/view/route.ts
+// app/api/processor-billing/route.ts
 import { NextResponse } from 'next/server';
 import { testConnection } from '@/lib/airtable';
 import Airtable from 'airtable';
@@ -10,7 +10,7 @@ const airtable = new Airtable({
 
 const base = airtable.base(process.env.AIRTABLE_BASE_ID || '');
 
-export async function GET(request: Request) {
+export async function GET() {
   try {
     // Test connection first
     const connectionTest = await testConnection();
@@ -25,42 +25,18 @@ export async function GET(request: Request) {
       );
     }
 
-    // Get query parameters
-    const { searchParams } = new URL(request.url);
-    const tableName = searchParams.get('table') || 'Subscriptions Corporate';
-    const viewName = searchParams.get('view') || 'Bookkeeping Billing';
-    const maxRecords = searchParams.get('maxRecords') ? parseInt(searchParams.get('maxRecords')!) : undefined;
-    const sortField = searchParams.get('sortField');
-    const sortDirection = searchParams.get('sortDirection') as 'asc' | 'desc' || 'asc';
-    const filterByFormula = searchParams.get('filterByFormula');
+    const tableName = 'Subscriptions Corporate';
+    const viewName = 'Bookkeeping Billing';
 
     console.log(`Fetching view "${viewName}" from table "${tableName}"`);
 
     const records: any[] = [];
     
-    // Build select options
-    const selectOptions: any = {
-      view: viewName
-    };
-    
-    if (maxRecords && maxRecords > 0) {
-      selectOptions.maxRecords = maxRecords;
-    }
-    
-    if (sortField) {
-      selectOptions.sort = [{
-        field: sortField,
-        direction: sortDirection
-      }];
-    }
-    
-    if (filterByFormula) {
-      selectOptions.filterByFormula = filterByFormula;
-    }
-
-    // Fetch records from the specified view
+    // Fetch records from the Bookkeeping Billing view
     await base(tableName)
-      .select(selectOptions)
+      .select({
+        view: viewName
+      })
       .eachPage((pageRecords, fetchNextPage) => {
         pageRecords.forEach((record) => {
           records.push({
@@ -79,78 +55,35 @@ export async function GET(request: Request) {
 
     console.log(`Total records fetched: ${records.length}`);
 
-    // Analyze the data structure
-    const fieldNames = records.length > 0 ? Object.keys(records[0].fields) : [];
-    const fieldTypes: Record<string, string> = {};
-    
-    if (records.length > 0) {
-      fieldNames.forEach(field => {
-        const sampleValue = records[0].fields[field];
-        if (Array.isArray(sampleValue)) {
-          fieldTypes[field] = 'array';
-        } else if (sampleValue instanceof Date) {
-          fieldTypes[field] = 'date';
-        } else if (typeof sampleValue === 'number') {
-          fieldTypes[field] = 'number';
-        } else if (typeof sampleValue === 'boolean') {
-          fieldTypes[field] = 'boolean';
-        } else if (sampleValue && typeof sampleValue === 'object') {
-          fieldTypes[field] = 'object';
-        } else {
-          fieldTypes[field] = 'text';
-        }
-      });
-    }
-
-    // Get recent records (last 5)
-    const recentRecords = records
-      .sort((a, b) => new Date(b.createdTime).getTime() - new Date(a.createdTime).getTime())
-      .slice(0, 5);
-
-    // Calculate basic statistics
+    // Basic statistics
     const stats = {
       totalRecords: records.length,
-      fieldCount: fieldNames.length,
       tableName,
       viewName,
-      lastUpdated: new Date().toISOString(),
-      recentActivity: recentRecords.length > 0 
-        ? new Date(recentRecords[0].createdTime).toLocaleString()
-        : 'No recent activity'
+      lastUpdated: new Date().toISOString()
     };
 
     return NextResponse.json({
       success: true,
       data: {
         records,
-        stats,
-        fieldNames,
-        fieldTypes,
-        recentRecords,
-        queryParams: {
-          tableName,
-          viewName,
-          maxRecords,
-          sortField,
-          sortDirection,
-          filterByFormula
-        }
+        stats
       }
     });
 
   } catch (error) {
-    console.error('Error in view API route:', error);
+    console.error('Error in processor billing API route:', error);
     
-    let errorMessage = 'Failed to fetch view data';
+    let errorMessage = 'Failed to fetch processor billing data';
     let suggestion = 'Please check your configuration and try again';
     
     if (error instanceof Error) {
       errorMessage = error.message;
       
       if (error.message.includes('Table') && error.message.includes('not found')) {
-        suggestion = 'Please check that the table name exists in your Airtable base';
+        suggestion = 'Please check that the "Subscriptions Corporate" table exists in your Airtable base';
       } else if (error.message.includes('View') && error.message.includes('not found')) {
-        suggestion = 'Please check that the view name exists in your specified table';
+        suggestion = 'Please check that the "Bookkeeping Billing" view exists in your Subscriptions Corporate table';
       } else if (error.message.includes('AIRTABLE_PERSONAL_ACCESS_TOKEN')) {
         suggestion = 'Create a Personal Access Token at https://airtable.com/create/tokens with data.records:read scope';
       } else if (error.message.includes('AIRTABLE_BASE_ID')) {

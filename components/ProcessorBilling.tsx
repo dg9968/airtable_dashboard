@@ -3,7 +3,14 @@
 
 import { useState, useEffect } from 'react';
 
-// Types for processor billing data
+// Types for the raw records from Airtable
+interface AirtableRecord {
+  id: string;
+  fields: Record<string, any>;
+  createdTime: string;
+}
+
+// Types for processed processor data
 interface ProcessorClient {
   id: string;
   companyName: string;
@@ -26,20 +33,36 @@ interface ProcessorBillingStats {
   grandTotalBilling: number;
   averageBillingPerClient: number;
   lastUpdated: string;
-  filterApplied: string;
-  sortField: string;
-}
-
-interface ProcessorBillingData {
-  processors: ProcessorData[];
-  stats: ProcessorBillingStats;
-  rawRecords: number;
   tableName: string;
   viewName: string;
 }
 
+interface ApiResponse {
+  success: boolean;
+  data?: {
+    records: AirtableRecord[];
+    stats: {
+      totalRecords: number;
+      tableName: string;
+      viewName: string;
+      lastUpdated: string;
+    };
+  };
+  error?: string;
+  suggestion?: string;
+}
+
 export default function ProcessorBilling() {
-  const [data, setData] = useState<ProcessorBillingData | null>(null);
+  const [processors, setProcessors] = useState<ProcessorData[]>([]);
+  const [stats, setStats] = useState<ProcessorBillingStats>({
+    totalClients: 0,
+    totalProcessors: 0,
+    grandTotalBilling: 0,
+    averageBillingPerClient: 0,
+    lastUpdated: '',
+    tableName: '',
+    viewName: ''
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [suggestion, setSuggestion] = useState<string | null>(null);
@@ -56,11 +79,20 @@ export default function ProcessorBilling() {
       setSuggestion(null);
       
       const response = await fetch('/api/processor-billing');
-      const result = await response.json();
+      const result: ApiResponse = await response.json();
       
-      if (result.success) {
-        setData(result.data);
-        console.log(`Loaded ${result.data.processors.length} processors with ${result.data.stats.totalClients} total clients`);
+      if (result.success && result.data) {
+        // Process the raw records to group by processor
+        const processedData = processRecordsIntoProcessors(result.data.records);
+        setProcessors(processedData.processors);
+        setStats({
+          ...processedData.stats,
+          tableName: result.data.stats.tableName,
+          viewName: result.data.stats.viewName,
+          lastUpdated: result.data.stats.lastUpdated
+        });
+        
+        console.log(`Loaded ${processedData.processors.length} processors with ${processedData.stats.totalClients} total clients`);
       } else {
         setError(result.error || 'Failed to fetch processor billing data');
         setSuggestion(result.suggestion || null);
@@ -71,6 +103,93 @@ export default function ProcessorBilling() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const processRecordsIntoProcessors = (records: AirtableRecord[]) => {
+    // Group records by processor
+    const processorGroups: Record<string, AirtableRecord[]> = {};
+    
+    records.forEach(record => {
+      // Try multiple possible field names for processor
+      const processor = record.fields.Processor || 
+                       record.fields.processor || 
+                       record.fields['Assigned Processor'] ||
+                       record.fields['Staff Member'] ||
+                       record.fields.Staff ||
+                       record.fields.Employee ||
+                       record.fields['Responsible Person'] ||
+                       record.fields.Owner ||
+                       record.fields['Account Manager'] ||
+                       'Unassigned';
+
+      const processorName = typeof processor === 'string' ? processor : String(processor || 'Unassigned');
+      
+      if (!processorGroups[processorName]) {
+        processorGroups[processorName] = [];
+      }
+      
+      processorGroups[processorName].push(record);
+    });
+
+    // Calculate statistics for each processor
+    const processors = Object.entries(processorGroups).map(([processorName, clients]) => {
+      const totalBilling = clients.reduce((sum, record) => {
+        const fee = record.fields['Monthly Fee'] || 
+                   record.fields.Fee || 
+                   record.fields.Amount || 
+                   record.fields['Subscription Fee'] || 
+                   record.fields.Price ||
+                   record.fields['Billing Amount'] ||
+                   record.fields['Monthly Amount'] || 0;
+        return sum + (typeof fee === 'number' ? fee : parseFloat(fee) || 0);
+      }, 0);
+
+      const averageBilling = clients.length > 0 ? totalBilling / clients.length : 0;
+
+      const clientDetails = clients.map(record => ({
+        id: record.id,
+        companyName: record.fields['Company Name'] || 
+                    record.fields.Name || 
+                    record.fields.Company || 
+                    record.fields['Client Name'] || 
+                    record.fields['Business Name'] ||
+                    'Unknown Company',
+        billingAmount: record.fields['Monthly Fee'] || 
+                      record.fields.Fee || 
+                      record.fields.Amount || 
+                      record.fields['Subscription Fee'] || 
+                      record.fields.Price ||
+                      record.fields['Billing Amount'] ||
+                      record.fields['Monthly Amount'] || 0,
+        status: record.fields.Status || record.fields.status || 'Active',
+        createdTime: record.createdTime
+      }));
+
+      return {
+        processor: processorName,
+        clientCount: clients.length,
+        totalBilling: Math.round(totalBilling),
+        averageBilling: Math.round(averageBilling),
+        clients: clientDetails
+      };
+    });
+
+    // Sort processors by total billing (highest first)
+    processors.sort((a, b) => b.totalBilling - a.totalBilling);
+
+    // Calculate overall statistics
+    const totalBilling = processors.reduce((sum, p) => sum + p.totalBilling, 0);
+    const stats = {
+      totalClients: records.length,
+      totalProcessors: processors.length,
+      grandTotalBilling: totalBilling,
+      averageBillingPerClient: records.length > 0 ? Math.round(totalBilling / records.length) : 0,
+      lastUpdated: '',
+      tableName: '',
+      viewName: ''
+    };
+
+    return { processors, stats };
   };
 
   const formatCurrency = (amount: number): string => {
@@ -144,8 +263,8 @@ export default function ProcessorBilling() {
               </div>
               <h1 className="text-3xl font-bold text-white mt-2">Processor Billing Dashboard</h1>
               <p className="text-gray-300">
-                {data ? 
-                  `Bookkeeping clients grouped by processor from "${data.tableName}"` :
+                {stats.tableName ? 
+                  `Bookkeeping clients grouped by processor from "${stats.viewName}" view` :
                   'Analyzing processor billing data'
                 }
               </p>
@@ -174,7 +293,7 @@ export default function ProcessorBilling() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {data && (
+        {processors.length > 0 && (
           <>
             {/* Statistics Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
@@ -187,7 +306,7 @@ export default function ProcessorBilling() {
                   </div>
                   <div className="ml-4">
                     <p className="text-sm font-medium text-gray-400">Total Processors</p>
-                    <p className="text-2xl font-bold text-white">{data.stats.totalProcessors}</p>
+                    <p className="text-2xl font-bold text-white">{stats.totalProcessors}</p>
                   </div>
                 </div>
               </div>
@@ -201,7 +320,7 @@ export default function ProcessorBilling() {
                   </div>
                   <div className="ml-4">
                     <p className="text-sm font-medium text-gray-400">Total Clients</p>
-                    <p className="text-2xl font-bold text-white">{data.stats.totalClients}</p>
+                    <p className="text-2xl font-bold text-white">{stats.totalClients}</p>
                   </div>
                 </div>
               </div>
@@ -215,7 +334,7 @@ export default function ProcessorBilling() {
                   </div>
                   <div className="ml-4">
                     <p className="text-sm font-medium text-gray-400">Total Monthly Revenue</p>
-                    <p className="text-2xl font-bold text-white">{formatCurrency(data.stats.grandTotalBilling)}</p>
+                    <p className="text-2xl font-bold text-white">{formatCurrency(stats.grandTotalBilling)}</p>
                   </div>
                 </div>
               </div>
@@ -229,7 +348,7 @@ export default function ProcessorBilling() {
                   </div>
                   <div className="ml-4">
                     <p className="text-sm font-medium text-gray-400">Avg per Client</p>
-                    <p className="text-2xl font-bold text-white">{formatCurrency(data.stats.averageBillingPerClient)}</p>
+                    <p className="text-2xl font-bold text-white">{formatCurrency(stats.averageBillingPerClient)}</p>
                   </div>
                 </div>
               </div>
@@ -239,7 +358,7 @@ export default function ProcessorBilling() {
             <div className="bg-gray-800 rounded-lg shadow-sm border border-gray-700">
               <div className="px-6 py-4 border-b border-gray-700">
                 <h2 className="text-xl font-semibold text-white">
-                  Processors by Billing ({data.processors.length} processors)
+                  Processors by Billing ({processors.length} processors)
                 </h2>
                 <p className="text-sm text-gray-400 mt-1">
                   Sorted by total monthly billing amount
@@ -247,7 +366,7 @@ export default function ProcessorBilling() {
               </div>
               <div className="p-6">
                 <div className="space-y-4">
-                  {data.processors.map((processor, index) => {
+                  {processors.map((processor, index) => {
                     const isExpanded = expandedProcessors.has(processor.processor);
                     const processorInitial = getProcessorInitial(processor.processor);
                     const processorColorClass = getProcessorColor(index);
@@ -332,11 +451,11 @@ export default function ProcessorBilling() {
             <div className="mt-8 bg-gray-800 rounded-lg p-4 border border-gray-700">
               <h3 className="text-sm font-medium text-gray-300 mb-2">Debug Information</h3>
               <div className="text-xs text-gray-400 space-y-1">
-                <p>Table: {data.tableName}</p>
-                <p>Raw Records: {data.rawRecords}</p>
-                <p>Active Bookkeeping Clients: {data.stats.totalClients}</p>
-                <p>Filter Applied: {data.stats.filterApplied}</p>
-                <p>Last Updated: {new Date(data.stats.lastUpdated).toLocaleString()}</p>
+                <p>Table: {stats.tableName}</p>
+                <p>View: {stats.viewName}</p>
+                <p>Total Records: {stats.totalClients}</p>
+                <p>Processors Found: {stats.totalProcessors}</p>
+                <p>Last Updated: {new Date(stats.lastUpdated).toLocaleString()}</p>
               </div>
             </div>
           </>

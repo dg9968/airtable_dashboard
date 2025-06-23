@@ -1,3 +1,4 @@
+// components/HomePage.tsx
 'use client';
 
 import Link from 'next/link';
@@ -98,6 +99,14 @@ export default function HomePage() {
       icon: "💼",
       color: "text-green-600",
       bgColor: "bg-green-50 hover:bg-green-100 border-green-200"
+    },
+    {
+      title: "Processor Billing",
+      description: "View processor billing information and client distribution for bookkeeping services",
+      href: "/processor-billing",
+      icon: "💰",
+      color: "text-orange-600",
+      bgColor: "bg-orange-50 hover:bg-orange-100 border-orange-200"
     }
   ];
 
@@ -136,7 +145,7 @@ export default function HomePage() {
 
       {/* Main Navigation Menu */}
       <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-8">
           {menuItems.map((item, index) => (
             <Link
               key={index}
