@@ -1,4 +1,4 @@
-// components/Footer.tsx
+// components/Footer.tsx (Updated)
 'use client';
 
 import TaxProLogo from './TaxProLogo';
@@ -31,11 +31,11 @@ export default function Footer({ className = '' }: FooterProps) {
             <a href="/view-display" className="text-gray-400 hover:text-white transition-colors">
               Views
             </a>
-            <a href="/bookkeeping-dashboard" className="text-gray-400 hover:text-white transition-colors">
-              Bookkeeping
-            </a>
             <a href="/processor-billing" className="text-gray-400 hover:text-white transition-colors">
               Billing
+            </a>
+            <a href="/training-videos" className="text-gray-400 hover:text-white transition-colors">
+              Training
             </a>
           </div>
 

@@ -31,14 +31,6 @@ export default function HomePage() {
       bgColor: "bg-purple-50 hover:bg-purple-100 border-purple-200"
     },
     {
-      title: "Bookkeeping Dashboard",
-      description: "Specialized dashboard for bookkeeping clients, subscription management, and financial tracking",
-      href: "/bookkeeping-dashboard",
-      icon: "💼",
-      color: "text-green-600",
-      bgColor: "bg-green-50 hover:bg-green-100 border-green-200"
-    },
-    {
       title: "Processor Billing",
       description: "View processor billing information, client distribution, and revenue analytics for bookkeeping services",
       href: "/processor-billing",
@@ -87,7 +79,7 @@ export default function HomePage() {
             <p className="text-gray-400 text-lg">Select the area you want to manage</p>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             {menuItems.map((item, index) => (
               <Link
                 key={index}
@@ -164,7 +156,7 @@ export default function HomePage() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-2 md:grid-cols-5 gap-6 text-center">
             <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
-              <div className="text-2xl font-bold text-blue-400">6</div>
+              <div className="text-2xl font-bold text-blue-400">5</div>
               <div className="text-sm text-gray-400">Dashboards</div>
             </div>
             <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">

@@ -1,3 +1,4 @@
+// components/Dashboard.tsx (Updated)
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -289,9 +290,13 @@ export default function Dashboard() {
           <div className="bg-white rounded-lg p-6 shadow-sm border">
             <h3 className="text-lg font-semibold text-gray-900 mb-2">Quick Actions</h3>
             <div className="space-y-3">
-              <a href="/bookkeeping-dashboard" className="block w-full text-left p-3 rounded-lg border hover:bg-gray-50 transition-colors cursor-pointer">
-                <div className="font-medium text-gray-900">📊 Bookkeeping Dashboard</div>
-                <div className="text-sm text-gray-500">View filtered bookkeeping subscriptions</div>
+              <a href="/view-display" className="block w-full text-left p-3 rounded-lg border hover:bg-gray-50 transition-colors cursor-pointer">
+                <div className="font-medium text-gray-900">👁️ View Display</div>
+                <div className="text-sm text-gray-500">Configure and display Airtable views</div>
+              </a>
+              <a href="/processor-billing" className="block w-full text-left p-3 rounded-lg border hover:bg-gray-50 transition-colors cursor-pointer">
+                <div className="font-medium text-gray-900">💰 Processor Billing</div>
+                <div className="text-sm text-gray-500">View processor billing information</div>
               </a>
               <button className="w-full text-left p-3 rounded-lg border hover:bg-gray-50 transition-colors">
                 <div className="font-medium text-gray-900">Export All Data</div>

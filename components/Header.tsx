@@ -66,15 +66,15 @@ export default function Header({ className = '' }: HeaderProps) {
   };
 
   return (
-    <header className={`bg-gray-800 shadow-lg border-b border-gray-700 ${className}`}>
+    <header className={`bg-blue-800 shadow-lg border-b border-blue-700 ${className}`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo Section */}
           <div className="flex items-center">
             <Link href="/" className="flex items-center space-x-3 hover:opacity-80 transition-opacity">
-              <TaxProLogo size="small" variant="main" priority={true} />
+              <TaxProLogo size="large" variant="main" priority={true} />
               <div className="hidden sm:block">
-                <h1 className="text-xl font-bold text-white">Tax Pro Operations</h1>
+                <h1 className="text-xl font-bold text-white">Tax Operations</h1>
                 <p className="text-xs text-gray-400">Business Management System</p>
               </div>
             </Link>
