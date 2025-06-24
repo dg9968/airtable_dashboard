@@ -1,6 +1,9 @@
+// app/layout.tsx
 import type { Metadata } from "next";
 import { Poppins } from "next/font/google";
 import "./globals.css";
+import Header from "@/components/Header";
+import Footer from "@/components/Footer";
 
 const poppins = Poppins({
   variable: "--font-poppins",
@@ -21,8 +24,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${poppins.variable} font-poppins antialiased`}>
-        {children}
+      <body className={`${poppins.variable} font-poppins antialiased bg-gray-900 min-h-screen flex flex-col`}>
+        <Header />
+        <main className="flex-1">
+          {children}
+        </main>
+        <Footer />
       </body>
     </html>
   );
