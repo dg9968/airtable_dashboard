@@ -1,4 +1,4 @@
-// components/HomePage.tsx (Updated to work with global header)
+// components/HomePage.tsx (Updated)
 'use client';
 
 import Link from 'next/link';
@@ -45,6 +45,14 @@ export default function HomePage() {
       icon: "💰",
       color: "text-orange-600",
       bgColor: "bg-orange-50 hover:bg-orange-100 border-orange-200"
+    },
+    {
+      title: "Training Videos",
+      description: "Access comprehensive tax preparation training videos, tutorials, and educational content from our YouTube channel",
+      href: "/training-videos",
+      icon: "🎥",
+      color: "text-red-600",
+      bgColor: "bg-red-50 hover:bg-red-100 border-red-200"
     }
   ];
 
@@ -79,7 +87,7 @@ export default function HomePage() {
             <p className="text-gray-400 text-lg">Select the area you want to manage</p>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {menuItems.map((item, index) => (
               <Link
                 key={index}
@@ -138,13 +146,13 @@ export default function HomePage() {
             
             <div className="text-center group">
               <div className="text-4xl md:text-5xl mb-6 group-hover:scale-110 transition-transform duration-300">
-                ⚙️
+                🎓
               </div>
               <h3 className="text-xl md:text-2xl font-semibold text-white mb-4">
-                Operations Control
+                Training & Education
               </h3>
               <p className="text-gray-300 leading-relaxed">
-                Centralized control panel for managing all aspects of tax preparation business operations efficiently
+                Access comprehensive training videos and educational resources to enhance your tax preparation skills
               </p>
             </div>
           </div>
@@ -154,9 +162,9 @@ export default function HomePage() {
       {/* Quick Stats */}
       <section className="py-12">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-6 text-center">
             <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
-              <div className="text-2xl font-bold text-blue-400">5+</div>
+              <div className="text-2xl font-bold text-blue-400">6</div>
               <div className="text-sm text-gray-400">Dashboards</div>
             </div>
             <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
@@ -170,6 +178,10 @@ export default function HomePage() {
             <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
               <div className="text-2xl font-bold text-orange-400">Secure</div>
               <div className="text-sm text-gray-400">Platform</div>
+            </div>
+            <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+              <div className="text-2xl font-bold text-red-400">Videos</div>
+              <div className="text-sm text-gray-400">Training</div>
             </div>
           </div>
         </div>

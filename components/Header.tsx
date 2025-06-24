@@ -1,4 +1,4 @@
-// components/Header.tsx
+// components/Header.tsx (Updated)
 'use client';
 
 import Link from 'next/link';
@@ -49,6 +49,12 @@ export default function Header({ className = '' }: HeaderProps) {
       href: '/processor-billing',
       icon: '💰',
       description: 'Processor billing overview'
+    },
+    {
+      name: 'Training Videos',
+      href: '/training-videos',
+      icon: '🎥',
+      description: 'Tax preparation training videos'
     }
   ];
 
