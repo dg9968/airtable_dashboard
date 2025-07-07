@@ -1,12 +1,35 @@
-// lib/auth.ts - NextAuth configuration
+// lib/auth.ts - Debug version with better logging
 import NextAuth from 'next-auth'
 import CredentialsProvider from 'next-auth/providers/credentials'
-import GoogleProvider from 'next-auth/providers/google'
 import { compare } from 'bcryptjs'
+
+// Mock users for development - using plaintext passwords for testing
+const mockUsers = [
+  {
+    id: '1',
+    email: 'admin@example.com',
+    name: 'Admin User',
+    password: 'password123', // Temporary plaintext for testing
+    role: 'admin'
+  },
+  {
+    id: '2',
+    email: 'user@example.com',
+    name: 'Regular User',
+    password: 'password123',
+    role: 'user'
+  },
+  {
+    id: '3',
+    email: 'staff@example.com',
+    name: 'Staff User',
+    password: 'password123',
+    role: 'staff'
+  }
+]
 
 export const authOptions = {
   providers: [
-    // Email/Password login
     CredentialsProvider({
       name: 'credentials',
       credentials: {
@@ -14,30 +37,38 @@ export const authOptions = {
         password: { label: 'Password', type: 'password' }
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) {
-          return null
-        }
-
-        // Replace with your user lookup logic
-        const user = await getUserByEmail(credentials.email)
+        console.log('Auth attempt:', credentials?.email) // Debug log
         
-        if (!user || !await compare(credentials.password, user.hashedPassword)) {
-          return null
+        if (!credentials?.email || !credentials?.password) {
+          console.log('Missing credentials')
+          throw new Error('Please enter email and password')
         }
 
+        const user = await getUserByEmail(credentials.email)
+        console.log('User found:', user ? 'Yes' : 'No') // Debug log
+        
+        if (!user) {
+          console.log('No user found for email:', credentials.email)
+          throw new Error('No user found with this email')
+        }
+
+        // For testing, use simple password comparison
+        const isValidPassword = credentials.password === user.password
+        console.log('Password valid:', isValidPassword) // Debug log
+        
+        if (!isValidPassword) {
+          console.log('Invalid password for user:', credentials.email)
+          throw new Error('Invalid password')
+        }
+
+        console.log('Login successful for:', credentials.email) // Debug log
         return {
           id: user.id,
           email: user.email,
           name: user.name,
-          role: user.role // 'admin', 'user', 'staff', etc.
+          role: user.role
         }
       }
-    }),
-    
-    // Google OAuth (optional)
-    GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
     })
   ],
   
@@ -54,7 +85,7 @@ export const authOptions = {
     },
     
     async session({ session, token }) {
-      if (token) {
+      if (token && session.user) {
         session.user.id = token.sub!
         session.user.role = token.role as string
       }
@@ -64,15 +95,15 @@ export const authOptions = {
   
   pages: {
     signIn: '/auth/signin',
-    signUp: '/auth/signup',
-  }
+  },
+
+  secret: process.env.NEXTAUTH_SECRET || 'your-secret-key-for-development',
 }
 
 export default NextAuth(authOptions)
 
-// Dummy user lookup function - replace with your database logic
 async function getUserByEmail(email: string) {
-  // This would typically query your database
-  // Example: return await prisma.user.findUnique({ where: { email } })
-  return null
+  const user = mockUsers.find(user => user.email.toLowerCase() === email.toLowerCase())
+  console.log('Looking for email:', email, 'Found:', user ? 'Yes' : 'No')
+  return user || null
 }
