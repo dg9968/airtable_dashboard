@@ -9,8 +9,12 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@types/bcryptjs": "^2.4.6",
     "airtable": "^0.12.2",
+    "bcryptjs": "^3.0.2",
     "next": "15.3.4",
+    "next-auth": "^4.24.11",
+    "openssl": "^2.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
