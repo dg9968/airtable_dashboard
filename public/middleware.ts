@@ -4,6 +4,7 @@ export default withAuth(
   function middleware(req) {
     // Additional middleware logic here
     console.log('User role:', req.nextauth.token?.role)
+    console.log('Accessing:', req.nextUrl.pathname)
   },
   {
     callbacks: {
@@ -15,7 +16,7 @@ export default withAuth(
           '/',
           '/about',
           '/contact',
-          '/training-videos', // Make this public
+          '/training-videos', // Keep this public
           '/auth/signin',
           '/auth/signup'
         ]
@@ -29,6 +30,7 @@ export default withAuth(
             pathname.startsWith('/airtable') ||
             pathname.startsWith('/bookkeeping') ||
             pathname.startsWith('/processor-billing') ||
+            pathname.startsWith('/view-display') || // Add view-display protection
             pathname.startsWith('/admin')) {
           
           // Check if user is authenticated
@@ -39,12 +41,19 @@ export default withAuth(
             return token.role === 'admin'
           }
           
-          // Staff and admin can access these
-          if (pathname.startsWith('/airtable') || pathname.startsWith('/bookkeeping')) {
+          // Staff and admin only routes (including view-display)
+          if (pathname.startsWith('/airtable') || 
+              pathname.startsWith('/bookkeeping') ||
+              pathname.startsWith('/view-display')) {
             return token.role === 'admin' || token.role === 'staff'
           }
           
-          return true // Any authenticated user
+          // Processor billing - staff and admin only
+          if (pathname.startsWith('/processor-billing')) {
+            return token.role === 'admin' || token.role === 'staff'
+          }
+          
+          return true // Any authenticated user for other dashboard routes
         }
         
         return true // Default allow

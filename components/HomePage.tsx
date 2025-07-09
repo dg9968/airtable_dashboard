@@ -1,7 +1,8 @@
-// components/HomePage.tsx (Updated)
+// components/HomePage.tsx (Updated with role-based access)
 'use client';
 
 import Link from 'next/link';
+import { useSession } from 'next-auth/react';
 
 interface MenuItem {
   title: string;
@@ -10,17 +11,21 @@ interface MenuItem {
   icon: string;
   color: string;
   bgColor: string;
+  requiredRole?: string[]; // Add role requirement
 }
 
 export default function HomePage() {
-  const menuItems: MenuItem[] = [
+  const { data: session, status } = useSession();
+
+  const allMenuItems: MenuItem[] = [
     {
       title: "Airtable Dashboard",
       description: "Overview of all Airtable tables, records, and database statistics with detailed analytics",
       href: "/airtable-dashboard",
       icon: "📊",
       color: "text-blue-600",
-      bgColor: "bg-blue-50 hover:bg-blue-100 border-blue-200"
+      bgColor: "bg-blue-50 hover:bg-blue-100 border-blue-200",
+      requiredRole: ['staff', 'admin']
     },
     {
       title: "View Display",
@@ -28,7 +33,8 @@ export default function HomePage() {
       href: "/view-display",
       icon: "👁️",
       color: "text-purple-600",
-      bgColor: "bg-purple-50 hover:bg-purple-100 border-purple-200"
+      bgColor: "bg-purple-50 hover:bg-purple-100 border-purple-200",
+      requiredRole: ['staff', 'admin'] // Restrict to staff and admin only
     },
     {
       title: "Processor Billing",
@@ -36,7 +42,17 @@ export default function HomePage() {
       href: "/processor-billing",
       icon: "💰",
       color: "text-orange-600",
-      bgColor: "bg-orange-50 hover:bg-orange-100 border-orange-200"
+      bgColor: "bg-orange-50 hover:bg-orange-100 border-orange-200",
+      requiredRole: ['staff', 'admin']
+    },
+    {
+    title: "Filing Deadlines",
+    description: "Track all tax filing deadlines, quarterly forms, and annual returns with priority alerts and notifications",
+    href: "/filing-deadlines",
+    icon: "📅",
+    color: "text-green-600",
+    bgColor: "bg-green-50 hover:bg-green-100 border-green-200"
+    // No requiredRole - accessible with password protection
     },
     {
       title: "Training Videos",
@@ -45,8 +61,25 @@ export default function HomePage() {
       icon: "🎥",
       color: "text-red-600",
       bgColor: "bg-red-50 hover:bg-red-100 border-red-200"
+      // No requiredRole - public access
     }
   ];
+
+  // Filter menu items based on user role
+  const getVisibleMenuItems = () => {
+    if (!session?.user?.role) {
+      // Show only public items for non-authenticated users
+      return allMenuItems.filter(item => !item.requiredRole);
+    }
+
+    const userRole = session.user.role;
+    return allMenuItems.filter(item => {
+      if (!item.requiredRole) return true; // Public items
+      return item.requiredRole.includes(userRole);
+    });
+  };
+
+  const menuItems = getVisibleMenuItems();
 
   return (
     <div className="min-h-screen bg-gray-900">
@@ -67,6 +100,29 @@ export default function HomePage() {
                 <span className="text-gray-300 font-medium">All Systems Operational</span>
               </div>
             </div>
+
+            {/* User Status */}
+            {session && (
+              <div className="mt-6">
+                <div className="inline-flex items-center space-x-2 bg-blue-900/50 rounded-full px-4 py-2 border border-blue-700">
+                  <span className="text-blue-300 text-sm">Welcome back, {session.user?.name}</span>
+                  <span className="text-xs text-blue-400 bg-blue-800 px-2 py-1 rounded-full">
+                    {session.user?.role || 'user'}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Authentication message for restricted content */}
+            {!session && (
+              <div className="mt-6">
+                <p className="text-sm text-gray-400">
+                  <Link href="/auth/signin" className="text-blue-400 hover:text-blue-300">
+                    Sign in
+                  </Link> to access additional business management tools
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </section>
@@ -76,7 +132,12 @@ export default function HomePage() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
             <h2 className="text-3xl font-bold text-white mb-4">Choose Your Dashboard</h2>
-            <p className="text-gray-400 text-lg">Select the area you want to manage</p>
+            <p className="text-gray-400 text-lg">
+              {session ? 
+                `Select the area you want to manage (${menuItems.length} available)` : 
+                'Select from available tools'
+              }
+            </p>
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -96,10 +157,31 @@ export default function HomePage() {
                   <p className="text-gray-700 leading-relaxed text-base md:text-lg">
                     {item.description}
                   </p>
+                  {item.requiredRole && (
+                    <div className="mt-4">
+                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-200 text-gray-700">
+                        {item.requiredRole.join(' • ')} access required
+                      </span>
+                    </div>
+                  )}
                 </div>
               </Link>
             ))}
           </div>
+
+          {/* Show message if some items are hidden */}
+          {!session && allMenuItems.length > menuItems.length && (
+            <div className="mt-8 text-center">
+              <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+                <p className="text-gray-300 text-sm">
+                  {allMenuItems.length - menuItems.length} additional tools available for staff and administrators.{' '}
+                  <Link href="/auth/signin" className="text-blue-400 hover:text-blue-300">
+                    Sign in
+                  </Link> to access more features.
+                </p>
+              </div>
+            </div>
+          )}
         </div>
       </section>
 
@@ -156,7 +238,7 @@ export default function HomePage() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-2 md:grid-cols-5 gap-6 text-center">
             <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
-              <div className="text-2xl font-bold text-blue-400">5</div>
+              <div className="text-2xl font-bold text-blue-400">{allMenuItems.length}</div>
               <div className="text-sm text-gray-400">Dashboards</div>
             </div>
             <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
