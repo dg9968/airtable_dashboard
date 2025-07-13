@@ -16,8 +16,8 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en">
-      <body className="bg-gray-900 text-white min-h-screen">
+    <html lang="en" data-theme="cupcake">
+      <body className="min-h-screen">
         <Providers>
           <div className="min-h-screen flex flex-col">
             <Header />

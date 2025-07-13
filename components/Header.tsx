@@ -7,73 +7,80 @@ export default function Header() {
   const { data: session, status } = useSession()
 
   return (
-    <header className="bg-blue-800 shadow-lg border-b border-blue-700">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
-          {/* Logo */}
-          <Link href="/" className="text-white font-bold text-xl">
-            Tax Pro Operations
-          </Link>
-
-          {/* Navigation */}
-          <nav className="hidden md:flex space-x-4">
-            <Link href="/" className="text-white hover:text-blue-200">
-              Home
-            </Link>
-            <Link href="/training-videos" className="text-white hover:text-blue-200">
-              Training Videos
-            </Link>
-            
+    <div className="navbar bg-primary text-primary-content shadow-lg">
+      <div className="navbar-start">
+        <div className="dropdown">
+          <div tabIndex={0} role="button" className="btn btn-ghost lg:hidden">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h8m-8 6h16" />
+            </svg>
+          </div>
+          <ul tabIndex={0} className="menu menu-sm dropdown-content mt-3 z-[1] p-2 shadow bg-base-100 rounded-box w-52">
+            <li><Link href="/">Home</Link></li>
+            <li><Link href="/training-videos">Training Videos</Link></li>
             {session && (
               <>
-                <Link href="/dashboard" className="text-white hover:text-blue-200">
-                  Dashboard
-                </Link>
-                <Link href="/airtable-dashboard" className="text-white hover:text-blue-200">
-                  Airtable
-                </Link>
+                <li><Link href="/dashboard">Dashboard</Link></li>
+                <li><Link href="/airtable-dashboard">Airtable</Link></li>
                 {session.user.role === 'admin' && (
-                  <Link href="/admin" className="text-white hover:text-blue-200">
-                    Admin
-                  </Link>
+                  <li><Link href="/admin">Admin</Link></li>
                 )}
               </>
             )}
-          </nav>
-
-          {/* Auth Buttons */}
-          <div className="flex items-center space-x-4">
-            {status === 'loading' ? (
-              <div className="text-white">Loading...</div>
-            ) : session ? (
-              <div className="flex items-center space-x-4">
-                <span className="text-white">Hello, {session.user.name}</span>
-                <button
-                  onClick={() => signOut()}
-                  className="bg-blue-700 text-white px-4 py-2 rounded hover:bg-blue-600"
-                >
-                  Sign Out
-                </button>
-              </div>
-            ) : (
-              <div className="space-x-2">
-                <Link
-                  href="/auth/signin"
-                  className="text-white hover:text-blue-200"
-                >
-                  Sign In
-                </Link>
-                <Link
-                  href="/auth/signup"
-                  className="bg-blue-700 text-white px-4 py-2 rounded hover:bg-blue-600"
-                >
-                  Sign Up
-                </Link>
-              </div>
-            )}
-          </div>
+          </ul>
         </div>
+        <Link href="/" className="btn btn-ghost text-xl font-bold">
+          Tax Pro Operations
+        </Link>
       </div>
-    </header>
+      
+      <div className="navbar-center hidden lg:flex">
+        <ul className="menu menu-horizontal px-1">
+          <li><Link href="/" className="btn btn-ghost">Home</Link></li>
+          <li><Link href="/training-videos" className="btn btn-ghost">Training Videos</Link></li>
+          {session && (
+            <>
+              <li><Link href="/dashboard" className="btn btn-ghost">Dashboard</Link></li>
+              <li><Link href="/airtable-dashboard" className="btn btn-ghost">Airtable</Link></li>
+              {session.user.role === 'admin' && (
+                <li><Link href="/admin" className="btn btn-ghost">Admin</Link></li>
+              )}
+            </>
+          )}
+        </ul>
+      </div>
+      
+      <div className="navbar-end">
+        {status === 'loading' ? (
+          <span className="loading loading-spinner loading-sm"></span>
+        ) : session ? (
+          <div className="flex items-center space-x-3">
+            <div className="text-sm">
+              <span>Hello, {session.user.name}</span>
+              {session.user.role && (
+                <div className="badge badge-secondary badge-sm ml-2">
+                  {session.user.role}
+                </div>
+              )}
+            </div>
+            <button
+              onClick={() => signOut()}
+              className="btn btn-secondary btn-sm"
+            >
+              Sign Out
+            </button>
+          </div>
+        ) : (
+          <div className="space-x-2">
+            <Link href="/auth/signin" className="btn btn-ghost btn-sm">
+              Sign In
+            </Link>
+            <Link href="/auth/signup" className="btn btn-accent btn-sm">
+              Sign Up
+            </Link>
+          </div>
+        )}
+      </div>
+    </div>
   )
 }
