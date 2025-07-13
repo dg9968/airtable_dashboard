@@ -1,4 +1,4 @@
-// app/api/services/route.ts
+// app/api/services/route.ts - FIXED VERSION
 import { NextResponse } from 'next/server';
 import { fetchAllTableData, testConnection } from '@/lib/airtable';
 
@@ -27,7 +27,8 @@ export async function GET() {
       'Service Offerings'
     ];
     
-    let serviceRecords;
+    // FIXED: Initialize with proper type and default value
+    let serviceRecords: any[] = [];
     let actualServiceTableName = '';
     let serviceTableFound = false;
     
@@ -55,6 +56,7 @@ export async function GET() {
     }
 
     // Extract service names and analyze the structure
+    // FIXED: Now serviceRecords is guaranteed to be an array
     const services = serviceRecords.map(record => {
       // Try multiple possible field names for the service name
       const possibleNameFields = [
@@ -85,7 +87,7 @@ export async function GET() {
           typeof value === 'string' && value.trim().length > 0
         );
         if (textFields.length > 0) {
-          serviceName = textFields[0][1].toString().trim();
+          serviceName = (textFields[0][1] as string).toString().trim();
           foundField = textFields[0][0];
         }
       }

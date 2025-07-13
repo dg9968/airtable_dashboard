@@ -39,7 +39,7 @@ export default function EnhancedFilingDeadlinesPage() {
   const [formData, setFormData] = useState({
     title: '',
     description: '',
-    frequency: 'Monthly' as const,
+    frequency: 'Monthly' as 'Monthly' | 'Quarterly' | 'Yearly' | 'One-time',
     dueDate: '',
     forms: '',
     clients: '',

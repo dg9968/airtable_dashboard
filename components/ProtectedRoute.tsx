@@ -32,7 +32,7 @@ export default function ProtectedRoute({
     }
 
     if (requiredRole) {
-      const userRole = session.user?.role;
+      const userRole = (session.user as any)?.role;
       const allowedRoles = Array.isArray(requiredRole) ? requiredRole : [requiredRole];
       
       if (!userRole || !allowedRoles.includes(userRole)) {
@@ -61,7 +61,7 @@ export default function ProtectedRoute({
 
   // Not authorized
   if (requiredRole) {
-    const userRole = session.user?.role;
+    const userRole = (session.user as any)?.role;
     const allowedRoles = Array.isArray(requiredRole) ? requiredRole : [requiredRole];
     
     if (!userRole || !allowedRoles.includes(userRole)) {

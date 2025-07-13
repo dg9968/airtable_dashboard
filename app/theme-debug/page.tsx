@@ -1,190 +1,105 @@
-// Create: app/theme-debug/page.tsx
+// Create: app/theme-test/page.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 
-export default function ThemeDebugTest() {
-  const [currentTheme, setCurrentTheme] = useState('dark');
+export default function ThemeTest() {
+  const [currentTheme, setCurrentTheme] = useState('cupcake');
 
   const themes = [
-    'light', 'dark', 'cupcake', 'bumblebee', 'emerald', 'corporate',
-    'synthwave', 'retro', 'cyberpunk', 'valentine', 'halloween', 'garden',
-    'forest', 'aqua', 'lofi', 'pastel', 'fantasy', 'wireframe', 'black',
-    'luxury', 'dracula', 'cmyk', 'autumn', 'business', 'acid', 'lemonade',
-    'night', 'coffee', 'winter'
+    "light", "dark", "cupcake", "bumblebee", "emerald", "corporate",
+    "synthwave", "retro", "cyberpunk", "valentine", "halloween", "garden",
+    "forest", "aqua", "lofi", "pastel", "fantasy", "wireframe", "black",
+    "luxury", "dracula", "cmyk", "autumn", "business", "acid", "lemonade",
+    "night", "coffee", "winter"
   ];
 
-  useEffect(() => {
-    const savedTheme = localStorage.getItem('theme') || 'dark';
-    setCurrentTheme(savedTheme);
-    document.documentElement.setAttribute('data-theme', savedTheme);
-  }, []);
-
   const changeTheme = (theme: string) => {
-    console.log(`Changing to theme: ${theme}`);
     setCurrentTheme(theme);
     document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem('theme', theme);
-    
-    // Debug: Log the actual data-theme attribute
-    setTimeout(() => {
-      const actualTheme = document.documentElement.getAttribute('data-theme');
-      console.log(`Current data-theme attribute: ${actualTheme}`);
-      
-      // Debug: Log some CSS variables
-      const styles = getComputedStyle(document.documentElement);
-      console.log('CSS Variables:', {
-        primary: styles.getPropertyValue('--p'),
-        secondary: styles.getPropertyValue('--s'),
-        accent: styles.getPropertyValue('--a'),
-        base100: styles.getPropertyValue('--b1'),
-      });
-    }, 100);
   };
 
   return (
-    <div className="min-h-screen p-8">
-      <div className="max-w-4xl mx-auto">
-        <h1 className="text-4xl font-bold mb-8">Theme Debug Test</h1>
+    <div className="min-h-screen bg-base-200 p-8">
+      <div className="max-w-6xl mx-auto">
+        <h1 className="text-4xl font-bold mb-8 text-center">DaisyUI Theme Test</h1>
         
-        <div className="mb-8">
-          <h2 className="text-2xl font-bold mb-4">Current Theme: {currentTheme}</h2>
-          <div className="alert alert-info">
-            <span>Current data-theme: {typeof window !== 'undefined' ? document.documentElement.getAttribute('data-theme') : 'loading...'}</span>
-          </div>
+        <div className="alert alert-info mb-8">
+          <span>Current theme: <strong>{currentTheme}</strong></span>
         </div>
 
         {/* Theme Grid */}
-        <div className="mb-8">
-          <h3 className="text-xl font-bold mb-4">Available Themes</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2">
-            {themes.map((theme) => (
-              <button
-                key={theme}
-                onClick={() => changeTheme(theme)}
-                className={`btn btn-sm ${currentTheme === theme ? 'btn-primary' : 'btn-outline'}`}
-              >
-                {theme}
-              </button>
-            ))}
-          </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 mb-8">
+          {themes.map((theme) => (
+            <button
+              key={theme}
+              onClick={() => changeTheme(theme)}
+              className={`btn btn-sm ${
+                currentTheme === theme ? 'btn-primary' : 'btn-outline'
+              }`}
+            >
+              {theme}
+            </button>
+          ))}
         </div>
 
-        {/* Color Test */}
-        <div className="mb-8">
-          <h3 className="text-xl font-bold mb-4">Color Test</h3>
-          <div className="flex flex-wrap gap-2">
-            <button className="btn btn-primary">Primary</button>
-            <button className="btn btn-secondary">Secondary</button>
-            <button className="btn btn-accent">Accent</button>
-            <button className="btn btn-info">Info</button>
-            <button className="btn btn-success">Success</button>
-            <button className="btn btn-warning">Warning</button>
-            <button className="btn btn-error">Error</button>
+        {/* Test Components */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {/* Card 1 */}
+          <div className="card bg-base-100 shadow-xl">
+            <div className="card-body">
+              <h2 className="card-title">Color Test</h2>
+              <div className="space-y-2">
+                <button className="btn btn-primary w-full">Primary</button>
+                <button className="btn btn-secondary w-full">Secondary</button>
+                <button className="btn btn-accent w-full">Accent</button>
+              </div>
+            </div>
           </div>
-        </div>
 
-        {/* Background Test */}
-        <div className="mb-8">
-          <h3 className="text-xl font-bold mb-4">Background Test</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="card bg-base-100 shadow-xl">
-              <div className="card-body">
-                <h4 className="card-title">Base-100</h4>
-                <p>This should show the primary background color</p>
-              </div>
+          {/* Card 2 */}
+          <div className="card bg-primary text-primary-content shadow-xl">
+            <div className="card-body">
+              <h2 className="card-title">Primary Card</h2>
+              <p>This card uses the primary theme colors.</p>
+              <div className="badge badge-secondary">Badge</div>
             </div>
-            <div className="card bg-base-200 shadow-xl">
-              <div className="card-body">
-                <h4 className="card-title">Base-200</h4>
-                <p>This should show a slightly different background</p>
+          </div>
+
+          {/* Card 3 */}
+          <div className="card bg-base-100 shadow-xl">
+            <div className="card-body">
+              <h2 className="card-title">Alerts</h2>
+              <div className="alert alert-success alert-sm">
+                <span>Success message</span>
               </div>
-            </div>
-            <div className="card bg-base-300 shadow-xl">
-              <div className="card-body">
-                <h4 className="card-title">Base-300</h4>
-                <p>This should show an even more different background</p>
+              <div className="alert alert-warning alert-sm">
+                <span>Warning message</span>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Cupcake Specific Test */}
-        <div className="mb-8">
-          <h3 className="text-xl font-bold mb-4">Cupcake Theme Specific Test</h3>
-          <div className="alert alert-warning mb-4">
-            <span>Click "cupcake" above and see if these colors change to pink/pastel tones</span>
+        {/* Stats */}
+        <div className="stats shadow w-full mt-8">
+          <div className="stat">
+            <div className="stat-title">Theme</div>
+            <div className="stat-value text-primary">{currentTheme}</div>
+            <div className="stat-desc">Currently active</div>
           </div>
           
-          <div className="space-y-4">
-            <div className="bg-primary text-primary-content p-4 rounded">
-              Primary color - Should be pink in cupcake theme
-            </div>
-            <div className="bg-secondary text-secondary-content p-4 rounded">
-              Secondary color - Should be teal in cupcake theme
-            </div>
-            <div className="bg-accent text-accent-content p-4 rounded">
-              Accent color - Should be violet in cupcake theme
-            </div>
+          <div className="stat">
+            <div className="stat-title">Total Themes</div>
+            <div className="stat-value text-secondary">{themes.length}</div>
+            <div className="stat-desc">Available themes</div>
           </div>
         </div>
 
-        {/* CSS Debug Info */}
-        <div className="mb-8">
-          <h3 className="text-xl font-bold mb-4">CSS Debug (Check Console)</h3>
-          <button 
-            className="btn btn-outline"
-            onClick={() => {
-              const styles = getComputedStyle(document.documentElement);
-              console.log('All CSS Custom Properties:', {
-                '--p': styles.getPropertyValue('--p'),
-                '--pc': styles.getPropertyValue('--pc'),
-                '--s': styles.getPropertyValue('--s'),
-                '--sc': styles.getPropertyValue('--sc'),
-                '--a': styles.getPropertyValue('--a'),
-                '--ac': styles.getPropertyValue('--ac'),
-                '--b1': styles.getPropertyValue('--b1'),
-                '--b2': styles.getPropertyValue('--b2'),
-                '--b3': styles.getPropertyValue('--b3'),
-                '--bc': styles.getPropertyValue('--bc'),
-              });
-            }}
-          >
-            Log CSS Variables to Console
-          </button>
-        </div>
-
-        {/* Manual cupcake test */}
-        <div className="mb-8">
-          <h3 className="text-xl font-bold mb-4">Manual Cupcake Test</h3>
-          <button 
-            className="btn btn-primary mr-2"
-            onClick={() => {
-              document.documentElement.setAttribute('data-theme', 'cupcake');
-              setTimeout(() => {
-                const actualTheme = document.documentElement.getAttribute('data-theme');
-                alert(`Theme set to: ${actualTheme}`);
-              }, 100);
-            }}
-          >
-            Force Cupcake Theme
-          </button>
-          <button 
-            className="btn btn-secondary"
-            onClick={() => {
-              document.documentElement.removeAttribute('data-theme');
-              setTimeout(() => {
-                const actualTheme = document.documentElement.getAttribute('data-theme');
-                alert(`Theme attribute: ${actualTheme || 'removed'}`);
-              }, 100);
-            }}
-          >
-            Remove Theme Attribute
-          </button>
-        </div>
-
-        <div className="text-sm opacity-70">
-          <p>Open browser console (F12) to see debug information when switching themes.</p>
+        {/* Progress indicators */}
+        <div className="mt-8 space-y-2">
+          <progress className="progress progress-primary w-full" value={70} max="100"></progress>
+          <progress className="progress progress-secondary w-full" value={50} max="100"></progress>
+          <progress className="progress progress-accent w-full" value={30} max="100"></progress>
         </div>
       </div>
     </div>

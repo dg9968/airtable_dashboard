@@ -1,9 +1,18 @@
+// Fix for app/view-display/page.tsx - Add type assertion
 'use client';
 
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import ViewDisplay from '@/components/ViewDisplay';
+
+// Type assertion to extend the session user type
+interface ExtendedUser {
+  role?: string;
+  name?: string | null;
+  email?: string | null;
+  image?: string | null;
+}
 
 export default function ViewDisplayPage() {
   const { data: session, status } = useSession();
@@ -18,8 +27,9 @@ export default function ViewDisplayPage() {
       return;
     }
 
-    // Check if user has required role (staff or admin)
-    if (session.user?.role !== 'staff' && session.user?.role !== 'admin') {
+    // Check if user has required role (staff or admin) - FIXED with type assertion
+    const user = session.user as ExtendedUser;
+    if (user?.role !== 'staff' && user?.role !== 'admin') {
       // Not authorized - redirect to main dashboard with error message
       router.push('/?error=unauthorized');
       return;
@@ -38,8 +48,9 @@ export default function ViewDisplayPage() {
     );
   }
 
-  // Show nothing if not authenticated or authorized (will redirect)
-  if (!session || (session.user?.role !== 'staff' && session.user?.role !== 'admin')) {
+  // Show nothing if not authenticated or authorized (will redirect) - FIXED with type assertion
+  const user = session?.user as ExtendedUser;
+  if (!session || (user?.role !== 'staff' && user?.role !== 'admin')) {
     return null;
   }
 

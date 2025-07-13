@@ -1,9 +1,9 @@
- // app/test-daisyui/page.tsx
+// Fixed version: app/fixed-daisyui-test/page.tsx
 'use client';
 
 import { useState } from 'react';
 
-export default function DaisyUITestPage() {
+export default function FixedDaisyUITestPage() {
   const [selectedTab, setSelectedTab] = useState('buttons');
   const [modalOpen, setModalOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -35,7 +35,7 @@ export default function DaisyUITestPage() {
       </div>
 
       <div className="container mx-auto p-6">
-        {/* Tab Navigation */}
+        {/* Tab Navigation - FIXED */}
         <div className="tabs tabs-boxed mb-6">
           <a 
             className={`tab ${selectedTab === 'buttons' ? 'tab-active' : ''}`}
@@ -84,14 +84,14 @@ export default function DaisyUITestPage() {
                   <button className="btn btn-outline">Outline</button>
                   <button className="btn btn-ghost">Ghost</button>
                   <button className="btn btn-link">Link</button>
-                  <button className="btn btn-disabled">Disabled</button>
+                  <button className="btn" disabled>Disabled</button>
                   <button className="btn btn-sm">Small</button>
                   <button className="btn btn-lg">Large</button>
                 </div>
               </div>
             </div>
 
-            {/* Dropdown */}
+            {/* Dropdown - FIXED */}
             <div className="card bg-base-100 shadow-xl">
               <div className="card-body">
                 <h2 className="card-title">Dropdown</h2>
@@ -133,6 +133,82 @@ export default function DaisyUITestPage() {
           </div>
         )}
 
+        {/* Forms Tab */}
+        {selectedTab === 'forms' && (
+          <div className="space-y-8">
+            <div className="card bg-base-100 shadow-xl">
+              <div className="card-body">
+                <h2 className="card-title">Form Elements</h2>
+                
+                {/* Input Fields */}
+                <div className="form-control w-full max-w-xs">
+                  <label className="label">
+                    <span className="label-text">What is your name?</span>
+                  </label>
+                  <input type="text" placeholder="Type here" className="input input-bordered w-full max-w-xs" />
+                  <label className="label">
+                    <span className="label-text-alt">Bottom Left label</span>
+                    <span className="label-text-alt">Bottom Right label</span>
+                  </label>
+                </div>
+
+                {/* Select - FIXED */}
+                <div className="form-control w-full max-w-xs">
+                  <label className="label">
+                    <span className="label-text">Pick your favorite</span>
+                  </label>
+                  <select className="select select-bordered w-full max-w-xs">
+                    <option disabled selected>Pick one</option>
+                    <option>Star Wars</option>
+                    <option>Harry Potter</option>
+                    <option>Lord of the Rings</option>
+                    <option>Planet of the Apes</option>
+                    <option>Star Trek</option>
+                  </select>
+                </div>
+
+                {/* Textarea */}
+                <div className="form-control w-full max-w-xs">
+                  <label className="label">
+                    <span className="label-text">Your bio</span>
+                  </label>
+                  <textarea className="textarea textarea-bordered" placeholder="Bio"></textarea>
+                </div>
+
+                {/* Checkbox */}
+                <div className="form-control">
+                  <label className="label cursor-pointer">
+                    <span className="label-text">Remember me</span>
+                    <input type="checkbox" className="checkbox" />
+                  </label>
+                </div>
+
+                {/* Radio */}
+                <div className="form-control">
+                  <label className="label cursor-pointer">
+                    <span className="label-text">Option 1</span>
+                    <input type="radio" name="radio-10" className="radio" defaultChecked />
+                  </label>
+                </div>
+                <div className="form-control">
+                  <label className="label cursor-pointer">
+                    <span className="label-text">Option 2</span>
+                    <input type="radio" name="radio-10" className="radio" />
+                  </label>
+                </div>
+
+                {/* Toggle */}
+                <div className="form-control">
+                  <label className="label cursor-pointer">
+                    <span className="label-text">Remember me</span>
+                    <input type="checkbox" className="toggle" defaultChecked />
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Data Display Tab */}
         {selectedTab === 'data' && (
           <div className="space-y-8">
@@ -168,98 +244,10 @@ export default function DaisyUITestPage() {
               <div className="card w-full bg-primary text-primary-content">
                 <div className="card-body">
                   <h2 className="card-title">Colored Card</h2>
-                  <p>This card has primary color background.</p>
+                  <p>This card uses primary colors.</p>
                   <div className="card-actions justify-end">
                     <button className="btn">Action</button>
                   </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Table */}
-            <div className="card bg-base-100 shadow-xl">
-              <div className="card-body">
-                <h2 className="card-title">Table</h2>
-                <div className="overflow-x-auto">
-                  <table className="table">
-                    <thead>
-                      <tr>
-                        <th>
-                          <label>
-                            <input type="checkbox" className="checkbox" />
-                          </label>
-                        </th>
-                        <th>Name</th>
-                        <th>Job</th>
-                        <th>Favorite Color</th>
-                        <th></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr>
-                        <th>
-                          <label>
-                            <input type="checkbox" className="checkbox" />
-                          </label>
-                        </th>
-                        <td>
-                          <div className="flex items-center gap-3">
-                            <div className="avatar">
-                              <div className="mask mask-squircle w-12 h-12">
-                                <div className="w-12 h-12 bg-primary rounded-lg flex items-center justify-center text-primary-content font-bold">
-                                  CY
-                                </div>
-                              </div>
-                            </div>
-                            <div>
-                              <div className="font-bold">Cy Ganderton</div>
-                              <div className="text-sm opacity-50">United States</div>
-                            </div>
-                          </div>
-                        </td>
-                        <td>
-                          Quality Control Specialist
-                          <br />
-                          <span className="badge badge-ghost badge-sm">Desktop Support Technician</span>
-                        </td>
-                        <td>Purple</td>
-                        <th>
-                          <button className="btn btn-ghost btn-xs">details</button>
-                        </th>
-                      </tr>
-                      <tr>
-                        <th>
-                          <label>
-                            <input type="checkbox" className="checkbox" />
-                          </label>
-                        </th>
-                        <td>
-                          <div className="flex items-center gap-3">
-                            <div className="avatar">
-                              <div className="mask mask-squircle w-12 h-12">
-                                <div className="w-12 h-12 bg-secondary rounded-lg flex items-center justify-center text-secondary-content font-bold">
-                                  HB
-                                </div>
-                              </div>
-                            </div>
-                            <div>
-                              <div className="font-bold">Hart Hagerty</div>
-                              <div className="text-sm opacity-50">United States</div>
-                            </div>
-                          </div>
-                        </td>
-                        <td>
-                          Desktop Support Technician
-                          <br />
-                          <span className="badge badge-ghost badge-sm">Tax Accountant</span>
-                        </td>
-                        <td>Red</td>
-                        <th>
-                          <button className="btn btn-ghost btn-xs">details</button>
-                        </th>
-                      </tr>
-                    </tbody>
-                  </table>
                 </div>
               </div>
             </div>
@@ -303,94 +291,28 @@ export default function DaisyUITestPage() {
                 <div className="stat-desc text-secondary">31 tasks remaining</div>
               </div>
             </div>
-          </div>
-        )}
 
-        {/* Forms Tab */}
-        {selectedTab === 'forms' && (
-          <div className="space-y-8">
+            {/* Badges */}
             <div className="card bg-base-100 shadow-xl">
               <div className="card-body">
-                <h2 className="card-title">Form Elements</h2>
-                
-                {/* Input Fields */}
-                <div className="form-control w-full max-w-xs">
-                  <label className="label">
-                    <span className="label-text">What is your name?</span>
-                  </label>
-                  <input type="text" placeholder="Type here" className="input input-bordered w-full max-w-xs" />
-                  <label className="label">
-                    <span className="label-text-alt">Bottom Left label</span>
-                    <span className="label-text-alt">Bottom Right label</span>
-                  </label>
+                <h2 className="card-title">Badges</h2>
+                <div className="flex flex-wrap gap-2">
+                  <div className="badge">default</div>
+                  <div className="badge badge-neutral">neutral</div>
+                  <div className="badge badge-primary">primary</div>
+                  <div className="badge badge-secondary">secondary</div>
+                  <div className="badge badge-accent">accent</div>
+                  <div className="badge badge-ghost">ghost</div>
+                  <div className="badge badge-info">info</div>
+                  <div className="badge badge-success">success</div>
+                  <div className="badge badge-warning">warning</div>
+                  <div className="badge badge-error">error</div>
                 </div>
-
-                {/* Select */}
-                <div className="form-control w-full max-w-xs">
-                  <label className="label">
-                    <span className="label-text">Pick your favorite</span>
-                  </label>
-                  <select className="select select-bordered">
-                    <option disabled selected>Pick one</option>
-                    <option>Star Wars</option>
-                    <option>Harry Potter</option>
-                    <option>Lord of the Rings</option>
-                    <option>Planet of the Apes</option>
-                    <option>Star Trek</option>
-                  </select>
-                </div>
-
-                {/* Textarea */}
-                <div className="form-control">
-                  <label className="label">
-                    <span className="label-text">Your bio</span>
-                  </label>
-                  <textarea className="textarea textarea-bordered h-24" placeholder="Bio"></textarea>
-                </div>
-
-                {/* Checkboxes */}
-                <div className="form-control">
-                  <label className="label cursor-pointer">
-                    <span className="label-text">Remember me</span>
-                    <input type="checkbox" defaultChecked className="checkbox" />
-                  </label>
-                </div>
-
-                {/* Radio Buttons */}
-                <div className="form-control">
-                  <label className="label cursor-pointer">
-                    <span className="label-text">Red pill</span>
-                    <input type="radio" name="radio-10" className="radio checked:bg-red-500" defaultChecked />
-                  </label>
-                </div>
-                <div className="form-control">
-                  <label className="label cursor-pointer">
-                    <span className="label-text">Blue pill</span>
-                    <input type="radio" name="radio-10" className="radio checked:bg-blue-500" />
-                  </label>
-                </div>
-
-                {/* Range */}
-                <div className="form-control">
-                  <label className="label">
-                    <span className="label-text">Range</span>
-                  </label>
-                  <input type="range" min={0} max="100" defaultValue="40" className="range" />
-                  <div className="w-full flex justify-between text-xs px-2">
-                    <span>0</span>
-                    <span>25</span>
-                    <span>50</span>
-                    <span>75</span>
-                    <span>100</span>
-                  </div>
-                </div>
-
-                {/* Toggle */}
-                <div className="form-control">
-                  <label className="label cursor-pointer">
-                    <span className="label-text">Remember me</span>
-                    <input type="checkbox" className="toggle" defaultChecked />
-                  </label>
+                <div className="flex flex-wrap gap-2 mt-4">
+                  <div className="badge badge-outline">outline</div>
+                  <div className="badge badge-primary badge-outline">primary</div>
+                  <div className="badge badge-secondary badge-outline">secondary</div>
+                  <div className="badge badge-accent badge-outline">accent</div>
                 </div>
               </div>
             </div>
@@ -424,7 +346,7 @@ export default function DaisyUITestPage() {
                     <span>Warning: Invalid email address!</span>
                   </div>
                   <div className="alert alert-error">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-6 h-6" fill="none" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                     <span>Error! Task failed successfully.</span>
@@ -461,44 +383,6 @@ export default function DaisyUITestPage() {
                   <progress className="progress progress-success w-56" value={85} max="100"></progress>
                   <progress className="progress progress-warning w-56" value={60} max="100"></progress>
                   <progress className="progress progress-error w-56" value={15} max="100"></progress>
-                </div>
-              </div>
-            </div>
-
-            {/* Toast */}
-            <div className="card bg-base-100 shadow-xl">
-              <div className="card-body">
-                <h2 className="card-title">Toast</h2>
-                <p>Toast notifications appear at the bottom-right corner.</p>
-                <div className="toast toast-top toast-end">
-                  <div className="alert alert-info">
-                    <span>New message arrived.</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Badges */}
-            <div className="card bg-base-100 shadow-xl">
-              <div className="card-body">
-                <h2 className="card-title">Badges</h2>
-                <div className="flex flex-wrap gap-2">
-                  <div className="badge">default</div>
-                  <div className="badge badge-neutral">neutral</div>
-                  <div className="badge badge-primary">primary</div>
-                  <div className="badge badge-secondary">secondary</div>
-                  <div className="badge badge-accent">accent</div>
-                  <div className="badge badge-ghost">ghost</div>
-                  <div className="badge badge-info">info</div>
-                  <div className="badge badge-success">success</div>
-                  <div className="badge badge-warning">warning</div>
-                  <div className="badge badge-error">error</div>
-                </div>
-                <div className="flex flex-wrap gap-2 mt-4">
-                  <div className="badge badge-outline">outline</div>
-                  <div className="badge badge-primary badge-outline">primary</div>
-                  <div className="badge badge-secondary badge-outline">secondary</div>
-                  <div className="badge badge-accent badge-outline">accent</div>
                 </div>
               </div>
             </div>

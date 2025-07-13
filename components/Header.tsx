@@ -22,7 +22,7 @@ export default function Header() {
               <>
                 <li><Link href="/dashboard">Dashboard</Link></li>
                 <li><Link href="/airtable-dashboard">Airtable</Link></li>
-                {session.user.role === 'admin' && (
+                {(session.user as any).role === 'admin' && (
                   <li><Link href="/admin">Admin</Link></li>
                 )}
               </>
@@ -42,7 +42,7 @@ export default function Header() {
             <>
               <li><Link href="/dashboard" className="btn btn-ghost">Dashboard</Link></li>
               <li><Link href="/airtable-dashboard" className="btn btn-ghost">Airtable</Link></li>
-              {session.user.role === 'admin' && (
+              {(session.user as any).role === 'admin' && (
                 <li><Link href="/admin" className="btn btn-ghost">Admin</Link></li>
               )}
             </>
@@ -56,10 +56,10 @@ export default function Header() {
         ) : session ? (
           <div className="flex items-center space-x-3">
             <div className="text-sm">
-              <span>Hello, {session.user.name}</span>
-              {session.user.role && (
+              <span>Hello, {session.user?.name}</span>
+              {(session.user as any)?.role && (
                 <div className="badge badge-secondary badge-sm ml-2">
-                  {session.user.role}
+                  {(session.user as any)?.role}
                 </div>
               )}
             </div>

@@ -6,6 +6,15 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 
+// Fix for components/Dashboard.tsx - Add type assertion for user.role
+
+// Add this interface at the top of the file (after imports):
+interface ExtendedUser {
+  role?: string;
+  name?: string | null;
+  email?: string | null;
+  image?: string | null;
+}
 // Types for dashboard data
 interface DashboardStats {
   totalClients: number;
@@ -146,7 +155,8 @@ export default function Dashboard() {
     ];
 
     // Add role-specific actions
-    if (session?.user?.role === 'admin' || session?.user?.role === 'staff') {
+    const user = session?.user as ExtendedUser;
+    if (user?.role === 'admin' || user?.role === 'staff') {
       baseActions.push(
         {
           title: "Bookkeeping Dashboard",
@@ -169,7 +179,7 @@ export default function Dashboard() {
       );
     }
 
-    if (session?.user?.role === 'admin') {
+    if ((session && session.user as any)?.role === 'admin') {
       baseActions.push({
         title: "Admin Panel",
         description: "System administration and user management",
@@ -237,7 +247,7 @@ export default function Dashboard() {
                 </p>
                 <div className="mt-2 flex items-center space-x-4">
                   <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                    {session.user?.role || 'user'}
+                    {(session.user as any)?.role || 'user'}
                   </span>
                   <span className="text-sm text-gray-400">
                     {session.user?.email}

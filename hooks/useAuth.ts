@@ -24,7 +24,7 @@ export function useRequireRole(requiredRole: string, redirectUrl = '/') {
   useEffect(() => {
     if (status === 'loading') return
 
-    if (!session || session.user.role !== requiredRole) {
+    if (!session || (session.user as any)?.role !== requiredRole) {
       router.push(redirectUrl)
     }
   }, [session, status, router, requiredRole, redirectUrl])

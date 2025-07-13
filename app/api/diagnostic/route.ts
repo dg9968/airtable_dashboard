@@ -1,4 +1,4 @@
-// app/api/diagnostic/route.ts
+// app/api/diagnostic/route.ts - FIXED VERSION
 import { NextResponse } from 'next/server';
 import { fetchAllTableData, testConnection } from '@/lib/airtable';
 
@@ -29,7 +29,8 @@ export async function GET() {
 
     // Also look specifically for any field that might contain services
     const serviceFieldAnalysis = records.slice(0, 5).map(record => {
-      const allFieldsWithServices = {};
+      // FIXED: Add proper type annotation for the object
+      const allFieldsWithServices: Record<string, any> = {};
       Object.keys(record.fields).forEach(fieldName => {
         if (fieldName.toLowerCase().includes('service') || 
             fieldName.toLowerCase().includes('subscription') ||

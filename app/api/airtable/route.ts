@@ -1,6 +1,13 @@
-// app/api/airtable/route.ts
+// app/api/airtable/route.ts - FIXED VERSION
 import { NextResponse } from 'next/server';
 import { fetchAllTableData, getTablesMetadata, analyzeTableData, testConnection } from '@/lib/airtable';
+
+// Define the table metadata interface
+interface TableMetadata {
+  id: string;
+  name: string;
+  fields: any[];
+}
 
 export async function GET() {
   try {
@@ -31,9 +38,9 @@ export async function GET() {
       );
     }
 
-    // Fetch data from each table and analyze it
+    // Fetch data from each table and analyze it - FIXED: Added type annotation
     const tablesWithData = await Promise.all(
-      tablesMetadata.map(async (table) => {
+      tablesMetadata.map(async (table: TableMetadata) => {
         try {
           const records = await fetchAllTableData(table.name); // Use fetchAllTableData for unlimited records
           const analysis = analyzeTableData(records);
