@@ -1,244 +1,214 @@
-// Create: app/debug-themes/page.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
 
 export default function ThemeDebugTool() {
-  const [currentTheme, setCurrentTheme] = useState('light');
-  const [cssVariables, setCssVariables] = useState<Record<string, string>>({});
-  const [appliedTheme, setAppliedTheme] = useState('');
+  const [currentTheme, setCurrentTheme] = useState('dark');
+  const [appliedTheme, setAppliedTheme] = useState('loading...');
+  const [isMounted, setIsMounted] = useState(false);
 
   const themes = [
-    "light", "dark", "cupcake", "bumblebee", "emerald", "corporate",
-    "synthwave", "retro", "cyberpunk", "valentine", "halloween", "garden",
+    'light', 'dark', 'cupcake', 'bumblebee', 'emerald', 'corporate',
+    'synthwave', 'retro', 'cyberpunk', 'valentine', 'halloween', 'garden',
+    'forest', 'aqua', 'lofi', 'pastel', 'fantasy', 'wireframe', 'black',
+    'luxury', 'dracula', 'cmyk', 'autumn', 'business', 'acid', 'lemonade',
+    'night', 'coffee', 'winter'
   ];
 
+  useEffect(() => {
+    setIsMounted(true);
+    const savedTheme = localStorage.getItem('theme') || 'dark';
+    setCurrentTheme(savedTheme);
+    document.documentElement.setAttribute('data-theme', savedTheme);
+    setAppliedTheme(document.documentElement.getAttribute('data-theme') || 'none');
+  }, []);
+
   const changeTheme = (theme: string) => {
-    console.log(`🎨 Attempting to change theme to: ${theme}`);
+    console.log(`Changing to theme: ${theme}`);
     setCurrentTheme(theme);
     document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('theme', theme);
+    setAppliedTheme(theme);
     
-    // Check if the attribute was actually set
+    // Debug: Log the actual data-theme attribute
     setTimeout(() => {
       const actualTheme = document.documentElement.getAttribute('data-theme');
-      setAppliedTheme(actualTheme || 'none');
-      console.log(`✅ Theme attribute set to: ${actualTheme}`);
+      console.log(`Current data-theme attribute: ${actualTheme}`);
       
-      // Check CSS variables
+      // Debug: Log some CSS variables
       const styles = getComputedStyle(document.documentElement);
-      const vars = {
-        '--p': styles.getPropertyValue('--p'),
-        '--s': styles.getPropertyValue('--s'),
-        '--a': styles.getPropertyValue('--a'),
-        '--b1': styles.getPropertyValue('--b1'),
-        '--b2': styles.getPropertyValue('--b2'),
-        '--b3': styles.getPropertyValue('--b3'),
-      };
-      setCssVariables(vars);
-      
-      console.log('🎨 CSS Variables:', vars);
-      
-      // Test if theme-specific classes exist
-      const testElement = document.createElement('div');
-      testElement.className = 'btn btn-primary';
-      document.body.appendChild(testElement);
-      const computedStyles = getComputedStyle(testElement);
-      console.log('🧪 Button primary color:', computedStyles.backgroundColor);
-      document.body.removeChild(testElement);
+      console.log('CSS Variables:', {
+        primary: styles.getPropertyValue('--p'),
+        secondary: styles.getPropertyValue('--s'),
+        accent: styles.getPropertyValue('--a'),
+        base100: styles.getPropertyValue('--b1'),
+      });
     }, 100);
   };
 
-  useEffect(() => {
-    // Check initial state
-    const initialTheme = document.documentElement.getAttribute('data-theme');
-    setAppliedTheme(initialTheme || 'none');
-    console.log('🏁 Initial theme:', initialTheme);
-  }, []);
+  // Don't render dynamic content until mounted to prevent hydration mismatch
+  if (!isMounted) {
+    return (
+      <div className="min-h-screen p-8">
+        <div className="max-w-4xl mx-auto">
+          <h1 className="text-4xl font-bold mb-8">Theme Debug Tool</h1>
+          <div className="loading loading-spinner loading-lg"></div>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-base-200 p-8">
+    <div className="min-h-screen p-8">
       <div className="max-w-4xl mx-auto">
-        <h1 className="text-4xl font-bold mb-8">DaisyUI Theme Debug Tool</h1>
+        <h1 className="text-4xl font-bold mb-8">Theme Debug Tool</h1>
         
-        {/* Debug Info */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-          <div className="card bg-base-100 shadow-xl">
-            <div className="card-body">
-              <h2 className="card-title">Debug Information</h2>
-              <div className="space-y-2 text-sm">
-                <p><strong>Selected Theme:</strong> {currentTheme}</p>
-                <p><strong>Applied data-theme:</strong> {appliedTheme}</p>
-                <p><strong>DaisyUI Version:</strong> 5.0.46</p>
-                <p><strong>Tailwind Build:</strong> {typeof window !== 'undefined' ? 'Client' : 'Server'}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="card bg-base-100 shadow-xl">
-            <div className="card-body">
-              <h2 className="card-title">CSS Variables</h2>
-              <div className="space-y-1 text-xs font-mono">
-                {Object.entries(cssVariables).map(([key, value]) => (
-                  <p key={key}>
-                    <span className="text-primary">{key}:</span> {value || 'not set'}
-                  </p>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Theme Buttons */}
+        {/* System Info Card */}
         <div className="card bg-base-100 shadow-xl mb-8">
           <div className="card-body">
-            <h2 className="card-title">Theme Selector</h2>
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2">
-              {themes.map((theme) => (
-                <button
-                  key={theme}
-                  onClick={() => changeTheme(theme)}
-                  className={`btn btn-sm ${
-                    currentTheme === theme ? 'btn-primary' : 'btn-outline'
-                  }`}
-                >
-                  {theme}
-                </button>
-              ))}
+            <h2 className="card-title">System Information</h2>
+            <div className="space-y-2 text-sm">
+              <p><strong>Current Theme:</strong> {currentTheme}</p>
+              <p><strong>Applied data-theme:</strong> {appliedTheme}</p>
+              <p><strong>DaisyUI Version:</strong> 5.0.46</p>
+              <p><strong>Environment:</strong> Client-side rendered</p>
             </div>
           </div>
         </div>
 
-        {/* Color Test Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          {/* Primary Colors */}
-          <div className="card bg-base-100 shadow-xl">
-            <div className="card-body">
-              <h3 className="card-title text-lg">Primary Colors</h3>
-              <div className="space-y-2">
-                <button className="btn btn-primary w-full">Primary</button>
-                <button className="btn btn-secondary w-full">Secondary</button>
-                <button className="btn btn-accent w-full">Accent</button>
-              </div>
-            </div>
-          </div>
-
-          {/* Status Colors */}
-          <div className="card bg-base-100 shadow-xl">
-            <div className="card-body">
-              <h3 className="card-title text-lg">Status Colors</h3>
-              <div className="space-y-2">
-                <button className="btn btn-info w-full">Info</button>
-                <button className="btn btn-success w-full">Success</button>
-                <button className="btn btn-warning w-full">Warning</button>
-                <button className="btn btn-error w-full">Error</button>
-              </div>
-            </div>
-          </div>
-
-          {/* Background Test */}
-          <div className="card bg-base-100 shadow-xl">
-            <div className="card-body">
-              <h3 className="card-title text-lg">Backgrounds</h3>
-              <div className="space-y-2">
-                <div className="bg-base-200 p-2 rounded text-center">Base-200</div>
-                <div className="bg-base-300 p-2 rounded text-center">Base-300</div>
-                <div className="bg-neutral p-2 rounded text-center text-neutral-content">Neutral</div>
-              </div>
-            </div>
+        {/* Theme Grid */}
+        <div className="mb-8">
+          <h3 className="text-xl font-bold mb-4">Available Themes</h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2">
+            {themes.map((theme) => (
+              <button
+                key={theme}
+                onClick={() => changeTheme(theme)}
+                className={`btn btn-sm ${currentTheme === theme ? 'btn-primary' : 'btn-outline'}`}
+              >
+                {theme}
+              </button>
+            ))}
           </div>
         </div>
 
-        {/* Live CSS Test */}
-        <div className="card bg-base-100 shadow-xl mb-8">
-          <div className="card-body">
-            <h3 className="card-title">Live CSS Test</h3>
-            <p className="text-sm mb-4">These colors should change dramatically between themes:</p>
-            
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {/* Color swatches that should change with themes */}
-              <div className="text-center">
-                <div 
-                  className="w-16 h-16 mx-auto rounded-lg mb-2"
-                  style={{ backgroundColor: 'hsl(var(--p))' }}
-                ></div>
-                <p className="text-xs">Primary</p>
+        {/* Color Test */}
+        <div className="mb-8">
+          <h3 className="text-xl font-bold mb-4">Color Test</h3>
+          <div className="flex flex-wrap gap-2">
+            <button className="btn btn-primary">Primary</button>
+            <button className="btn btn-secondary">Secondary</button>
+            <button className="btn btn-accent">Accent</button>
+            <button className="btn btn-info">Info</button>
+            <button className="btn btn-success">Success</button>
+            <button className="btn btn-warning">Warning</button>
+            <button className="btn btn-error">Error</button>
+          </div>
+        </div>
+
+        {/* Background Test */}
+        <div className="mb-8">
+          <h3 className="text-xl font-bold mb-4">Background Test</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="card bg-base-100 shadow-xl">
+              <div className="card-body">
+                <h4 className="card-title">Base-100</h4>
+                <p>This should show the primary background color</p>
               </div>
-              
-              <div className="text-center">
-                <div 
-                  className="w-16 h-16 mx-auto rounded-lg mb-2"
-                  style={{ backgroundColor: 'hsl(var(--s))' }}
-                ></div>
-                <p className="text-xs">Secondary</p>
+            </div>
+            <div className="card bg-base-200 shadow-xl">
+              <div className="card-body">
+                <h4 className="card-title">Base-200</h4>
+                <p>This should show a slightly different background</p>
               </div>
-              
-              <div className="text-center">
-                <div 
-                  className="w-16 h-16 mx-auto rounded-lg mb-2"
-                  style={{ backgroundColor: 'hsl(var(--a))' }}
-                ></div>
-                <p className="text-xs">Accent</p>
-              </div>
-              
-              <div className="text-center">
-                <div 
-                  className="w-16 h-16 mx-auto rounded-lg mb-2"
-                  style={{ backgroundColor: 'hsl(var(--b1))' }}
-                ></div>
-                <p className="text-xs">Base</p>
+            </div>
+            <div className="card bg-base-300 shadow-xl">
+              <div className="card-body">
+                <h4 className="card-title">Base-300</h4>
+                <p>This should show an even more different background</p>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Instructions */}
-        <div className="alert alert-info">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" className="stroke-current shrink-0 w-6 h-6">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-          </svg>
-          <div>
-            <h3 className="font-bold">Debug Instructions:</h3>
-            <p className="text-sm">
-              1. Open browser console (F12) to see debug logs<br/>
-              2. Click different themes and watch the color swatches<br/>
-              3. If only light/dark work, the issue is in your Tailwind build<br/>
-              4. Check if CSS variables change when switching themes
-            </p>
+        {/* Cupcake Specific Test */}
+        <div className="mb-8">
+          <h3 className="text-xl font-bold mb-4">Cupcake Theme Specific Test</h3>
+          <div className="alert alert-warning mb-4">
+            <span>Click "cupcake" above and see if these colors change to pink/pastel tones</span>
+          </div>
+          
+          <div className="space-y-4">
+            <div className="bg-primary text-primary-content p-4 rounded">
+              Primary color - Should be pink in cupcake theme
+            </div>
+            <div className="bg-secondary text-secondary-content p-4 rounded">
+              Secondary color - Should be teal in cupcake theme
+            </div>
+            <div className="bg-accent text-accent-content p-4 rounded">
+              Accent color - Should be violet in cupcake theme
+            </div>
           </div>
         </div>
 
-        {/* Manual CSS Override Test */}
-        <div className="card bg-base-100 shadow-xl mt-8">
-          <div className="card-body">
-            <h3 className="card-title">Manual Override Test</h3>
-            <p className="text-sm mb-4">Click to manually force cupcake theme CSS variables:</p>
-            <button 
-              className="btn btn-outline"
-              onClick={() => {
-                // Manually set cupcake theme variables
-                const root = document.documentElement;
-                root.style.setProperty('--p', '327 73% 84%');  // Pink
-                root.style.setProperty('--s', '180 81% 69%');  // Teal  
-                root.style.setProperty('--a', '271 91% 84%');  // Purple
-                root.style.setProperty('--b1', '323 14% 96%'); // Light pink base
-                console.log('🎨 Manually applied cupcake colors');
-                
-                // Re-check variables
-                setTimeout(() => {
-                  const styles = getComputedStyle(document.documentElement);
-                  const vars = {
-                    '--p': styles.getPropertyValue('--p'),
-                    '--s': styles.getPropertyValue('--s'),
-                    '--a': styles.getPropertyValue('--a'),
-                    '--b1': styles.getPropertyValue('--b1'),
-                  };
-                  setCssVariables(vars);
-                }, 100);
-              }}
-            >
-              Force Cupcake Colors
-            </button>
-          </div>
+        {/* CSS Debug Info */}
+        <div className="mb-8">
+          <h3 className="text-xl font-bold mb-4">CSS Debug (Check Console)</h3>
+          <button 
+            className="btn btn-outline"
+            onClick={() => {
+              const styles = getComputedStyle(document.documentElement);
+              console.log('All CSS Custom Properties:', {
+                '--p': styles.getPropertyValue('--p'),
+                '--pc': styles.getPropertyValue('--pc'),
+                '--s': styles.getPropertyValue('--s'),
+                '--sc': styles.getPropertyValue('--sc'),
+                '--a': styles.getPropertyValue('--a'),
+                '--ac': styles.getPropertyValue('--ac'),
+                '--b1': styles.getPropertyValue('--b1'),
+                '--b2': styles.getPropertyValue('--b2'),
+                '--b3': styles.getPropertyValue('--b3'),
+                '--bc': styles.getPropertyValue('--bc'),
+              });
+            }}
+          >
+            Log CSS Variables to Console
+          </button>
+        </div>
+
+        {/* Manual cupcake test */}
+        <div className="mb-8">
+          <h3 className="text-xl font-bold mb-4">Manual Cupcake Test</h3>
+          <button 
+            className="btn btn-primary mr-2"
+            onClick={() => {
+              document.documentElement.setAttribute('data-theme', 'cupcake');
+              setAppliedTheme('cupcake');
+              setTimeout(() => {
+                const actualTheme = document.documentElement.getAttribute('data-theme');
+                alert(`Theme set to: ${actualTheme}`);
+              }, 100);
+            }}
+          >
+            Force Cupcake Theme
+          </button>
+          <button 
+            className="btn btn-secondary"
+            onClick={() => {
+              document.documentElement.removeAttribute('data-theme');
+              setAppliedTheme('removed');
+              setTimeout(() => {
+                const actualTheme = document.documentElement.getAttribute('data-theme');
+                alert(`Theme attribute: ${actualTheme || 'removed'}`);
+              }, 100);
+            }}
+          >
+            Remove Theme Attribute
+          </button>
+        </div>
+
+        <div className="text-sm opacity-70">
+          <p>Open browser console (F12) to see debug information when switching themes.</p>
         </div>
       </div>
     </div>
