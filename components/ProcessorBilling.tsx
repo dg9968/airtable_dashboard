@@ -1,30 +1,23 @@
-// components/ProcessorBilling.tsx
+// components/ProcessorBilling.tsx - Updated with URL state persistence
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 
-// ===== TYPE DEFINITIONS =====
-interface AirtableRecord {
-  id: string;
-  fields: Record<string, any>;
-  createdTime: string;
-}
-
-interface ProcessorClient {
-  id: string;
-  companyName: string;
-  billingAmount: number;
-  status: string;
-  service?: string;
-  createdTime: string;
-}
-
+// ===== TYPES =====
 interface ProcessorData {
   processor: string;
-  clientCount: number;
+  clients: ClientData[];
   totalBilling: number;
+  clientCount: number;
   averageBilling: number;
-  clients: ProcessorClient[];
+}
+
+interface ClientData {
+  name: string;
+  billing: number;
+  services: string[];
+  status: string;
 }
 
 interface DashboardStats {
@@ -38,11 +31,17 @@ interface DashboardStats {
 }
 
 interface ViewConfig {
-  key: 'bookkeeping' | 'service-by-client';
+  key: string;
   label: string;
   description: string;
   endpoint: string;
   icon: string;
+}
+
+interface AirtableRecord {
+  id: string;
+  fields: Record<string, any>;
+  createdTime: string;
 }
 
 interface ApiResponse {
@@ -62,6 +61,12 @@ interface ApiResponse {
 
 // ===== COMPONENT =====
 export default function ProcessorBilling() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  
+  // Get initial activeView from URL params, fallback to 'bookkeeping'
+  const initialView = (searchParams.get('view') as 'bookkeeping' | 'service-by-client') || 'bookkeeping';
+  
   // State Management
   const [processors, setProcessors] = useState<ProcessorData[]>([]);
   const [stats, setStats] = useState<DashboardStats>({
@@ -77,7 +82,7 @@ export default function ProcessorBilling() {
   const [error, setError] = useState<string | null>(null);
   const [suggestion, setSuggestion] = useState<string | null>(null);
   const [expandedProcessors, setExpandedProcessors] = useState<Set<string>>(new Set());
-  const [activeView, setActiveView] = useState<'bookkeeping' | 'service-by-client'>('bookkeeping');
+  const [activeView, setActiveView] = useState<'bookkeeping' | 'service-by-client'>(initialView);
 
   // View Configuration
   const views: ViewConfig[] = [
@@ -99,10 +104,31 @@ export default function ProcessorBilling() {
 
   const currentView = views.find(v => v.key === activeView) || views[0];
 
+  // Update URL when activeView changes
+  const handleViewChange = (newView: 'bookkeeping' | 'service-by-client') => {
+    setActiveView(newView);
+    
+    // Update URL without causing page reload
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('view', newView);
+    router.replace(`?${params.toString()}`, { scroll: false });
+    
+    console.log(`🔄 Switched to ${newView} view and updated URL`);
+  };
+
   // ===== EFFECTS =====
   useEffect(() => {
     fetchData();
   }, [activeView]);
+
+  // Sync state with URL changes (for browser back/forward)
+  useEffect(() => {
+    const urlView = searchParams.get('view') as 'bookkeeping' | 'service-by-client';
+    if (urlView && urlView !== activeView && (urlView === 'bookkeeping' || urlView === 'service-by-client')) {
+      setActiveView(urlView);
+      console.log(`🔄 Synced view from URL: ${urlView}`);
+    }
+  }, [searchParams]);
 
   // ===== API FUNCTIONS =====
   const fetchData = async () => {
@@ -131,8 +157,8 @@ export default function ProcessorBilling() {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch data';
       setError(errorMessage);
-      setSuggestion(err instanceof Error && 'suggestion' in err ? (err as any).suggestion : null);
-      console.error('❌ Error fetching data:', err);
+      setSuggestion(err instanceof Error && 'suggestion' in err ? 
+        (err as any).suggestion : 'Please check your internet connection and try again.');
     } finally {
       setLoading(false);
     }
@@ -140,128 +166,85 @@ export default function ProcessorBilling() {
 
   // ===== DATA PROCESSING =====
   const processRecordsIntoProcessors = (records: AirtableRecord[]) => {
-    // Group records by processor
-    const processorGroups: Record<string, AirtableRecord[]> = {};
-    
+    const processorMap = new Map<string, ProcessorData>();
+    let totalClients = 0;
+    let grandTotalBilling = 0;
+
     records.forEach(record => {
-      const processor = getProcessorName(record.fields);
-      if (!processorGroups[processor]) {
-        processorGroups[processor] = [];
+      const fields = record.fields;
+      const processorName = fields['Processor'] || 'Unassigned';
+      const clientName = fields['Name'] || fields['Client Name'] || 'Unknown Client';
+      const billingAmount = parseFloat(fields['Billing Amount'] || '0');
+      const servicesName = fields['Services Name'] || fields['Service'] || 'No Service';
+      const status = fields['Status'] || 'Active';
+
+      if (!processorMap.has(processorName)) {
+        processorMap.set(processorName, {
+          processor: processorName,
+          clients: [],
+          totalBilling: 0,
+          clientCount: 0,
+          averageBilling: 0
+        });
       }
-      processorGroups[processor].push(record);
+
+      const processor = processorMap.get(processorName)!;
+      
+      // Check if client already exists
+      let existingClient = processor.clients.find(c => c.name === clientName);
+      
+      if (!existingClient) {
+        existingClient = {
+          name: clientName,
+          billing: 0,
+          services: [],
+          status: status
+        };
+        processor.clients.push(existingClient);
+        totalClients++;
+      }
+
+      existingClient.billing += billingAmount;
+      if (!existingClient.services.includes(servicesName)) {
+        existingClient.services.push(servicesName);
+      }
+
+      processor.totalBilling += billingAmount;
+      grandTotalBilling += billingAmount;
     });
 
-    // Calculate statistics for each processor
-    const processors = Object.entries(processorGroups).map(([processorName, clients]) => {
-      const totalBilling = clients.reduce((sum, record) => {
-        const fee = getBillingAmount(record.fields);
-        return sum + fee;
-      }, 0);
-
-      const averageBilling = clients.length > 0 ? totalBilling / clients.length : 0;
-
-      const clientDetails = clients.map(record => ({
-        id: record.id,
-        companyName: getCompanyName(record.fields),
-        billingAmount: getBillingAmount(record.fields),
-        status: getStatus(record.fields),
-        service: getService(record.fields),
-        createdTime: record.createdTime
-      }));
-
-      return {
-        processor: processorName,
-        clientCount: clients.length,
-        totalBilling: Math.round(totalBilling),
-        averageBilling: Math.round(averageBilling),
-        clients: clientDetails
-      };
+    // Calculate averages and sort
+    const processorsArray = Array.from(processorMap.values()).map(processor => {
+      processor.clientCount = processor.clients.length;
+      processor.averageBilling = processor.clientCount > 0 ? processor.totalBilling / processor.clientCount : 0;
+      processor.clients.sort((a, b) => b.billing - a.billing);
+      return processor;
     });
 
-    // Sort processors by total billing (highest first)
-    processors.sort((a, b) => b.totalBilling - a.totalBilling);
+    processorsArray.sort((a, b) => b.totalBilling - a.totalBilling);
 
-    // Calculate overall statistics
-    const totalBilling = processors.reduce((sum, p) => sum + p.totalBilling, 0);
-    const stats = {
-      totalClients: records.length,
-      totalProcessors: processors.length,
-      grandTotalBilling: totalBilling,
-      averageBillingPerClient: records.length > 0 ? Math.round(totalBilling / records.length) : 0,
-      lastUpdated: '',
-      tableName: '',
-      viewName: ''
+    return {
+      processors: processorsArray,
+      stats: {
+        totalClients,
+        totalProcessors: processorsArray.length,
+        grandTotalBilling,
+        averageBillingPerClient: totalClients > 0 ? grandTotalBilling / totalClients : 0,
+        lastUpdated: new Date().toISOString(),
+        tableName: '',
+        viewName: ''
+      }
     };
-
-    return { processors, stats };
   };
 
-  // ===== FIELD EXTRACTION HELPERS =====
-  const getProcessorName = (fields: Record<string, any>): string => {
-    const processor = fields.Processor || 
-                    fields.processor || 
-                    fields['Assigned Processor'] ||
-                    fields['Staff Member'] ||
-                    fields.Staff ||
-                    fields.Employee ||
-                    fields['Responsible Person'] ||
-                    fields.Owner ||
-                    fields['Account Manager'] ||
-                    'Unassigned';
-    return String(processor || 'Unassigned');
-  };
-
-  const getCompanyName = (fields: Record<string, any>): string => {
-    return fields['Company Name'] || 
-           fields.Name || 
-           fields.Company || 
-           fields['Client Name'] || 
-           fields['Business Name'] ||
-           'Unknown Company';
-  };
-
-  const getBillingAmount = (fields: Record<string, any>): number => {
-    const amount = fields['Monthly Fee'] || 
-                  fields.Fee || 
-                  fields.Amount || 
-                  fields['Subscription Fee'] || 
-                  fields.Price ||
-                  fields['Billing Amount'] ||
-                  fields['Monthly Amount'] || 0;
-    return typeof amount === 'number' ? amount : parseFloat(amount) || 0;
-  };
-
-  const getStatus = (fields: Record<string, any>): string => {
-    return String(fields.Status || fields.status || 'Active');
-  };
-
-  const getService = (fields: Record<string, any>): string | undefined => {
-    if (activeView === 'service-by-client') {
-      return fields.Service || 
-             fields['Service Type'] || 
-             fields['Service Name'] ||
-             fields.Services ||
-             'Multiple Services';
-    }
-    return undefined;
-  };
-
-  // ===== UI HELPER FUNCTIONS =====
+  // ===== UTILITY FUNCTIONS =====
   const formatCurrency = (amount: number): string => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
-      currency: 'USD'
+      currency: 'USD',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
     }).format(amount);
-  };
-
-  const getStatusColor = (status: string): string => {
-    const statusStr = status.toLowerCase();
-    switch (statusStr) {
-      case 'active': return 'bg-green-100 text-green-800';
-      case 'pending': return 'bg-yellow-100 text-yellow-800';
-      case 'inactive': return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
   };
 
   const getProcessorInitial = (processorName: string): string => {
@@ -343,14 +326,19 @@ export default function ProcessorBilling() {
     <div className="bg-gray-800 rounded-lg shadow-sm border border-gray-700 mb-8">
       <div className="px-6 py-4 border-b border-gray-700">
         <h2 className="text-xl font-semibold text-white">Select Data View</h2>
-        <p className="text-sm text-gray-400 mt-1">Choose which dataset to analyze</p>
+        <p className="text-sm text-gray-400 mt-1">
+          Choose which dataset to analyze
+          <span className="ml-2 text-xs text-blue-400">
+            (View persisted in URL)
+          </span>
+        </p>
       </div>
       <div className="p-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {views.map((view) => (
             <button
               key={view.key}
-              onClick={() => setActiveView(view.key)}
+              onClick={() => handleViewChange(view.key as 'bookkeeping' | 'service-by-client')}
               disabled={loading}
               className={`p-4 rounded-lg border-2 transition-all duration-300 text-left disabled:opacity-50 disabled:cursor-not-allowed ${
                 activeView === view.key
@@ -512,43 +500,38 @@ export default function ProcessorBilling() {
 
                 {/* Expanded Client Details */}
                 {isExpanded && (
-                  <div className="border-t border-gray-700 bg-gray-900">
+                  <div className="border-t border-gray-700 bg-gray-750">
                     <div className="p-4">
-                      <div className="flex items-center justify-between mb-4">
-                        <h4 className="text-sm font-medium text-gray-300">
-                          Client Details ({processor.clients.length} clients)
-                        </h4>
-                        <div className="text-xs text-gray-400">
-                          Total: {formatCurrency(processor.totalBilling)} • Avg: {formatCurrency(processor.averageBilling)}
-                        </div>
-                      </div>
-                      <div className="grid gap-3">
-                        {processor.clients.map((client) => (
-                          <div key={client.id} className="flex items-center justify-between py-3 px-4 bg-gray-800 rounded-lg hover:bg-gray-750 transition-colors">
-                            <div className="flex items-center space-x-3">
-                              <div className="w-3 h-3 bg-blue-400 rounded-full"></div>
-                              <div className="flex-1">
-                                <div className="flex items-center space-x-3">
-                                  <span className="text-sm font-medium text-white">
-                                    {client.companyName}
-                                  </span>
-                                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(client.status)}`}>
-                                    {client.status}
+                      <h4 className="text-md font-semibold text-white mb-3">
+                        Clients ({processor.clientCount})
+                      </h4>
+                      <div className="space-y-2">
+                        {processor.clients.map((client, clientIndex) => (
+                          <div key={clientIndex} className="flex items-center justify-between p-3 bg-gray-700 rounded-lg">
+                            <div className="flex-1">
+                              <div className="flex items-center space-x-3">
+                                <div className="w-8 h-8 bg-gray-600 rounded-full flex items-center justify-center">
+                                  <span className="text-xs font-semibold text-white">
+                                    {client.name.charAt(0).toUpperCase()}
                                   </span>
                                 </div>
-                                {client.service && activeView === 'service-by-client' && (
-                                  <div className="text-xs text-gray-400 mt-1 flex items-center space-x-1">
-                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                    </svg>
-                                    <span>Service: {client.service}</span>
+                                <div>
+                                  <p className="font-medium text-white">{client.name}</p>
+                                  <div className="flex items-center space-x-2 text-xs text-gray-400">
+                                    <span>Services: {client.services.join(', ')}</span>
+                                    <span>•</span>
+                                    <span className={`px-2 py-1 rounded-full ${
+                                      client.status === 'Active' ? 'bg-green-900 text-green-300' : 'bg-gray-600 text-gray-300'
+                                    }`}>
+                                      {client.status}
+                                    </span>
                                   </div>
-                                )}
+                                </div>
                               </div>
                             </div>
                             <div className="text-right">
-                              <div className="text-sm font-semibold text-white">
-                                {formatCurrency(client.billingAmount)}
+                              <div className="font-bold text-green-400">
+                                {formatCurrency(client.billing)}
                               </div>
                               <div className="text-xs text-gray-400">
                                 Monthly
@@ -569,29 +552,23 @@ export default function ProcessorBilling() {
   );
 
   const DebugInfo = () => (
-    <div className="mt-8 bg-gray-800 rounded-lg p-6 border border-gray-700">
-      <h3 className="text-lg font-medium text-gray-300 mb-4">System Information</h3>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
+    <div className="bg-gray-800 rounded-lg shadow-sm border border-gray-700 mt-8">
+      <div className="px-6 py-4 border-b border-gray-700">
+        <h3 className="text-lg font-semibold text-white">Debug Information</h3>
+      </div>
+      <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="space-y-2">
           <div className="text-gray-400">
-            <span className="font-medium">Active View:</span> {currentView.label}
+            <span className="font-medium">Current View:</span><br />
+            <span className="text-sm">{currentView.label} ({activeView})</span>
           </div>
           <div className="text-gray-400">
-            <span className="font-medium">Data Source:</span> {stats.tableName}
+            <span className="font-medium">Data Source:</span><br />
+            <span className="text-sm">{stats.tableName || 'Loading...'} • {stats.viewName || 'Loading...'}</span>
           </div>
           <div className="text-gray-400">
-            <span className="font-medium">View Name:</span> {stats.viewName}
-          </div>
-        </div>
-        <div className="space-y-2">
-          <div className="text-gray-400">
-            <span className="font-medium">Total Records:</span> {stats.totalClients}
-          </div>
-          <div className="text-gray-400">
-            <span className="font-medium">Processors Found:</span> {stats.totalProcessors}
-          </div>
-          <div className="text-gray-400">
-            <span className="font-medium">Expanded Sections:</span> {expandedProcessors.size}
+            <span className="font-medium">URL Parameters:</span><br />
+            <span className="text-sm font-mono">?view={activeView}</span>
           </div>
         </div>
         <div className="space-y-2">
@@ -602,6 +579,10 @@ export default function ProcessorBilling() {
           <div className="text-gray-400">
             <span className="font-medium">API Endpoint:</span><br />
             <span className="text-xs font-mono">{currentView.endpoint}</span>
+          </div>
+          <div className="text-gray-400">
+            <span className="font-medium">Records Processed:</span><br />
+            <span className="text-sm">{processors.reduce((sum, p) => sum + p.clientCount, 0)} clients across {processors.length} processors</span>
           </div>
         </div>
       </div>
