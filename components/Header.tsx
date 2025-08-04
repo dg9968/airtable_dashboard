@@ -1,3 +1,4 @@
+// components/Header.tsx - UPDATED WITH CALENDAR
 'use client'
 
 import { useSession, signOut } from 'next-auth/react'
@@ -18,6 +19,8 @@ export default function Header() {
           <ul tabIndex={0} className="menu menu-sm dropdown-content mt-3 z-[1] p-2 shadow bg-base-100 rounded-box w-52">
             <li><Link href="/">Home</Link></li>
             <li><Link href="/training-videos">Training Videos</Link></li>
+            <li><Link href="/calendar">Calendar</Link></li>
+            <li><Link href="/filing-deadlines">Filing Deadlines</Link></li>
             {session && (
               <>
                 <li><Link href="/dashboard">Dashboard</Link></li>
@@ -38,6 +41,8 @@ export default function Header() {
         <ul className="menu menu-horizontal px-1">
           <li><Link href="/" className="btn btn-ghost">Home</Link></li>
           <li><Link href="/training-videos" className="btn btn-ghost">Training Videos</Link></li>
+          <li><Link href="/calendar" className="btn btn-ghost">Calendar</Link></li>
+          <li><Link href="/filing-deadlines" className="btn btn-ghost">Filing Deadlines</Link></li>
           {session && (
             <>
               <li><Link href="/dashboard" className="btn btn-ghost">Dashboard</Link></li>
@@ -54,31 +59,30 @@ export default function Header() {
         {status === 'loading' ? (
           <span className="loading loading-spinner loading-sm"></span>
         ) : session ? (
-          <div className="flex items-center space-x-3">
-            <div className="text-sm">
-              <span>Hello, {session.user?.name}</span>
-              {(session.user as any)?.role && (
-                <div className="badge badge-secondary badge-sm ml-2">
-                  {(session.user as any)?.role}
-                </div>
-              )}
+          <div className="dropdown dropdown-end">
+            <div tabIndex={0} role="button" className="btn btn-ghost btn-circle avatar">
+              <div className="w-10 rounded-full">
+                <img 
+                  alt="User Avatar" 
+                  src={session.user?.image || '/api/placeholder/40/40'} 
+                />
+              </div>
             </div>
-            <button
-              onClick={() => signOut()}
-              className="btn btn-secondary btn-sm"
-            >
-              Sign Out
-            </button>
+            <ul tabIndex={0} className="menu menu-sm dropdown-content mt-3 z-[1] p-2 shadow bg-base-100 rounded-box w-52">
+              <li>
+                <a className="justify-between">
+                  Profile
+                  <span className="badge">New</span>
+                </a>
+              </li>
+              <li><a>Settings</a></li>
+              <li><a onClick={() => signOut()}>Logout</a></li>
+            </ul>
           </div>
         ) : (
-          <div className="space-x-2">
-            <Link href="/auth/signin" className="btn btn-ghost btn-sm">
-              Sign In
-            </Link>
-            <Link href="/auth/signup" className="btn btn-accent btn-sm">
-              Sign Up
-            </Link>
-          </div>
+          <Link href="/auth/signin" className="btn btn-ghost">
+            Sign In
+          </Link>
         )}
       </div>
     </div>

@@ -1,11 +1,12 @@
-import React from 'react'
+// app/calendar/page.tsx - FIXED VERSION
+'use client';
 
-const Calendar = () => {
+import ServiceTaskCalendar from '@/components/ServiceTaskCalendar';
+
+export default function CalendarPage() {
   return (
-    <div>
-      <Calendar />
+    <div className="min-h-screen bg-gray-50">
+      <ServiceTaskCalendar />
     </div>
-  )
+  );
 }
-
-export default Calendar

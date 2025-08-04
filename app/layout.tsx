@@ -17,7 +17,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en">
+    <html lang="en" daisy-theme="winter" >
       <body className="min-h-screen">
         <ClientThemeWrapper>
           <Providers>
