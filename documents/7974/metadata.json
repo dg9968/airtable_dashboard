@@ -1,0 +1,82 @@
+[
+  {
+    "id": "local_1754918290884_nccrwelx0",
+    "fileName": "1754918290882.jpeg",
+    "originalName": "1095-A_Aetna CVS_Vega Gretchen_2024.jpeg",
+    "uploadDate": "2025-08-11T13:18:10.884Z",
+    "fileSize": 900362,
+    "fileType": "image/jpeg",
+    "clientCode": "7974",
+    "uploadedBy": "admin@example.com"
+  },
+  {
+    "id": "local_1754918294707_bn6km5hkt",
+    "fileName": "1754918294705.jpeg",
+    "originalName": "1096-A_Oscar Insurance Company of Florida_Vega_Gretchen_2024.jpeg",
+    "uploadDate": "2025-08-11T13:18:14.707Z",
+    "fileSize": 736491,
+    "fileType": "image/jpeg",
+    "clientCode": "7974",
+    "uploadedBy": "admin@example.com"
+  },
+  {
+    "id": "local_1754918313995_z183z9ub9",
+    "fileName": "1754918313994.jpeg",
+    "originalName": "1099-NEC_Greyhound Lines Inc_Vega_Elias_2024.jpeg",
+    "uploadDate": "2025-08-11T13:18:33.995Z",
+    "fileSize": 606954,
+    "fileType": "image/jpeg",
+    "clientCode": "7974",
+    "uploadedBy": "admin@example.com"
+  },
+  {
+    "id": "local_1754918317795_52aeki1kr",
+    "fileName": "1754918317790.pdf",
+    "originalName": "CUENTAS2024 (1).pdf",
+    "uploadDate": "2025-08-11T13:18:37.795Z",
+    "fileSize": 2435083,
+    "fileType": "application/pdf",
+    "clientCode": "7974",
+    "uploadedBy": "admin@example.com"
+  },
+  {
+    "id": "local_1754918320920_udfyxc6om",
+    "fileName": "1754918320919.jpeg",
+    "originalName": "SSA_1099_Social Security Benefit_Vega_Gretchen_2024.jpeg",
+    "uploadDate": "2025-08-11T13:18:40.920Z",
+    "fileSize": 533139,
+    "fileType": "image/jpeg",
+    "clientCode": "7974",
+    "uploadedBy": "admin@example.com"
+  },
+  {
+    "id": "local_1754918323895_0btdgksus",
+    "fileName": "1754918323894.jpeg",
+    "originalName": "SSA-1099_Declaracion de Beneficios de Seguro Social_Vega_Gretchen_2024.jpeg",
+    "uploadDate": "2025-08-11T13:18:43.895Z",
+    "fileSize": 561897,
+    "fileType": "image/jpeg",
+    "clientCode": "7974",
+    "uploadedBy": "admin@example.com"
+  },
+  {
+    "id": "local_1754918329265_b4067w3es",
+    "fileName": "1754918329264.pdf",
+    "originalName": "W2_Frankrum 5 Inc_Vega Elias 2024.pdf",
+    "uploadDate": "2025-08-11T13:18:49.265Z",
+    "fileSize": 499308,
+    "fileType": "application/pdf",
+    "clientCode": "7974",
+    "uploadedBy": "admin@example.com"
+  },
+  {
+    "id": "local_1754918332297_9zkjehnd0",
+    "fileName": "1754918332295.jpeg",
+    "originalName": "W2_Mainsl Financial Management_Vega_Gretchen_2024.jpeg",
+    "uploadDate": "2025-08-11T13:18:52.297Z",
+    "fileSize": 801233,
+    "fileType": "image/jpeg",
+    "clientCode": "7974",
+    "uploadedBy": "admin@example.com"
+  }
+]

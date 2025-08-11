@@ -31,6 +31,7 @@ export default withAuth(
             pathname.startsWith('/bookkeeping') ||
             pathname.startsWith('/processor-billing') ||
             pathname.startsWith('/view-display') || // Add view-display protection
+            pathname.startsWith('/document-management') ||
             pathname.startsWith('/admin')) {
           
           // Check if user is authenticated
@@ -41,10 +42,11 @@ export default withAuth(
             return token.role === 'admin'
           }
           
-          // Staff and admin only routes (including view-display)
+          // Staff and admin only routes (including view-display and document-management)
           if (pathname.startsWith('/airtable') || 
               pathname.startsWith('/bookkeeping') ||
-              pathname.startsWith('/view-display')) {
+              pathname.startsWith('/view-display') ||
+              pathname.startsWith('/document-management')) {
             return token.role === 'admin' || token.role === 'staff'
           }
           
