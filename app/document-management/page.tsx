@@ -7,6 +7,7 @@ import DocumentBrowser from '../../components/DocumentBrowser';
 
 export default function DocumentManagementPage() {
   const [refreshKey, setRefreshKey] = useState(0);
+  const [useGoogleDrive, setUseGoogleDrive] = useState(true); // Default to Google Drive
 
   const handleUploadComplete = (result: any) => {
     if (result.clientCode) {
@@ -18,10 +19,40 @@ export default function DocumentManagementPage() {
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2">Document Management</h1>
-        <p className="text-gray-600">
-          Upload, manage, and retrieve client documents using 4-digit codes
-        </p>
+        <div className="flex justify-between items-center mb-4">
+          <div>
+            <h1 className="text-3xl font-bold mb-2">Document Management</h1>
+            <p className="text-gray-600">
+              Upload, manage, and retrieve client documents using 4-digit codes
+            </p>
+          </div>
+          
+          <div className="form-control">
+            <label className="label cursor-pointer">
+              <span className="label-text mr-3">
+                {useGoogleDrive ? 'Google Drive' : 'Local Storage'}
+              </span>
+              <input 
+                type="checkbox" 
+                className="toggle toggle-primary" 
+                checked={useGoogleDrive}
+                onChange={(e) => setUseGoogleDrive(e.target.checked)}
+              />
+            </label>
+          </div>
+        </div>
+        
+        {useGoogleDrive && (
+          <div className="alert alert-info mb-4">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" className="stroke-current shrink-0 w-6 h-6">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+            <div>
+              <h3 className="font-bold">Using Google Drive Storage</h3>
+              <div className="text-sm">Documents will be stored securely in Google Drive with automatic backup and sharing capabilities.</div>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -29,13 +60,15 @@ export default function DocumentManagementPage() {
         <div>
           <DocumentUpload
             onUploadComplete={handleUploadComplete}
+            useGoogleDrive={useGoogleDrive}
           />
         </div>
 
         {/* Browser Section */}
         <div>
           <DocumentBrowser
-            key={refreshKey}
+            key={`${refreshKey}-${useGoogleDrive ? 'gdrive' : 'local'}`}
+            useGoogleDrive={useGoogleDrive}
           />
         </div>
       </div>

@@ -5,9 +5,10 @@ import { useState, useRef } from 'react';
 
 interface DocumentUploadProps {
   onUploadComplete?: (result: any) => void;
+  useGoogleDrive?: boolean;
 }
 
-export default function DocumentUpload({ onUploadComplete }: DocumentUploadProps) {
+export default function DocumentUpload({ onUploadComplete, useGoogleDrive = false }: DocumentUploadProps) {
   const [clientCode, setClientCode] = useState('');
   const [taxYear, setTaxYear] = useState('');
   const [isUploading, setIsUploading] = useState(false);
@@ -62,7 +63,8 @@ export default function DocumentUpload({ onUploadComplete }: DocumentUploadProps
       formData.append('clientCode', clientCode.trim());
       formData.append('taxYear', taxYear);
 
-      const response = await fetch('/api/documents', {
+      const apiEndpoint = useGoogleDrive ? '/api/documents-gdrive' : '/api/documents';
+      const response = await fetch(apiEndpoint, {
         method: 'POST',
         body: formData,
       });
@@ -202,6 +204,11 @@ export default function DocumentUpload({ onUploadComplete }: DocumentUploadProps
               <div className="font-bold">Upload successful!</div>
               <div className="text-sm">
                 Client Code: <strong>{uploadResult.clientCode}</strong>
+                {uploadResult.source === 'google-drive' && (
+                  <div className="text-xs mt-1 opacity-75">
+                    Stored in Google Drive
+                  </div>
+                )}
               </div>
             </div>
           </div>

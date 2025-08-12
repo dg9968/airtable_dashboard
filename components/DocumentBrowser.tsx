@@ -13,7 +13,11 @@ interface Document {
   clientCode: string;
 }
 
-export default function DocumentBrowser() {
+interface DocumentBrowserProps {
+  useGoogleDrive?: boolean;
+}
+
+export default function DocumentBrowser({ useGoogleDrive = false }: DocumentBrowserProps) {
   const [clientCode, setClientCode] = useState('');
   const [taxYear, setTaxYear] = useState('');
   const [documents, setDocuments] = useState<Document[]>([]);
@@ -52,7 +56,8 @@ export default function DocumentBrowser() {
     setError('');
 
     try {
-      const response = await fetch(`/api/documents?clientCode=${clientCode.trim()}&taxYear=${taxYear}`);
+      const apiEndpoint = useGoogleDrive ? '/api/documents-gdrive' : '/api/documents';
+      const response = await fetch(`${apiEndpoint}?clientCode=${clientCode.trim()}&taxYear=${taxYear}`);
       const result = await response.json();
 
       if (!response.ok) {
@@ -71,7 +76,8 @@ export default function DocumentBrowser() {
 
   const downloadDocument = async (document: Document) => {
     try {
-      const response = await fetch(`/api/documents/download?recordId=${document.id}`);
+      const apiEndpoint = useGoogleDrive ? '/api/documents-gdrive/download' : '/api/documents/download';
+      const response = await fetch(`${apiEndpoint}?recordId=${document.id}`);
       
       if (!response.ok) {
         const result = await response.json();
@@ -97,7 +103,8 @@ export default function DocumentBrowser() {
   const viewDocument = (document: Document) => {
     try {
       // Open document in new tab for viewing
-      const viewUrl = `/api/documents/view?recordId=${document.id}`;
+      const apiEndpoint = useGoogleDrive ? '/api/documents-gdrive/view' : '/api/documents/view';
+      const viewUrl = `${apiEndpoint}?recordId=${document.id}`;
       window.open(viewUrl, '_blank');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'View failed');
@@ -115,7 +122,8 @@ export default function DocumentBrowser() {
     setError('');
 
     try {
-      const response = await fetch(`/api/documents?recordId=${deleteConfirm.document.id}`, {
+      const apiEndpoint = useGoogleDrive ? '/api/documents-gdrive' : '/api/documents';
+      const response = await fetch(`${apiEndpoint}?recordId=${deleteConfirm.document.id}`, {
         method: 'DELETE'
       });
 
