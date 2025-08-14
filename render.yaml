@@ -16,6 +16,6 @@ services:
       - key: AIRTABLE_USERS_TABLE
         value: Users
       - key: NEXTAUTH_SECRET
-        generateValue: true  # Render will generate a secure secret
+        sync: false  # Set this in Render dashboard
       - key: NEXTAUTH_URL
         value: https://airtable-dashboard.onrender.com
