@@ -18,4 +18,4 @@ services:
       - key: NEXTAUTH_SECRET
         generateValue: true  # Render will generate a secure secret
       - key: NEXTAUTH_URL
-        value: https://airtable-dashboard.onrender.com  # Update with your actual URL
+        value: https://airtable-dashboard.onrender.com
