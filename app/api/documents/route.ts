@@ -290,9 +290,9 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Record ID is required' }, { status: 400 });
     }
 
-    let clientCode: string;
-    let fileName: string;
-    let taxYear: string;
+    let clientCode: string = '';
+    let fileName: string = '';
+    let taxYear: string = '';
     let documentMetadata: any;
 
     try {
