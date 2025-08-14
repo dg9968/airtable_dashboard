@@ -1,32 +1,26 @@
-// lib/auth.ts - Debug version with better logging
+// lib/auth.ts - Secure Airtable-based authentication
 import NextAuth from 'next-auth'
 import CredentialsProvider from 'next-auth/providers/credentials'
 import { compare } from 'bcryptjs'
+import Airtable from 'airtable'
 
-// Mock users for development - using plaintext passwords for testing
-const mockUsers = [
-  {
-    id: '1',
-    email: 'admin@example.com',
-    name: 'Admin User',
-    password: 'password123', // Temporary plaintext for testing
-    role: 'admin'
-  },
-  {
-    id: '2',
-    email: 'user@example.com',
-    name: 'Regular User',
-    password: 'password123',
-    role: 'user'
-  },
-  {
-    id: '3',
-    email: 'staff@example.com',
-    name: 'Staff User',
-    password: 'password123',
-    role: 'staff'
-  }
-]
+// Initialize Airtable
+const airtable = new Airtable({
+  apiKey: process.env.AIRTABLE_PERSONAL_ACCESS_TOKEN,
+})
+const base = airtable.base(process.env.AIRTABLE_BASE_ID || '')
+
+// Users table name - adjust this to match your Airtable base
+const USERS_TABLE = process.env.AIRTABLE_USERS_TABLE || 'Users'
+
+interface User {
+  id: string
+  email: string
+  name: string
+  passwordHash: string
+  role: string
+  isActive: boolean
+}
 
 export const authOptions = {
   providers: [
@@ -37,36 +31,37 @@ export const authOptions = {
         password: { label: 'Password', type: 'password' }
       },
       async authorize(credentials) {
-        console.log('Auth attempt:', credentials?.email) // Debug log
-        
         if (!credentials?.email || !credentials?.password) {
-          console.log('Missing credentials')
           throw new Error('Please enter email and password')
         }
 
-        const user = await getUserByEmail(credentials.email)
-        console.log('User found:', user ? 'Yes' : 'No') // Debug log
-        
-        if (!user) {
-          console.log('No user found for email:', credentials.email)
-          throw new Error('No user found with this email')
-        }
+        try {
+          const user = await getUserByEmail(credentials.email)
+          
+          if (!user) {
+            throw new Error('Invalid credentials')
+          }
 
-        // For testing, use simple password comparison
-        const isValidPassword = credentials.password === user.password
-        console.log('Password valid:', isValidPassword) // Debug log
-        
-        if (!isValidPassword) {
-          console.log('Invalid password for user:', credentials.email)
-          throw new Error('Invalid password')
-        }
+          if (!user.isActive) {
+            throw new Error('Account is deactivated. Contact administrator.')
+          }
 
-        console.log('Login successful for:', credentials.email) // Debug log
-        return {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          role: user.role
+          // Compare hashed password
+          const isValidPassword = await compare(credentials.password, user.passwordHash)
+          
+          if (!isValidPassword) {
+            throw new Error('Invalid credentials')
+          }
+
+          return {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            role: user.role
+          }
+        } catch (error) {
+          console.error('Authentication error:', error)
+          throw new Error('Authentication failed')
         }
       }
     })
@@ -97,13 +92,62 @@ async session({ session, token }: any) {
     signIn: '/auth/signin',
   },
 
-  secret: process.env.NEXTAUTH_SECRET || 'your-secret-key-for-development',
+  secret: process.env.NEXTAUTH_SECRET,
 }
 
 export default NextAuth(authOptions)
 
-async function getUserByEmail(email: string) {
-  const user = mockUsers.find(user => user.email.toLowerCase() === email.toLowerCase())
-  console.log('Looking for email:', email, 'Found:', user ? 'Yes' : 'No')
-  return user || null
+// Secure function to get user from Airtable
+async function getUserByEmail(email: string): Promise<User | null> {
+  try {
+    const records = await base(USERS_TABLE)
+      .select({
+        filterByFormula: `LOWER({Email}) = LOWER('${email.replace(/'/g, "\\'")}')`
+      })
+      .firstPage()
+
+    if (records.length === 0) {
+      return null
+    }
+
+    const record = records[0]
+    const fields = record.fields
+
+    return {
+      id: record.id,
+      email: fields.Email as string,
+      name: fields.Name as string,
+      passwordHash: fields.PasswordHash as string,
+      role: fields.Role as string || 'user',
+      isActive: fields.IsActive !== false // Default to true if not specified
+    }
+  } catch (error) {
+    console.error('Error fetching user from Airtable:', error)
+    return null
+  }
+}
+
+// Utility function to create a new user (for admin use)
+export async function createUser(email: string, name: string, password: string, role: string = 'user') {
+  try {
+    const bcrypt = await import('bcryptjs')
+    const passwordHash = await bcrypt.hash(password, 12)
+
+    const record = await base(USERS_TABLE).create([
+      {
+        fields: {
+          Email: email,
+          Name: name,
+          PasswordHash: passwordHash,
+          Role: role,
+          IsActive: true
+        }
+      }
+    ])
+
+    return { success: true, userId: record[0].id }
+  } catch (error) {
+    console.error('Error creating user:', error)
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+  }
 }
