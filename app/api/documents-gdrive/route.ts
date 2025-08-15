@@ -136,7 +136,7 @@ export async function POST(request: NextRequest) {
         'Tax Year': taxYear,
         'File Name': driveResult.fileId, // Store Google Drive file ID
         'Original Name': file.name,
-        'Upload Date': new Date().toISOString(),
+        'Upload Date': new Date().toISOString().split('T')[0],
         'File Size': file.size,
         'File Type': file.type,
         'Google Drive File ID': driveResult.fileId,

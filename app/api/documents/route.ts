@@ -242,7 +242,7 @@ export async function POST(request: NextRequest) {
             'Tax Year': taxYear,
             'File Name': fileName,
             'Original Name': file.name,
-            'Upload Date': new Date().toISOString(),
+            'Upload Date': new Date().toISOString().split('T')[0],
             'File Size': file.size,
             'File Type': file.type,
             'Uploaded By': session.user?.email || 'Unknown'
