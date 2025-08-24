@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3'
+
+const s3Client = new S3Client({
+  region: process.env.AWS_REGION,
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+  },
+})
 
 export async function GET(request: NextRequest) {
   try {
@@ -16,28 +25,93 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'File key is required' }, { status: 400 })
     }
 
-    // TODO: Replace with actual AWS S3 SDK implementation
-    // In a real implementation, you would:
-    // 1. Check if the processed QBO file exists in S3 parsed directory
-    // 2. Generate a pre-signed URL or stream the file directly
-    // 3. Return the actual QBO file content
-    
-    // For demo purposes, generate a sample QBO file content
-    const qboContent = generateSampleQboContent(fileKey)
-    
-    // Create response with QBO file
-    const response = new NextResponse(qboContent, {
-      status: 200,
-      headers: {
-        'Content-Type': 'application/vnd.intu.qbo',
-        'Content-Disposition': `attachment; filename="bank_statement_${Date.now()}.qbo"`,
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-        'Pragma': 'no-cache',
-        'Expires': '0'
-      }
-    })
+    // Convert incoming file key to parsed directory key
+    // incoming/timestamp_id.pdf -> parsed/timestamp_id.qbo
+    const parsedFileKey = fileKey
+      .replace('incoming/', 'parsed/')
+      .replace(/\.(pdf|csv|xlsx?)$/i, '.qbo')
 
-    return response
+    const bucketName = process.env.AWS_S3_BUCKET_NAME
+    if (!bucketName) {
+      return NextResponse.json({ error: 'AWS S3 bucket not configured' }, { status: 500 })
+    }
+
+    try {
+      // Try to get the processed QBO file from S3
+      const getObjectCommand = new GetObjectCommand({
+        Bucket: bucketName,
+        Key: parsedFileKey
+      })
+
+      const s3Response = await s3Client.send(getObjectCommand)
+      
+      if (!s3Response.Body) {
+        return NextResponse.json({ error: 'QBO file not found or empty' }, { status: 404 })
+      }
+
+      // Convert S3 stream to buffer
+      const chunks: Uint8Array[] = []
+      const reader = s3Response.Body.transformToWebStream().getReader()
+      
+      try {
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          chunks.push(value)
+        }
+      } finally {
+        reader.releaseLock()
+      }
+
+      const buffer = new Uint8Array(chunks.reduce((acc, chunk) => acc + chunk.length, 0))
+      let offset = 0
+      for (const chunk of chunks) {
+        buffer.set(chunk, offset)
+        offset += chunk.length
+      }
+
+      // Get original filename from metadata or generate one
+      const originalName = s3Response.Metadata?.originalname || 'bank_statement'
+      const filename = `${originalName.replace(/\.[^/.]+$/, '')}_${Date.now()}.qbo`
+
+      console.log('QBO file downloaded from S3:', {
+        parsedFileKey,
+        bucket: bucketName,
+        size: buffer.length,
+        user: session.user?.email
+      })
+
+      // Return the QBO file
+      return new NextResponse(buffer, {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/vnd.intu.qbo',
+          'Content-Disposition': `attachment; filename="${filename}"`,
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0',
+          'Content-Length': buffer.length.toString()
+        }
+      })
+
+    } catch (s3Error: any) {
+      console.error('S3 download failed:', s3Error)
+      
+      // If file not found, return helpful error
+      if (s3Error.name === 'NoSuchKey' || s3Error.$metadata?.httpStatusCode === 404) {
+        return NextResponse.json({ 
+          error: 'QBO file not ready yet. Processing may still be in progress.',
+          parsedFileKey,
+          details: process.env.NODE_ENV === 'development' ? String(s3Error) : undefined
+        }, { status: 404 })
+      }
+
+      // Other S3 errors
+      return NextResponse.json({ 
+        error: 'Failed to download QBO file from S3.',
+        details: process.env.NODE_ENV === 'development' ? String(s3Error) : undefined
+      }, { status: 500 })
+    }
 
   } catch (error) {
     console.error('Error downloading QBO file:', error)

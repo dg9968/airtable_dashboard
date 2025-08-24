@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
+
+const s3Client = new S3Client({
+    region: process.env.AWS_REGION,
+    credentials: {
+      accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+    },
+  })
 
 export async function POST(request: NextRequest) {
   try {
@@ -33,35 +42,67 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'File too large (max 25MB)' }, { status: 400 })
     }
 
-    // TODO: Replace with actual AWS S3 SDK implementation
-    // For now, we'll simulate the S3 upload process
-    
     // Generate unique file key for S3
     const timestamp = Date.now()
     const randomId = Math.random().toString(36).substring(2, 15)
     const fileExtension = file.name.split('.').pop()
-    const fileKey = `bank-statements/${timestamp}_${randomId}.${fileExtension}`
+    const fileKey = `incoming/${timestamp}_${randomId}.${fileExtension}`
 
-    // Simulate S3 upload delay
-    await new Promise(resolve => setTimeout(resolve, 1000))
+    // Convert file to buffer for S3 upload
+    const bytes = await file.arrayBuffer()
+    const buffer = Buffer.from(bytes)
 
-    // In a real implementation, you would:
-    // 1. Upload to S3 using AWS SDK
-    // 2. The S3 upload would trigger AWS Lambda functions
-    // 3. Lambda functions would process the file and put results in parsed directory
-    
-    // Simulated S3 upload result
-    const uploadResult = {
-      success: true,
-      fileKey: fileKey,
-      bucket: 'your-bank-processing-bucket',
-      originalName: file.name,
-      size: file.size,
-      uploadedAt: new Date().toISOString(),
-      uploadedBy: session.user?.email || 'Unknown'
+    // Upload to S3
+    const bucketName = process.env.AWS_S3_BUCKET_NAME
+    if (!bucketName) {
+      return NextResponse.json({ error: 'AWS S3 bucket not configured' }, { status: 500 })
     }
 
-    return NextResponse.json(uploadResult)
+    const uploadParams = {
+      Bucket: bucketName,
+      Key: fileKey,
+      Body: buffer,
+      ContentType: file.type,
+      Metadata: {
+        originalName: file.name,
+        uploadedBy: session.user?.email || 'Unknown',
+        processingType: 'bank-statement',
+        uploadedAt: new Date().toISOString()
+      }
+    }
+
+    try {
+      const result = await s3Client.send(new PutObjectCommand(uploadParams))
+      
+      // S3 upload successful - this will trigger Lambda function via S3 event
+      const uploadResult = {
+        success: true,
+        fileKey: fileKey,
+        bucket: bucketName,
+        originalName: file.name,
+        size: file.size,
+        uploadedAt: new Date().toISOString(),
+        uploadedBy: session.user?.email || 'Unknown',
+        s3ETag: result.ETag,
+        s3Location: `s3://${bucketName}/${fileKey}`
+      }
+
+      console.log('Bank statement uploaded to S3:', {
+        fileKey,
+        bucket: bucketName,
+        size: file.size,
+        user: session.user?.email
+      })
+
+      return NextResponse.json(uploadResult)
+
+    } catch (s3Error) {
+      console.error('S3 upload failed:', s3Error)
+      return NextResponse.json({ 
+        error: 'Failed to upload file to S3. Please check AWS configuration.',
+        details: process.env.NODE_ENV === 'development' ? String(s3Error) : undefined
+      }, { status: 500 })
+    }
 
   } catch (error) {
     console.error('Error processing bank statement upload:', error)

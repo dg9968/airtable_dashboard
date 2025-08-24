@@ -23,7 +23,10 @@ export default function Header() {
                 <li><Link href="/dashboard">Dashboard</Link></li>
                 <li><Link href="/airtable-dashboard">Airtable</Link></li>
                 {((session.user as any).role === 'staff' || (session.user as any).role === 'admin') && (
-                  <li><Link href="/document-management">Documents</Link></li>
+                  <>
+                    <li><Link href="/document-management">Documents</Link></li>
+                    <li><Link href="/bank-statement-processing">Statement to QBO</Link></li>
+                  </>
                 )}
                 {(session.user as any).role === 'admin' && (
                   <li><Link href="/admin">Admin</Link></li>
@@ -46,7 +49,10 @@ export default function Header() {
               <li><Link href="/dashboard" className="btn btn-ghost">Dashboard</Link></li>
               <li><Link href="/airtable-dashboard" className="btn btn-ghost">Airtable</Link></li>
               {((session.user as any).role === 'staff' || (session.user as any).role === 'admin') && (
-                <li><Link href="/document-management" className="btn btn-ghost">Documents</Link></li>
+                <>
+                  <li><Link href="/document-management" className="btn btn-ghost">Documents</Link></li>
+                  <li><Link href="/bank-statement-processing" className="btn btn-ghost">Statement to QBO</Link></li>
+                </>
               )}
               {(session.user as any).role === 'admin' && (
                 <li><Link href="/admin" className="btn btn-ghost">Admin</Link></li>
