@@ -6,9 +6,11 @@ import { useState, useRef } from 'react';
 interface DocumentUploadProps {
   onUploadComplete?: (result: any) => void;
   useGoogleDrive?: boolean;
+  documentCategory?: string;
+  isCorporate?: boolean;
 }
 
-export default function DocumentUpload({ onUploadComplete, useGoogleDrive = false }: DocumentUploadProps) {
+export default function DocumentUpload({ onUploadComplete, useGoogleDrive = false, documentCategory, isCorporate = false }: DocumentUploadProps) {
   const [clientCode, setClientCode] = useState('');
   const [taxYear, setTaxYear] = useState('');
   const [isUploading, setIsUploading] = useState(false);
@@ -44,9 +46,18 @@ export default function DocumentUpload({ onUploadComplete, useGoogleDrive = fals
       return;
     }
 
-    // Validate tax year is selected
-    if (!taxYear) {
+    // Validate tax year is selected (except for business credentials)
+    if (!taxYear && !(isCorporate && documentCategory === 'business-credentials')) {
       setError('Please select a tax filing year');
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      return;
+    }
+
+    // Validate document category for corporate uploads
+    if (isCorporate && !documentCategory) {
+      setError('Please select a document category first');
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
@@ -61,7 +72,18 @@ export default function DocumentUpload({ onUploadComplete, useGoogleDrive = fals
       const formData = new FormData();
       formData.append('file', file);
       formData.append('clientCode', clientCode.trim());
-      formData.append('taxYear', taxYear);
+      
+      // For business credentials, use 'N/A' as tax year
+      if (isCorporate && documentCategory === 'business-credentials') {
+        formData.append('taxYear', 'N/A');
+      } else {
+        formData.append('taxYear', taxYear);
+      }
+      
+      if (isCorporate && documentCategory) {
+        formData.append('documentCategory', documentCategory);
+        formData.append('isCorporate', 'true');
+      }
 
       const apiEndpoint = useGoogleDrive ? '/api/documents-gdrive' : '/api/documents';
       const response = await fetch(apiEndpoint, {
@@ -95,7 +117,9 @@ export default function DocumentUpload({ onUploadComplete, useGoogleDrive = fals
   return (
     <div className="card bg-base-100 shadow-xl">
       <div className="card-body">
-        <h2 className="card-title">Upload Document</h2>
+        <h2 className="card-title">
+          {isCorporate ? 'Upload Corporate Document' : 'Upload Document'}
+        </h2>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
           <div className="form-control w-full">
@@ -123,13 +147,15 @@ export default function DocumentUpload({ onUploadComplete, useGoogleDrive = fals
           <div className="form-control w-full">
             <label className="label">
               <span className="label-text">Select tax filing year</span>
-              <span className="label-text-alt text-error">*Required</span>
+              <span className="label-text-alt text-error">
+                {isCorporate && documentCategory === 'business-credentials' ? 'Not required for Business Credentials' : '*Required'}
+              </span>
             </label>
             <select
               className="select select-bordered w-full"
               value={taxYear}
               onChange={(e) => setTaxYear(e.target.value)}
-              disabled={isUploading}
+              disabled={isUploading || (isCorporate && documentCategory === 'business-credentials')}
             >
               <option value="">Choose tax filing year</option>
               {taxYearOptions.map((option) => (
@@ -140,7 +166,10 @@ export default function DocumentUpload({ onUploadComplete, useGoogleDrive = fals
             </select>
             <label className="label">
               <span className="label-text-alt">
-                Select relevant tax year
+                {isCorporate && documentCategory === 'business-credentials' ? 
+                  'Business credentials are year-independent' : 
+                  'Select relevant tax year'
+                }
               </span>
             </label>
           </div>
@@ -156,7 +185,7 @@ export default function DocumentUpload({ onUploadComplete, useGoogleDrive = fals
             className="file-input file-input-bordered w-full"
             accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png,.gif"
             onChange={handleFileUpload}
-            disabled={isUploading || !clientCode.trim() || !/^\d{4}$/.test(clientCode.trim()) || !taxYear}
+            disabled={isUploading || !clientCode.trim() || !/^\d{4}$/.test(clientCode.trim()) || (!taxYear && !(isCorporate && documentCategory === 'business-credentials')) || (isCorporate && !documentCategory)}
           />
           <label className="label">
             <span className="label-text-alt">
@@ -165,7 +194,7 @@ export default function DocumentUpload({ onUploadComplete, useGoogleDrive = fals
           </label>
         </div>
 
-        {clientCode && /^\d{4}$/.test(clientCode) && taxYear && (
+        {clientCode && /^\d{4}$/.test(clientCode) && (taxYear || (isCorporate && documentCategory === 'business-credentials')) && (!isCorporate || documentCategory) && (
           <div className="alert alert-success">
             <div className="flex items-center">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" className="stroke-current shrink-0 w-6 h-6">
@@ -173,7 +202,14 @@ export default function DocumentUpload({ onUploadComplete, useGoogleDrive = fals
               </svg>
               <div>
                 <div>Ready to upload to client code: <strong>{clientCode}</strong></div>
-                <div className="text-sm">Tax filing year: <strong>{taxYearOptions.find(opt => opt.value === taxYear)?.label}</strong></div>
+                {isCorporate && documentCategory === 'business-credentials' ? (
+                  <div className="text-sm">Category: <strong>Business Credentials</strong> (Year-independent)</div>
+                ) : (
+                  <div className="text-sm">Tax filing year: <strong>{taxYearOptions.find(opt => opt.value === taxYear)?.label}</strong></div>
+                )}
+                {isCorporate && documentCategory && documentCategory !== 'business-credentials' && (
+                  <div className="text-sm">Category: <strong>{documentCategory}</strong></div>
+                )}
               </div>
             </div>
           </div>

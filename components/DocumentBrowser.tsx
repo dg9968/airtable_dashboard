@@ -15,9 +15,11 @@ interface Document {
 
 interface DocumentBrowserProps {
   useGoogleDrive?: boolean;
+  documentCategory?: string;
+  isCorporate?: boolean;
 }
 
-export default function DocumentBrowser({ useGoogleDrive = false }: DocumentBrowserProps) {
+export default function DocumentBrowser({ useGoogleDrive = false, documentCategory, isCorporate = false }: DocumentBrowserProps) {
   const [clientCode, setClientCode] = useState('');
   const [taxYear, setTaxYear] = useState('');
   const [documents, setDocuments] = useState<Document[]>([]);
@@ -47,7 +49,7 @@ export default function DocumentBrowser({ useGoogleDrive = false }: DocumentBrow
       return;
     }
 
-    if (!taxYear) {
+    if (!taxYear && !(isCorporate && documentCategory === 'business-credentials')) {
       setError('Please select a tax filing year');
       return;
     }
@@ -57,7 +59,16 @@ export default function DocumentBrowser({ useGoogleDrive = false }: DocumentBrow
 
     try {
       const apiEndpoint = useGoogleDrive ? '/api/documents-gdrive' : '/api/documents';
-      const response = await fetch(`${apiEndpoint}?clientCode=${clientCode.trim()}&taxYear=${taxYear}`);
+      
+      // For business credentials, use 'N/A' as tax year
+      const effectiveTaxYear = (isCorporate && documentCategory === 'business-credentials') ? 'N/A' : taxYear;
+      let queryParams = `clientCode=${clientCode.trim()}&taxYear=${effectiveTaxYear}`;
+      
+      if (isCorporate && documentCategory) {
+        queryParams += `&documentCategory=${documentCategory}&isCorporate=true`;
+      }
+      
+      const response = await fetch(`${apiEndpoint}?${queryParams}`);
       const result = await response.json();
 
       if (!response.ok) {
@@ -171,7 +182,12 @@ export default function DocumentBrowser({ useGoogleDrive = false }: DocumentBrow
   return (
     <div className="card bg-base-100 shadow-xl">
       <div className="card-body">
-        <h2 className="card-title">Document Browser</h2>
+        <h2 className="card-title">
+          {isCorporate ? 'Corporate Document Browser' : 'Document Browser'}
+          {isCorporate && documentCategory && (
+            <div className="badge badge-primary text-xs ml-2">{documentCategory}</div>
+          )}
+        </h2>
         
         <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-4">
           <div className="form-control">
@@ -202,7 +218,7 @@ export default function DocumentBrowser({ useGoogleDrive = false }: DocumentBrow
           <button
             className="btn btn-primary"
             onClick={fetchDocuments}
-            disabled={isLoading || !clientCode.trim() || !taxYear}
+            disabled={isLoading || !clientCode.trim() || (!taxYear && !(isCorporate && documentCategory === 'business-credentials'))}
           >
             {isLoading && <span className="loading loading-spinner loading-sm"></span>}
             Search Documents

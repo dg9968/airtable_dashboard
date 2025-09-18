@@ -156,6 +156,8 @@ export async function POST(request: NextRequest) {
     const file = formData.get('file') as File;
     const clientCode = formData.get('clientCode') as string;
     const taxYear = formData.get('taxYear') as string;
+    const documentCategory = formData.get('documentCategory') as string;
+    const isCorporate = formData.get('isCorporate') === 'true';
     
     if (!file) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 });
@@ -170,10 +172,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Client code must be exactly 4 digits' }, { status: 400 });
     }
 
-    // Validate tax year is provided and valid
-    const validTaxYears = ['2022', '2023', '2024', '2025'];
-    if (!taxYear || !validTaxYears.includes(taxYear)) {
+    // Validate tax year is provided and valid (except for business credentials)
+    const validTaxYears = ['2022', '2023', '2024', '2025', 'N/A'];
+    const isBusinessCredentials = isCorporate && documentCategory === 'business-credentials';
+    
+    if (!taxYear || (!validTaxYears.includes(taxYear))) {
       return NextResponse.json({ error: 'Valid tax year is required (2022-2025)' }, { status: 400 });
+    }
+    
+    // For business credentials, allow 'N/A' as tax year
+    if (isBusinessCredentials && taxYear !== 'N/A') {
+      return NextResponse.json({ error: 'Business credentials should use N/A as tax year' }, { status: 400 });
     }
 
     // Validate file type and size
