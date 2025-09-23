@@ -33,15 +33,15 @@ export async function GET(request: NextRequest) {
       })
       .eachPage((records, fetchNextPage) => {
         records.forEach((record) => {
-          const subscriptionName = record.fields['Name'] || ''
+          const subscriptionName = String(record.fields['Name'] || '')
           const serviceName = subscriptionName.replace(customerName + ' - ', '')
 
           subscriptions.push({
             id: record.id,
             clientId: customerName,
             serviceId: serviceName,
-            status: record.fields['Status'] || [],
-            price: record.fields['Billing Amount'] || 0,
+            status: Array.isArray(record.fields['Status']) ? record.fields['Status'] : [],
+            price: Number(record.fields['Billing Amount']) || 0,
             fields: record.fields
           })
         })
