@@ -12,9 +12,19 @@ const nextConfig = {
   
   // Image optimization for YouTube thumbnails and other external images
   images: {
-    domains: [
-      'img.youtube.com',
-      'i.ytimg.com',
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'img.youtube.com',
+        port: '',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'i.ytimg.com',
+        port: '',
+        pathname: '/**',
+      },
     ],
   },
 };
