@@ -215,12 +215,21 @@ export default function Subscriptions() {
   }
 
   const calculateTotalBilling = () => {
-    return subscriptions.reduce((total, subscription) => {
-      // Only include subscriptions with Active status
-      const hasActiveStatus = Array.isArray(subscription.status) &&
-                             subscription.status.includes('Active')
-      return hasActiveStatus ? total + (subscription.price || 0) : total
+    const total = services.reduce((total, service) => {
+      const status = getSubscriptionStatus(service.name)
+      const price = getSubscriptionPrice(service.name) || service.price
+
+      console.log(`Service: ${service.name}, Status: ${status}, Price: ${price}`)
+
+      // Only include services with Active status
+      if (status === 'Active') {
+        return total + (price || 0)
+      }
+      return total
     }, 0)
+
+    console.log('Total Active Billing:', total)
+    return total
   }
 
   return (
