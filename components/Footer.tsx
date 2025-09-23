@@ -1,6 +1,7 @@
 // components/Footer.tsx (Updated for DaisyUI)
 'use client';
 
+import { useState, useEffect } from 'react';
 import TaxProLogo from './TaxProLogo';
 
 interface FooterProps {
@@ -9,6 +10,12 @@ interface FooterProps {
 
 export default function Footer({ className = '' }: FooterProps) {
   const currentYear = new Date().getFullYear();
+  const [currentTime, setCurrentTime] = useState<string>('');
+
+  useEffect(() => {
+    // Only set the time on client-side to avoid hydration mismatch
+    setCurrentTime(new Date().toLocaleString());
+  }, []);
 
   return (
     <footer className={`bg-base-200 border-t border-base-300 mt-auto ${className}`}>
@@ -58,7 +65,7 @@ export default function Footer({ className = '' }: FooterProps) {
               <span className="text-sm opacity-70">System Online</span>
             </div>
             <div className="text-xs opacity-50">
-              Last updated: {new Date().toLocaleString()}
+              {currentTime && `Last updated: ${currentTime}`}
             </div>
           </div>
         </div>
