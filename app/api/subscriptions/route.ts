@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       data: {
-        id: record._rawJson.id,
+        id: (record as any).id,
         fields: record.fields
       }
     })
@@ -101,7 +101,7 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({
       success: true,
       data: {
-        id: record._rawJson.id,
+        id: (record as any).id,
         fields: record.fields
       }
     })
