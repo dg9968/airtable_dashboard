@@ -214,11 +214,31 @@ export default function Subscriptions() {
     return subscription?.price || 0
   }
 
+  const calculateTotalBilling = () => {
+    return subscriptions.reduce((total, subscription) => {
+      // Only include subscriptions with Active status
+      const hasActiveStatus = Array.isArray(subscription.status) &&
+                             subscription.status.includes('Active')
+      return hasActiveStatus ? total + (subscription.price || 0) : total
+    }, 0)
+  }
+
   return (
     <div className="space-y-6">
       <div className="card bg-base-100 shadow-xl">
         <div className="card-body">
-          <h2 className="card-title text-2xl mb-4">Corporate Subscriptions Management</h2>
+          <div className="flex justify-between items-start mb-4">
+            <h2 className="card-title text-2xl">Corporate Subscriptions Management</h2>
+            {selectedCustomer && (
+              <div className="text-right">
+                <div className="text-sm text-base-content/60">Total Active Billing</div>
+                <div className="text-2xl font-bold text-success">
+                  ${calculateTotalBilling().toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+                <div className="text-xs text-base-content/50">for {selectedCustomer}</div>
+              </div>
+            )}
+          </div>
 
           {/* Customer Selection */}
           <div className="form-control w-full max-w-xs mb-6">
