@@ -137,6 +137,14 @@ export default function Dashboard() {
         bgColor: "bg-blue-50 hover:bg-blue-100 border-blue-200"
       },
       {
+        title: "Subscriptions",
+        description: "Manage corporate customer subscriptions and services",
+        href: "/subscriptions",
+        icon: "💼",
+        color: "text-indigo-600",
+        bgColor: "bg-indigo-50 hover:bg-indigo-100 border-indigo-200"
+      },
+      {
         title: "Training Videos",
         description: "Watch educational content and tutorials",
         href: "/training-videos",
