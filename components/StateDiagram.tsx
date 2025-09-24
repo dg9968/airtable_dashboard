@@ -22,38 +22,65 @@ export default function StateDiagram({ theme = "default" }: StateDiagramProps) {
 
   // Dynamic state diagram definition based on checkbox states
   const def = useMemo(() => {
-    return `stateDiagram-v2
-    [*] --> ClientEngagement
-
-    state "Client Engagement" as ClientEngagement {
-        [*] --> ClientEngagementLetterSigned
-        ClientEngagementLetterSigned: Client engagement letter signed
-        ClientEngagementLetterSigned --> QuestionnaireFilled
-        QuestionnaireFilled: Questionnaire filled
-        QuestionnaireFilled --> DocumentUploaded
-        DocumentUploaded: Document uploaded to document management system
-        DocumentUploaded --> Proforma
-        Proforma: MyTaxPrep either previous year or new basic info
-        Proforma --> ReadyToAssign
-        ReadyToAssign: Ready to be assigned to tax preparer
-    }
-    ReadyToAssign --> AssignedToTaxPreparer
-
-    state "Assigned to Tax Preparer" as AssignedToTaxPreparer {
-        [*] --> Questions
-        Questions --> MissingDocuments
-        MissingDocuments: Missing Documents
-        MissingDocuments --> Questions
-    }
-
-    state "Missing Info" as MissingInfo
-    state "Questions" as Questions
-    state "Taxpayer Review" as TaxpayerReview
-    state "E-Filed" as EFiled
-    state "Escalated" as Escalated
-    state "Complete" as Complete
-    state "In Process" as InProcess
-    state "Sent As Paper Return" as SentAsPaperReturn`;
+    return `---
+config:
+  layout: elk
+---
+stateDiagram
+  direction TB
+  classDef Sky stroke-width:1px,stroke-dasharray:none,stroke:#374D7C,fill:#E2EBFF,color:#374D7C;
+  state ClientEngagement {
+    direction LR
+    [*] --> ClientEngagementLetterSigned
+    ClientEngagementLetterSigned --> QuestionnaireFilled
+    QuestionnaireFilled --> DocumentUploaded
+    DocumentUploaded --> Proforma
+    Proforma --> ReadyToAssign
+    [*] --> ClientEngagementLetterSigned
+    QuestionnaireFilled
+    DocumentUploaded
+    Proforma
+    ReadyToAssign
+  }
+  state AssignedToTaxPreparer {
+    direction TB
+    Questions --> MissingDocuments
+    MissingDocuments --> Questions
+    Escalate
+    MissingDocuments
+  }
+  state ClientReview {
+    direction TB
+    [*] --> ScheduleMeet
+    ScheduleMeet --> Sign
+    Sign --> Invoice
+    [*] --> ScheduleMeet
+    Sign
+    Invoice
+  }
+  [*] --> ClientEngagement
+  ClientEngagement --> AssignedToTaxPreparer
+  AssignedToTaxPreparer --> ClientReview
+  AssignedToTaxPreparer --> MissingDocuments
+  EFiled --> InProcess
+  ClientEngagement:Client Engagement
+  ClientEngagementLetterSigned:Client engagement letter signed
+  QuestionnaireFilled:Questionnaire filled
+  DocumentUploaded:Document uploaded to document management system
+  Proforma:MyTaxPrep either previous year or new basic info
+  ReadyToAssign:Ready to be assigned to tax preparer
+  AssignedToTaxPreparer:Assigned to Tax Preparer
+  MissingDocuments:Missing Documents
+  ClientReview:Client Review
+  ScheduleMeet:Schedule Meet
+  Escalate:If you need a consultaion escalate to manager
+  Escalated
+  EFiled:E-Filed
+  InProcess:In Process
+  s1
+  Complete
+  SentAsPaperReturn:Sent As Paper Return
+  class Escalated Sky`;
   }, []);
 
   useEffect(() => {
