@@ -3,11 +3,25 @@
 import { useState } from 'react';
 import DocumentUpload from '../../components/DocumentUpload';
 import DocumentBrowser from '../../components/DocumentBrowser';
+import CorporateClientSearch from '../../components/CorporateClientSearch';
+
+interface CorporateClient {
+  id: string;
+  name: string;
+  ein: string;
+  entityNumber: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+  phone?: string;
+}
 
 export default function CorporateDocumentManagementPage() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [useGoogleDrive, setUseGoogleDrive] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState('');
+  const [selectedClient, setSelectedClient] = useState<CorporateClient | null>(null);
 
   const documentCategories = [
     { value: 'statements', label: 'Financial Statements', icon: '📊' },
@@ -62,10 +76,33 @@ export default function CorporateDocumentManagementPage() {
           </div>
         )}
 
-        {/* Document Category Selection */}
+        {/* Corporate Client Search */}
         <div className="card bg-base-100 shadow-xl mb-6">
           <div className="card-body">
-            <h2 className="card-title mb-4">Document Categories</h2>
+            <h2 className="card-title mb-4">
+              <span className="mr-2">🏢</span>
+              Step 1: Select Corporate Client
+            </h2>
+            <p className="text-base-content/70 mb-4">
+              Search and select a corporate client to manage their documents. The search includes company name, EIN, and entity number.
+            </p>
+            <CorporateClientSearch
+              selectedClient={selectedClient}
+              onClientSelect={setSelectedClient}
+              placeholder="Search by company name, EIN, or entity number..."
+              className="max-w-2xl"
+            />
+          </div>
+        </div>
+
+        {/* Document Category Selection */}
+        {selectedClient && (
+          <div className="card bg-base-100 shadow-xl mb-6">
+            <div className="card-body">
+              <h2 className="card-title mb-4">
+                <span className="mr-2">📂</span>
+                Step 2: Select Document Category
+              </h2>
             <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
               {documentCategories.map((category) => (
                 <div
@@ -95,29 +132,80 @@ export default function CorporateDocumentManagementPage() {
             )}
           </div>
         </div>
+        )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Upload Section */}
-        <div>
-          <DocumentUpload
-            onUploadComplete={handleUploadComplete}
-            useGoogleDrive={useGoogleDrive}
-            documentCategory={selectedCategory}
-            isCorporate={true}
-          />
-        </div>
+      {/* Upload and Browse Sections - Only show when client and category are selected */}
+      {selectedClient && selectedCategory && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Upload Section */}
+          <div>
+            <div className="card bg-base-100 shadow-xl mb-4">
+              <div className="card-body pb-4">
+                <h3 className="card-title text-lg">
+                  <span className="mr-2">📤</span>
+                  Step 3: Upload Documents
+                </h3>
+                <p className="text-sm text-base-content/70">
+                  Upload documents for <strong>{selectedClient.name}</strong> in the <strong>{documentCategories.find(cat => cat.value === selectedCategory)?.label}</strong> category.
+                </p>
+              </div>
+            </div>
+            <DocumentUpload
+              onUploadComplete={handleUploadComplete}
+              useGoogleDrive={useGoogleDrive}
+              documentCategory={selectedCategory}
+              isCorporate={true}
+            />
+          </div>
 
-        {/* Browser Section */}
-        <div>
-          <DocumentBrowser
-            key={`${refreshKey}-${useGoogleDrive ? 'gdrive' : 'local'}-${selectedCategory}`}
-            useGoogleDrive={useGoogleDrive}
-            documentCategory={selectedCategory}
-            isCorporate={true}
-          />
+          {/* Browser Section */}
+          <div>
+            <div className="card bg-base-100 shadow-xl mb-4">
+              <div className="card-body pb-4">
+                <h3 className="card-title text-lg">
+                  <span className="mr-2">🔍</span>
+                  Browse Documents
+                </h3>
+                <p className="text-sm text-base-content/70">
+                  View and manage documents for <strong>{selectedClient.name}</strong> in the <strong>{documentCategories.find(cat => cat.value === selectedCategory)?.label}</strong> category.
+                </p>
+              </div>
+            </div>
+            <DocumentBrowser
+              key={`${refreshKey}-${useGoogleDrive ? 'gdrive' : 'local'}-${selectedCategory}-${selectedClient.id}`}
+              useGoogleDrive={useGoogleDrive}
+              documentCategory={selectedCategory}
+              isCorporate={true}
+            />
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* Progress Indicator */}
+      {!selectedClient && (
+        <div className="card bg-base-100 shadow-xl">
+          <div className="card-body text-center py-12">
+            <div className="text-6xl mb-4">🏢</div>
+            <h3 className="text-xl font-semibold mb-2">Get Started</h3>
+            <p className="text-base-content/70">
+              Select a corporate client above to begin managing their documents.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {selectedClient && !selectedCategory && (
+        <div className="card bg-base-100 shadow-xl">
+          <div className="card-body text-center py-12">
+            <div className="text-6xl mb-4">📂</div>
+            <h3 className="text-xl font-semibold mb-2">Choose Document Category</h3>
+            <p className="text-base-content/70">
+              Select a document category above to upload and manage documents for <strong>{selectedClient.name}</strong>.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Quick Actions */}
       <div className="mt-8">
@@ -125,19 +213,29 @@ export default function CorporateDocumentManagementPage() {
           <div className="card-body">
             <h2 className="card-title">Corporate Document Workflow</h2>
             
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="stat">
                 <div className="stat-figure text-primary">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 21h19.5m-18-18v18m2.25-18v18m13.5-18v18M6.75 7.5h10.5M6.75 12h10.5m-10.5 4.5h10.5m2.25-18L21 3.75V20.25L18.75 21h-2.25m0-18h2.25L21 3.75" />
+                  </svg>
+                </div>
+                <div className="stat-title">Select Client</div>
+                <div className="stat-desc">Search by name or EIN</div>
+              </div>
+
+              <div className="stat">
+                <div className="stat-figure text-secondary">
                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0-1.125-.504-1.125-1.125V11.25a9 9 0 00-9-9z" />
                   </svg>
                 </div>
                 <div className="stat-title">Categorize</div>
-                <div className="stat-desc">Select document type first</div>
+                <div className="stat-desc">Select document type</div>
               </div>
 
               <div className="stat">
-                <div className="stat-figure text-secondary">
+                <div className="stat-figure text-accent">
                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 16.5V9.75m0 0l3 3m-3-3l-3 3M6.75 19.5a4.5 4.5 0 01-1.41-8.775 5.25 5.25 0 0110.233-2.33 3 3 0 013.758 3.848A3.752 3.752 0 0118 19.5H6.75z" />
                   </svg>
@@ -147,14 +245,14 @@ export default function CorporateDocumentManagementPage() {
               </div>
 
               <div className="stat">
-                <div className="stat-figure text-accent">
+                <div className="stat-figure text-info">
                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
                     <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                   </svg>
                 </div>
-                <div className="stat-title">Retrieve</div>
-                <div className="stat-desc">Search and download by category</div>
+                <div className="stat-title">Browse</div>
+                <div className="stat-desc">View and download</div>
               </div>
             </div>
 
@@ -167,13 +265,14 @@ export default function CorporateDocumentManagementPage() {
               <div>
                 <h3 className="font-bold">Corporate Document Management Workflow:</h3>
                 <ul className="mt-2 space-y-1 text-sm">
-                  <li>• <strong>Step 1:</strong> Select document category (Statements, Tax Returns, Notices and Letters, Sales Tax, Payroll Tax, or Business Credentials)</li>
-                  <li>• <strong>Step 2:</strong> Enter the 4-digit corporate client code (e.g., 1234)</li>
-                  <li>• <strong>Step 3:</strong> Select the relevant tax filing year (2022-2025)</li>
-                  <li>• <strong>Step 4:</strong> Upload the corporate document</li>
-                  <li>• <strong>Step 5:</strong> Browse documents by category, client code, and year</li>
-                  <li>• Documents are automatically organized by category for easier retrieval</li>
+                  <li>• <strong>Step 1:</strong> Search and select a corporate client using company name, EIN, or entity number</li>
+                  <li>• <strong>Step 2:</strong> Choose document category (Financial Statements, Tax Returns, Notices and Letters, Sales Tax, Payroll Tax, or Business Credentials)</li>
+                  <li>• <strong>Step 3:</strong> Upload corporate documents with automatic client and category association</li>
+                  <li>• <strong>Step 4:</strong> Browse and download documents organized by client and category</li>
+                  <li>• Client search includes EIN and entity number for accurate identification</li>
+                  <li>• Documents are automatically organized by client and category for easier retrieval</li>
                   <li>• Supported file types: PDF, Word docs, Excel sheets, images (max 10MB)</li>
+                  <li>• Google Drive integration provides secure backup and sharing capabilities</li>
                 </ul>
               </div>
             </div>
