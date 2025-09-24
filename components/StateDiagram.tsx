@@ -22,11 +22,7 @@ export default function StateDiagram({ theme = "default" }: StateDiagramProps) {
 
   // Dynamic state diagram definition based on checkbox states
   const def = useMemo(() => {
-    return `---
-config:
-  layout: elk
----
-stateDiagram
+    return `stateDiagram
   direction TB
   classDef Sky stroke-width:1px,stroke-dasharray:none,stroke:#374D7C,fill:#E2EBFF,color:#374D7C;
   state ClientEngagement {
@@ -47,7 +43,6 @@ stateDiagram
     Questions --> MissingDocuments
     MissingDocuments --> Questions
     Escalate
-    MissingDocuments
   }
   state ClientReview {
     direction TB
@@ -71,12 +66,12 @@ stateDiagram
   ReadyToAssign:Ready to be assigned to tax preparer
   AssignedToTaxPreparer:Assigned to Tax Preparer
   MissingDocuments:Missing Documents
+  Escalate:If you need a consultaion escalate to manager
   ClientReview:Client Review
   ScheduleMeet:Schedule Meet
-  Escalate:If you need a consultaion escalate to manager
-  Escalated
   EFiled:E-Filed
   InProcess:In Process
+  Escalated
   s1
   Complete
   SentAsPaperReturn:Sent As Paper Return
