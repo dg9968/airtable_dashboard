@@ -1,7 +1,11 @@
 import { useEffect, useId, useMemo, useState } from "react";
 import mermaid from "mermaid";
 
-export default function StateDiagram({ theme = "default" }) {
+interface StateDiagramProps {
+  theme?: string;
+}
+
+export default function StateDiagram({ theme = "default" }: StateDiagramProps) {
   const id = useId().replace(/:/g, "_");
   const [svg, setSvg] = useState("");
 
@@ -53,7 +57,11 @@ export default function StateDiagram({ theme = "default" }) {
   }, []);
 
   useEffect(() => {
-    mermaid.initialize({ startOnLoad: false, securityLevel: "strict", theme });
+    mermaid.initialize({
+      startOnLoad: false,
+      securityLevel: "strict",
+      theme: theme as any
+    });
     (async () => {
       const { svg } = await mermaid.render(id, def);
       setSvg(svg);
