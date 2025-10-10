@@ -1,0 +1,441 @@
+!TRNS	TRNSID	TRNSTYPE	DATE	ACCNT	NAME	CLASS	AMOUNT	DOCNUM	MEMO	CLEAR	TOPRINT	ADDR1	ADDR2	ADDR3	ADDR4	ADDR5
+!SPL	SPLID	TRNSTYPE	DATE	ACCNT	NAME	CLASS	AMOUNT	DOCNUM	MEMO	CLEAR	QNTY	PRICE	INVITEM	PAYMETH	TAXABLE	REIMBEXP	EXTRA
+!ENDTRNS
+TRNS	1	CHECK	01/02/2024	Wells Fargo Checking	Burger King #16847 Homestead		-15.6		Purchase authorized on 12/30 Burger King #16847 Homestead FL S383364526006786 Card 2563	N	N					
+SPL	1	CHECK	01/02/2024	Uncategorized	Burger King #16847 Homestead		15.6		Purchase authorized on 12/30 Burger King #16847 Homestead FL S383364526006786 Card 2563	N							
+ENDTRNS
+TRNS	2	CHECK	01/02/2024	Wells Fargo Checking	24420 S Dixie Hwy Homestead FL 383364661		-202.95		Non-WF ATM Withdrawal authorized on 12/30 24420 S Dixie Hwy Homestead FL 383364661958991 ATM ID P678	N	N					
+SPL	2	CHECK	01/02/2024	Uncategorized	24420 S Dixie Hwy Homestead FL 383364661		202.95		Non-WF ATM Withdrawal authorized on 12/30 24420 S Dixie Hwy Homestead FL 383364661958991 ATM ID P678	N							
+ENDTRNS
+TRNS	3	CHECK	01/02/2024	Wells Fargo Checking	Non-Wells Fargo ATM Transaction Fee		-2.5		Non-Wells Fargo ATM Transaction Fee	N	N					
+SPL	3	CHECK	01/02/2024	Uncategorized	Non-Wells Fargo ATM Transaction Fee		2.5		Non-Wells Fargo ATM Transaction Fee	N							
+ENDTRNS
+TRNS	4	CHECK	01/02/2024	Wells Fargo Checking	13449 SW 288th St Homestead FL 0000925 A		-800		ATM Withdrawal authorized on 12/30 13449 SW 288th St Homestead FL 0000925 ATM ID 0837B Card 4273	N	N					
+SPL	4	CHECK	01/02/2024	Uncategorized	13449 SW 288th St Homestead FL 0000925 A		800		ATM Withdrawal authorized on 12/30 13449 SW 288th St Homestead FL 0000925 ATM ID 0837B Card 4273	N							
+ENDTRNS
+TRNS	5	CHECK	01/02/2024	Wells Fargo Checking	Lowe's #2707 Homestead		-65.73		Purchase authorized on 12/30 Lowe's #2707 Homestead FL P463364771130855 Card 4273	N	N					
+SPL	5	CHECK	01/02/2024	Uncategorized	Lowe's #2707 Homestead		65.73		Purchase authorized on 12/30 Lowe's #2707 Homestead FL P463364771130855 Card 4273	N							
+ENDTRNS
+TRNS	6	CHECK	01/02/2024	Wells Fargo Checking	Apple.Com/Bill 800-275-2273		-14.99		Purchase authorized on 12/30 Apple.Com/Bill 800-275-2273 CA S463365035574156 Card 4273	N	N					
+SPL	6	CHECK	01/02/2024	Uncategorized	Apple.Com/Bill 800-275-2273		14.99		Purchase authorized on 12/30 Apple.Com/Bill 800-275-2273 CA S463365035574156 Card 4273	N							
+ENDTRNS
+TRNS	7	CHECK	01/02/2024	Wells Fargo Checking	The Home Depot #6355 Florida City		-55.84		Purchase authorized on 12/30 The Home Depot #6355 Florida City FL P303365047370161 Card 4273	N	N					
+SPL	7	CHECK	01/02/2024	Uncategorized	The Home Depot #6355 Florida City		55.84		Purchase authorized on 12/30 The Home Depot #6355 Florida City FL P303365047370161 Card 4273	N							
+ENDTRNS
+TRNS	8	CHECK	01/02/2024	Wells Fargo Checking	Rodriguez R Everyday Checking xxxxxx0842		-300		Online Transfer to Rodriguez R Everyday Checking xxxxxx0842 Ref #Ib0Ls9Xn3x on 12/30/23	N	N					
+SPL	8	CHECK	01/02/2024	Uncategorized	Rodriguez R Everyday Checking xxxxxx0842		300		Online Transfer to Rodriguez R Everyday Checking xxxxxx0842 Ref #Ib0Ls9Xn3x on 12/30/23	N							
+ENDTRNS
+TRNS	9	CHECK	01/02/2024	Wells Fargo Checking	Rodriguez R Everyday Checking xxxxxx0842		-300		Online Transfer to Rodriguez R Everyday Checking xxxxxx0842 Ref #Ib0Lsg7T7V on 12/31/23	N	N					
+SPL	9	CHECK	01/02/2024	Uncategorized	Rodriguez R Everyday Checking xxxxxx0842		300		Online Transfer to Rodriguez R Everyday Checking xxxxxx0842 Ref #Ib0Lsg7T7V on 12/31/23	N							
+ENDTRNS
+TRNS	10	CHECK	01/02/2024	Wells Fargo Checking	Lowe's #2707 Homestead		-285.33		Purchase authorized on 01/01 Lowe's #2707 Homestead FL P464001801095469 Card 4273	N	N					
+SPL	10	CHECK	01/02/2024	Uncategorized	Lowe's #2707 Homestead		285.33		Purchase authorized on 01/01 Lowe's #2707 Homestead FL P464001801095469 Card 4273	N							
+ENDTRNS
+TRNS	11	CHECK	01/02/2024	Wells Fargo Checking	Circle K 02384 13300 S Homestead		-53.7		Purchase authorized on 01/01 Circle K 02384 13300 S Homestead FL P000000383991203 Card 4273	N	N					
+SPL	11	CHECK	01/02/2024	Uncategorized	Circle K 02384 13300 S Homestead		53.7		Purchase authorized on 01/01 Circle K 02384 13300 S Homestead FL P000000383991203 Card 4273	N							
+ENDTRNS
+TRNS	12	CHECK	01/02/2024	Wells Fargo Checking	7-Eleven Sarasota		-63		Purchase authorized on 01/02 7-Eleven Sarasota FL P000000779204973 Card 4273	N	N					
+SPL	12	CHECK	01/02/2024	Uncategorized	7-Eleven Sarasota		63		Purchase authorized on 01/02 7-Eleven Sarasota FL P000000779204973 Card 4273	N							
+ENDTRNS
+TRNS	13	DEPOSIT	01/03/2024	Wells Fargo Checking	IN Branch 01/03/24 04:44:15 PM 907 N Hom		6780		eDeposit IN Branch 01/03/24 04:44:15 PM 907 N Homestead Blvd Homestead FL 4273	N	N					
+SPL	13	DEPOSIT	01/03/2024	Uncategorized	IN Branch 01/03/24 04:44:15 PM 907 N Hom		-6780		eDeposit IN Branch 01/03/24 04:44:15 PM 907 N Homestead Blvd Homestead FL 4273	N							
+ENDTRNS
+TRNS	14	CHECK	01/03/2024	Wells Fargo Checking	Rodriguez R Everyday Checking xxxxxx0842		-3200		Online Transfer to Rodriguez R Everyday Checking xxxxxx0842 Ref #Ib0Ltbw2Vc on 01/03/24	N	N					
+SPL	14	CHECK	01/03/2024	Uncategorized	Rodriguez R Everyday Checking xxxxxx0842		3200		Online Transfer to Rodriguez R Everyday Checking xxxxxx0842 Ref #Ib0Ltbw2Vc on 01/03/24	N							
+ENDTRNS
+TRNS	15	CHECK	01/03/2024	Wells Fargo Checking	IN Branch 01/03/2024 13:49 PM 907 N Home		-1500		Cash eWithdrawal IN Branch 01/03/2024 13:49 PM 907 N Homestead Blvd Homestead FL 4273	N	N					
+SPL	15	CHECK	01/03/2024	Uncategorized	IN Branch 01/03/2024 13:49 PM 907 N Home		1500		Cash eWithdrawal IN Branch 01/03/2024 13:49 PM 907 N Homestead Blvd Homestead FL 4273	N							
+ENDTRNS
+TRNS	16	CHECK	01/03/2024	Wells Fargo Checking	Rodriguez R Ref #Ib0Ltdcntw Everyday Che		-600		Online Transfer to Rodriguez R Ref #Ib0Ltdcntw Everyday Checking School Fees	N	N					
+SPL	16	CHECK	01/03/2024	Uncategorized	Rodriguez R Ref #Ib0Ltdcntw Everyday Che		600		Online Transfer to Rodriguez R Ref #Ib0Ltdcntw Everyday Checking School Fees	N							
+ENDTRNS
+TRNS	17	CHECK	01/04/2024	Wells Fargo Checking	Apple.Com/Bill 866-712-7753		-13.49		Purchase authorized on 01/03 Apple.Com/Bill 866-712-7753 CA S464003428412291 Card 4273	N	N					
+SPL	17	CHECK	01/04/2024	Uncategorized	Apple.Com/Bill 866-712-7753		13.49		Purchase authorized on 01/03 Apple.Com/Bill 866-712-7753 CA S464003428412291 Card 4273	N							
+ENDTRNS
+TRNS	18	CHECK	01/04/2024	Wells Fargo Checking	Circle K 02384 Homestead		-46		Purchase authorized on 01/03 Circle K 02384 Homestead FL S304003695048420 Card 4273	N	N					
+SPL	18	CHECK	01/04/2024	Uncategorized	Circle K 02384 Homestead		46		Purchase authorized on 01/03 Circle K 02384 Homestead FL S304003695048420 Card 4273	N							
+ENDTRNS
+TRNS	19	CHECK	01/04/2024	Wells Fargo Checking	24 Hour Fitness US 800-4326348		-320.87		Purchase authorized on 01/03 24 Hour Fitness US 800-4326348 CA S384003808212161 Card 4273	N	N					
+SPL	19	CHECK	01/04/2024	Uncategorized	24 Hour Fitness US 800-4326348		320.87		Purchase authorized on 01/03 24 Hour Fitness US 800-4326348 CA S384003808212161 Card 4273	N							
+ENDTRNS
+TRNS	20	CHECK	01/04/2024	Wells Fargo Checking	Rodriguez R Everyday Checking XXXXXX0842		-60		Online Transfer to Rodriguez R Everyday Checking XXXXXX0842 Ref #Ib0Ltglwzb on 01/03/24	N	N					
+SPL	20	CHECK	01/04/2024	Uncategorized	Rodriguez R Everyday Checking XXXXXX0842		60		Online Transfer to Rodriguez R Everyday Checking XXXXXX0842 Ref #Ib0Ltglwzb on 01/03/24	N							
+ENDTRNS
+TRNS	21	CHECK	01/04/2024	Wells Fargo Checking	Rodriguez R Ref #Ib0Ltgnsyk Everyday Che		-300		Online Transfer to Rodriguez R Ref #Ib0Ltgnsyk Everyday Checking Cells Bill	N	N					
+SPL	21	CHECK	01/04/2024	Uncategorized	Rodriguez R Ref #Ib0Ltgnsyk Everyday Che		300		Online Transfer to Rodriguez R Ref #Ib0Ltgnsyk Everyday Checking Cells Bill	N							
+ENDTRNS
+TRNS	22	CHECK	01/04/2024	Wells Fargo Checking	LA Mexicana Market Homestead		-67.88		Purchase authorized on 01/04 LA Mexicana Market Homestead FL P384004625847913 Card 4273	N	N					
+SPL	22	CHECK	01/04/2024	Uncategorized	LA Mexicana Market Homestead		67.88		Purchase authorized on 01/04 LA Mexicana Market Homestead FL P384004625847913 Card 4273	N							
+ENDTRNS
+TRNS	23	CHECK	01/04/2024	Wells Fargo Checking	The Home Depot #6355 Florida City		-11.28		Purchase authorized on 01/04 The Home Depot #6355 Florida City FL P584005002906836 Card 4273	N	N					
+SPL	23	CHECK	01/04/2024	Uncategorized	The Home Depot #6355 Florida City		11.28		Purchase authorized on 01/04 The Home Depot #6355 Florida City FL P584005002906836 Card 4273	N							
+ENDTRNS
+TRNS	24	CHECK	01/05/2024	Wells Fargo Checking	Non-WF ATM Balance Inquiry Fee 01/05 750		-2.5		Non-WF ATM Balance Inquiry Fee 01/05 750 Ocean Dr Miami Beach FL ATM ID P384452 Card 4273	N	N					
+SPL	24	CHECK	01/05/2024	Uncategorized	Non-WF ATM Balance Inquiry Fee 01/05 750		2.5		Non-WF ATM Balance Inquiry Fee 01/05 750 Ocean Dr Miami Beach FL ATM ID P384452 Card 4273	N							
+ENDTRNS
+TRNS	25	CHECK	01/05/2024	Wells Fargo Checking	Apple.Com/Bill 866-712-7753		-9.99		Recurring Payment authorized on 01/04 Apple.Com/Bill 866-712-7753 CA S464004843375325 Card 4273	N	N					
+SPL	25	CHECK	01/05/2024	Uncategorized	Apple.Com/Bill 866-712-7753		9.99		Recurring Payment authorized on 01/04 Apple.Com/Bill 866-712-7753 CA S464004843375325 Card 4273	N							
+ENDTRNS
+TRNS	26	CHECK	01/05/2024	Wells Fargo Checking	Publix Super Mar 891 N Ho Homestead		-47.14		Purchase authorized on 01/05 Publix Super Mar 891 N Ho Homestead FL P384005842970121 Card 4273	N	N					
+SPL	26	CHECK	01/05/2024	Uncategorized	Publix Super Mar 891 N Ho Homestead		47.14		Purchase authorized on 01/05 Publix Super Mar 891 N Ho Homestead FL P384005842970121 Card 4273	N							
+ENDTRNS
+TRNS	27	CHECK	01/05/2024	Wells Fargo Checking	750 Ocean Dr Miami Beach FL 464006052497		-208		Non-WF ATM Withdrawal authorized on 01/05 750 Ocean Dr Miami Beach FL 464006052497656 ATM ID P384452	N	N					
+SPL	27	CHECK	01/05/2024	Uncategorized	750 Ocean Dr Miami Beach FL 464006052497		208		Non-WF ATM Withdrawal authorized on 01/05 750 Ocean Dr Miami Beach FL 464006052497656 ATM ID P384452	N							
+ENDTRNS
+TRNS	28	CHECK	01/05/2024	Wells Fargo Checking	Non-Wells Fargo ATM Transaction Fee		-2.5		Non-Wells Fargo ATM Transaction Fee	N	N					
+SPL	28	CHECK	01/05/2024	Uncategorized	Non-Wells Fargo ATM Transaction Fee		2.5		Non-Wells Fargo ATM Transaction Fee	N							
+ENDTRNS
+TRNS	29	CHECK	01/08/2024	Wells Fargo Checking	Walmart.Com 800-966-6546		-1359.16		Purchase authorized on 01/04 Walmart.Com 800-966-6546 AR S384004769176807 Card 4273	N	N					
+SPL	29	CHECK	01/08/2024	Uncategorized	Walmart.Com 800-966-6546		1359.16		Purchase authorized on 01/04 Walmart.Com 800-966-6546 AR S384004769176807 Card 4273	N							
+ENDTRNS
+TRNS	30	CHECK	01/08/2024	Wells Fargo Checking	Apple.Com/Bill 866-712-7753		-9.99		Recurring Payment authorized on 01/05 Apple.Com/Bill 866-712-7753 CA S304005760446034 Card 4273	N	N					
+SPL	30	CHECK	01/08/2024	Uncategorized	Apple.Com/Bill 866-712-7753		9.99		Recurring Payment authorized on 01/05 Apple.Com/Bill 866-712-7753 CA S304005760446034 Card 4273	N							
+ENDTRNS
+TRNS	31	CHECK	01/08/2024	Wells Fargo Checking	Apple.Com/Bill 866-712-7753		-8.85		Recurring Payment authorized on 01/05 Apple.Com/Bill 866-712-7753 CA S304005760462866 Card 4273	N	N					
+SPL	31	CHECK	01/08/2024	Uncategorized	Apple.Com/Bill 866-712-7753		8.85		Recurring Payment authorized on 01/05 Apple.Com/Bill 866-712-7753 CA S304005760462866 Card 4273	N							
+ENDTRNS
+TRNS	32	CHECK	01/08/2024	Wells Fargo Checking	Sq *Lupita?S Baker Homestead		-32.1		Purchase authorized on 01/05 Sq *Lupita?S Baker Homestead FL S464005829085070 Card 4273	N	N					
+SPL	32	CHECK	01/08/2024	Uncategorized	Sq *Lupita?S Baker Homestead		32.1		Purchase authorized on 01/05 Sq *Lupita?S Baker Homestead FL S464005829085070 Card 4273	N							
+ENDTRNS
+TRNS	33	CHECK	01/08/2024	Wells Fargo Checking	Miamibch Parking M Miami Beach		-10		Purchase authorized on 01/05 Miamibch Parking M Miami Beach FL S304006045926083 Card 4273	N	N					
+SPL	33	CHECK	01/08/2024	Uncategorized	Miamibch Parking M Miami Beach		10		Purchase authorized on 01/05 Miamibch Parking M Miami Beach FL S304006045926083 Card 4273	N							
+ENDTRNS
+TRNS	34	CHECK	01/08/2024	Wells Fargo Checking	Tst* Alma Cubana Miami Beach		-325.25		Purchase authorized on 01/05 Tst* Alma Cubana Miami Beach FL S584006121399048 Card 4273	N	N					
+SPL	34	CHECK	01/08/2024	Uncategorized	Tst* Alma Cubana Miami Beach		325.25		Purchase authorized on 01/05 Tst* Alma Cubana Miami Beach FL S584006121399048 Card 4273	N							
+ENDTRNS
+TRNS	35	CHECK	01/08/2024	Wells Fargo Checking	Rodriguez R Ref #Ib0Lv5Yvyj Everyday Che		-500		Online Transfer to Rodriguez R Ref #Ib0Lv5Yvyj Everyday Checking Insurance	N	N					
+SPL	35	CHECK	01/08/2024	Uncategorized	Rodriguez R Ref #Ib0Lv5Yvyj Everyday Che		500		Online Transfer to Rodriguez R Ref #Ib0Lv5Yvyj Everyday Checking Insurance	N							
+ENDTRNS
+TRNS	36	CHECK	01/08/2024	Wells Fargo Checking	Jack IN The Box 02 San Pedro		-14.87		Purchase authorized on 01/06 Jack IN The Box 02 San Pedro CA S584007001858822 Card 4273	N	N					
+SPL	36	CHECK	01/08/2024	Uncategorized	Jack IN The Box 02 San Pedro		14.87		Purchase authorized on 01/06 Jack IN The Box 02 San Pedro CA S584007001858822 Card 4273	N							
+ENDTRNS
+TRNS	37	CHECK	01/08/2024	Wells Fargo Checking	230 S Gaffey Street San Pedro CA 5840070		-202.5		Non-WF ATM Withdrawal authorized on 01/06 230 S Gaffey Street San Pedro CA 584007021238016 ATM ID C6	N	N					
+SPL	37	CHECK	01/08/2024	Uncategorized	230 S Gaffey Street San Pedro CA 5840070		202.5		Non-WF ATM Withdrawal authorized on 01/06 230 S Gaffey Street San Pedro CA 584007021238016 ATM ID C6	N							
+ENDTRNS
+TRNS	38	CHECK	01/08/2024	Wells Fargo Checking	Non-Wells Fargo ATM Transaction Fee		-2.5		Non-Wells Fargo ATM Transaction Fee	N	N					
+SPL	38	CHECK	01/08/2024	Uncategorized	Non-Wells Fargo ATM Transaction Fee		2.5		Non-Wells Fargo ATM Transaction Fee	N							
+ENDTRNS
+TRNS	39	CHECK	01/08/2024	Wells Fargo Checking	Rodriguez R Everyday Checking xxxxxx0842		-200		Online Transfer to Rodriguez R Everyday Checking xxxxxx0842 Ref #Ib0Lvcnrzs on 01/06/24	N	N					
+SPL	39	CHECK	01/08/2024	Uncategorized	Rodriguez R Everyday Checking xxxxxx0842		200		Online Transfer to Rodriguez R Everyday Checking xxxxxx0842 Ref #Ib0Lvcnrzs on 01/06/24	N							
+ENDTRNS
+TRNS	40	CHECK	01/08/2024	Wells Fargo Checking	Dicarlo Liquor Pomona		-42.88		Purchase authorized on 01/06 Dicarlo Liquor Pomona CA S384007060044241 Card 4273	N	N					
+SPL	40	CHECK	01/08/2024	Uncategorized	Dicarlo Liquor Pomona		42.88		Purchase authorized on 01/06 Dicarlo Liquor Pomona CA S384007060044241 Card 4273	N							
+ENDTRNS
+TRNS	41	CHECK	01/08/2024	Wells Fargo Checking	Apple.Com/Bill 866-712-7753		-9.99		Recurring Payment authorized on 01/07 Apple.Com/Bill 866-712-7753 CA S384007778973597 Card 4273	N	N					
+SPL	41	CHECK	01/08/2024	Uncategorized	Apple.Com/Bill 866-712-7753		9.99		Recurring Payment authorized on 01/07 Apple.Com/Bill 866-712-7753 CA S384007778973597 Card 4273	N							
+ENDTRNS
+TRNS	42	CHECK	01/08/2024	Wells Fargo Checking	7-Eleven Huntington Be		-16.81		Purchase authorized on 01/08 7-Eleven Huntington Be CA P000000885145426 Card 4273	N	N					
+SPL	42	CHECK	01/08/2024	Uncategorized	7-Eleven Huntington Be		16.81		Purchase authorized on 01/08 7-Eleven Huntington Be CA P000000885145426 Card 4273	N							
+ENDTRNS
+TRNS	43	CHECK	01/08/2024	Wells Fargo Checking	Rodriguez R Everyday Checking XXXXXX0842		-200		Online Transfer to Rodriguez R Everyday Checking XXXXXX0842 Ref #Ib0Lvq84Hk on 01/08/24	N	N					
+SPL	43	CHECK	01/08/2024	Uncategorized	Rodriguez R Everyday Checking XXXXXX0842		200		Online Transfer to Rodriguez R Everyday Checking XXXXXX0842 Ref #Ib0Lvq84Hk on 01/08/24	N							
+ENDTRNS
+TRNS	44	CHECK	01/08/2024	Wells Fargo Checking	Rodriguez R Everyday Checking XXXXXX0842		-300		Online Transfer to Rodriguez R Everyday Checking XXXXXX0842 Ref #Ib0Lvqtvwl on 01/08/24	N	N					
+SPL	44	CHECK	01/08/2024	Uncategorized	Rodriguez R Everyday Checking XXXXXX0842		300		Online Transfer to Rodriguez R Everyday Checking XXXXXX0842 Ref #Ib0Lvqtvwl on 01/08/24	N							
+ENDTRNS
+TRNS	45	DEPOSIT	01/09/2024	Wells Fargo Checking	Purchase Return authorized on 01/08 Walm		339.79		Purchase Return authorized on 01/08 Walmart.Com Walmart.Com AR S584008684658662 Card 4273	N	N					
+SPL	45	DEPOSIT	01/09/2024	Uncategorized	Purchase Return authorized on 01/08 Walm		-339.79		Purchase Return authorized on 01/08 Walmart.Com Walmart.Com AR S584008684658662 Card 4273	N							
+ENDTRNS
+TRNS	46	DEPOSIT	01/09/2024	Wells Fargo Checking	Purchase Return authorized on 01/08 Walm		339.79		Purchase Return authorized on 01/08 Walmart.Com Walmart.Com AR S464008685218925 Card 4273	N	N					
+SPL	46	DEPOSIT	01/09/2024	Uncategorized	Purchase Return authorized on 01/08 Walm		-339.79		Purchase Return authorized on 01/08 Walmart.Com Walmart.Com AR S464008685218925 Card 4273	N							
+ENDTRNS
+TRNS	47	DEPOSIT	01/09/2024	Wells Fargo Checking	Purchase Return authorized on 01/08 Walm		339.79		Purchase Return authorized on 01/08 Walmart.Com Walmart.Com AR S384008686426018 Card 4273	N	N					
+SPL	47	DEPOSIT	01/09/2024	Uncategorized	Purchase Return authorized on 01/08 Walm		-339.79		Purchase Return authorized on 01/08 Walmart.Com Walmart.Com AR S384008686426018 Card 4273	N							
+ENDTRNS
+TRNS	48	DEPOSIT	01/09/2024	Wells Fargo Checking	Purchase Return authorized on 01/08 Walm		339.79		Purchase Return authorized on 01/08 Walmart.Com Walmart.Com AR S464008687032764 Card 4273	N	N					
+SPL	48	DEPOSIT	01/09/2024	Uncategorized	Purchase Return authorized on 01/08 Walm		-339.79		Purchase Return authorized on 01/08 Walmart.Com Walmart.Com AR S464008687032764 Card 4273	N							
+ENDTRNS
+TRNS	49	DEPOSIT	01/09/2024	Wells Fargo Checking	ATM Check Deposit on 01/09 13449 SW 288t		503		ATM Check Deposit on 01/09 13449 SW 288th St Homestead FL 0004154 ATM ID 0837B Card 4273	N	N					
+SPL	49	DEPOSIT	01/09/2024	Uncategorized	ATM Check Deposit on 01/09 13449 SW 288t		-503		ATM Check Deposit on 01/09 13449 SW 288th St Homestead FL 0004154 ATM ID 0837B Card 4273	N							
+ENDTRNS
+TRNS	50	CHECK	01/09/2024	Wells Fargo Checking	American Air001700 Fort Worth		-340.1		Purchase authorized on 01/07 American Air001700 Fort Worth TX S304008221348183 Card 4273	N	N					
+SPL	50	CHECK	01/09/2024	Uncategorized	American Air001700 Fort Worth		340.1		Purchase authorized on 01/07 American Air001700 Fort Worth TX S304008221348183 Card 4273	N							
+ENDTRNS
+TRNS	51	CHECK	01/09/2024	Wells Fargo Checking	Economy Park Ride Doral		-75		Purchase authorized on 01/08 Economy Park Ride Doral FL S384009160771159 Card 4273	N	N					
+SPL	51	CHECK	01/09/2024	Uncategorized	Economy Park Ride Doral		75		Purchase authorized on 01/08 Economy Park Ride Doral FL S384009160771159 Card 4273	N							
+ENDTRNS
+TRNS	52	CHECK	01/09/2024	Wells Fargo Checking	13449 SW 288th St Homestead FL 0004155 A		-1000		ATM Withdrawal authorized on 01/09 13449 SW 288th St Homestead FL 0004155 ATM ID 0837B Card 4273	N	N					
+SPL	52	CHECK	01/09/2024	Uncategorized	13449 SW 288th St Homestead FL 0004155 A		1000		ATM Withdrawal authorized on 01/09 13449 SW 288th St Homestead FL 0004155 ATM ID 0837B Card 4273	N							
+ENDTRNS
+TRNS	53	CHECK	01/09/2024	Wells Fargo Checking	Rodriguez R Ref #Ib0Lvzbf2T Everyday Che		-500		Online Transfer to Rodriguez R Ref #Ib0Lvzbf2T Everyday Checking Power Light Bill and Water	N	N					
+SPL	53	CHECK	01/09/2024	Uncategorized	Rodriguez R Ref #Ib0Lvzbf2T Everyday Che		500		Online Transfer to Rodriguez R Ref #Ib0Lvzbf2T Everyday Checking Power Light Bill and Water	N							
+ENDTRNS
+TRNS	54	CHECK	01/10/2024	Wells Fargo Checking	Ntta Online 972-818-6882		-61		Purchase authorized on 01/09 Ntta Online 972-818-6882 TX S464009801086008 Card 4273	N	N					
+SPL	54	CHECK	01/10/2024	Uncategorized	Ntta Online 972-818-6882		61		Purchase authorized on 01/09 Ntta Online 972-818-6882 TX S464009801086008 Card 4273	N							
+ENDTRNS
+TRNS	55	CHECK	01/10/2024	Wells Fargo Checking	Sunpass*Acc1237235 888-865-5352		-101.41		Purchase authorized on 01/09 Sunpass*Acc1237235 888-865-5352 FL S584009859510530 Card 4273	N	N					
+SPL	55	CHECK	01/10/2024	Uncategorized	Sunpass*Acc1237235 888-865-5352		101.41		Purchase authorized on 01/09 Sunpass*Acc1237235 888-865-5352 FL S584009859510530 Card 4273	N							
+ENDTRNS
+TRNS	56	CHECK	01/10/2024	Wells Fargo Checking	Sunoco 06411888 Homestead		-83.47		Purchase authorized on 01/10 Sunoco 06411888 Homestead FL P000000871989671 Card 4273	N	N					
+SPL	56	CHECK	01/10/2024	Uncategorized	Sunoco 06411888 Homestead		83.47		Purchase authorized on 01/10 Sunoco 06411888 Homestead FL P000000871989671 Card 4273	N							
+ENDTRNS
+TRNS	57	CHECK	01/10/2024	Wells Fargo Checking	Cvs/Pharmacy #00 00113--2 Homestead		-16.78		Purchase authorized on 01/10 Cvs/Pharmacy #00 00113--2 Homestead FL P304010691760568 Card 2563	N	N					
+SPL	57	CHECK	01/10/2024	Uncategorized	Cvs/Pharmacy #00 00113--2 Homestead		16.78		Purchase authorized on 01/10 Cvs/Pharmacy #00 00113--2 Homestead FL P304010691760568 Card 2563	N							
+ENDTRNS
+TRNS	58	CHECK	01/10/2024	Wells Fargo Checking	T.J. Maxx 2605 NE 10th Homestead		-52		Purchase authorized on 01/10 T.J. Maxx 2605 NE 10th Homestead FL P000000179586550 Card 2563	N	N					
+SPL	58	CHECK	01/10/2024	Uncategorized	T.J. Maxx 2605 NE 10th Homestead		52		Purchase authorized on 01/10 T.J. Maxx 2605 NE 10th Homestead FL P000000179586550 Card 2563	N							
+ENDTRNS
+TRNS	59	CHECK	01/11/2024	Wells Fargo Checking	Aci*Miami Dade Pmt 305-665-7477		-545.48		Purchase authorized on 01/10 Aci*Miami Dade Pmt 305-665-7477 FL S464010584937778 Card 2563	N	N					
+SPL	59	CHECK	01/11/2024	Uncategorized	Aci*Miami Dade Pmt 305-665-7477		545.48		Purchase authorized on 01/10 Aci*Miami Dade Pmt 305-665-7477 FL S464010584937778 Card 2563	N							
+ENDTRNS
+TRNS	60	CHECK	01/11/2024	Wells Fargo Checking	Sunpass*Acc1303280 888-865-5352		-7.33		Purchase authorized on 01/10 Sunpass*Acc1303280 888-865-5352 FL S584010590282113 Card 2563	N	N					
+SPL	60	CHECK	01/11/2024	Uncategorized	Sunpass*Acc1303280 888-865-5352		7.33		Purchase authorized on 01/10 Sunpass*Acc1303280 888-865-5352 FL S584010590282113 Card 2563	N							
+ENDTRNS
+TRNS	61	CHECK	01/11/2024	Wells Fargo Checking	Amzn Mktp US*Tk9B8 Amzn.Com/Bill		-51.34		Purchase authorized on 01/10 Amzn Mktp US*Tk9B8 Amzn.Com/Bill WA S304010607616844 Card 4273	N	N					
+SPL	61	CHECK	01/11/2024	Uncategorized	Amzn Mktp US*Tk9B8 Amzn.Com/Bill		51.34		Purchase authorized on 01/10 Amzn Mktp US*Tk9B8 Amzn.Com/Bill WA S304010607616844 Card 4273	N							
+ENDTRNS
+TRNS	62	CHECK	01/11/2024	Wells Fargo Checking	Rodriguez R Everyday Checking xxxxxx0842		-200		Online Transfer to Rodriguez R Everyday Checking xxxxxx0842 Ref #Ib0Lwfh7Dh on 01/11/24	N	N					
+SPL	62	CHECK	01/11/2024	Uncategorized	Rodriguez R Everyday Checking xxxxxx0842		200		Online Transfer to Rodriguez R Everyday Checking xxxxxx0842 Ref #Ib0Lwfh7Dh on 01/11/24	N							
+ENDTRNS
+TRNS	63	CHECK	01/11/2024	Wells Fargo Checking	Dollar Tr 2552 NE 10th Homestead		-27.79		Purchase authorized on 01/11 Dollar Tr 2552 NE 10th Homestead FL P000000485718661 Card 2563	N	N					
+SPL	63	CHECK	01/11/2024	Uncategorized	Dollar Tr 2552 NE 10th Homestead		27.79		Purchase authorized on 01/11 Dollar Tr 2552 NE 10th Homestead FL P000000485718661 Card 2563	N							
+ENDTRNS
+TRNS	64	CHECK	01/12/2024	Wells Fargo Checking	Chipotle 2606 Homestead		-11.83		Purchase authorized on 01/11 Chipotle 2606 Homestead FL S584011608991933 Card 2563	N	N					
+SPL	64	CHECK	01/12/2024	Uncategorized	Chipotle 2606 Homestead		11.83		Purchase authorized on 01/11 Chipotle 2606 Homestead FL S584011608991933 Card 2563	N							
+ENDTRNS
+TRNS	65	CHECK	01/12/2024	Wells Fargo Checking	Dollar Tr 33497 S Dixi Florida City		-18.11		Purchase authorized on 01/12 Dollar Tr 33497 S Dixi Florida City FL P000000483551024 Card 2563	N	N					
+SPL	65	CHECK	01/12/2024	Uncategorized	Dollar Tr 33497 S Dixi Florida City		18.11		Purchase authorized on 01/12 Dollar Tr 33497 S Dixi Florida City FL P000000483551024 Card 2563	N							
+ENDTRNS
+TRNS	66	CHECK	01/12/2024	Wells Fargo Checking	Wal-Mart #2727 Florida City		-35.89		Purchase authorized on 01/12 Wal-Mart #2727 Florida City FL P000000875443837 Card 2563	N	N					
+SPL	66	CHECK	01/12/2024	Uncategorized	Wal-Mart #2727 Florida City		35.89		Purchase authorized on 01/12 Wal-Mart #2727 Florida City FL P000000875443837 Card 2563	N							
+ENDTRNS
+TRNS	67	CHECK	01/16/2024	Wells Fargo Checking	Ulta.Com 866-983-8582		-54.89		Purchase authorized on 01/10 Ulta.Com 866-983-8582 IL S384010613154923 Card 2563	N	N					
+SPL	67	CHECK	01/16/2024	Uncategorized	Ulta.Com 866-983-8582		54.89		Purchase authorized on 01/10 Ulta.Com 866-983-8582 IL S384010613154923 Card 2563	N							
+ENDTRNS
+TRNS	68	CHECK	01/16/2024	Wells Fargo Checking	Amzn Mktp US*Rt9Ui Amzn.Com/Bill		-128.39		Purchase authorized on 01/10 Amzn Mktp US*Rt9Ui Amzn.Com/Bill WA S464011261997429 Card 4273	N	N					
+SPL	68	CHECK	01/16/2024	Uncategorized	Amzn Mktp US*Rt9Ui Amzn.Com/Bill		128.39		Purchase authorized on 01/10 Amzn Mktp US*Rt9Ui Amzn.Com/Bill WA S464011261997429 Card 4273	N							
+ENDTRNS
+TRNS	69	CHECK	01/16/2024	Wells Fargo Checking	Amwins Auto Ins 800-856-0191		-321.88		Purchase authorized on 01/11 Amwins Auto Ins 800-856-0191 TX S384011548183960 Card 4273	N	N					
+SPL	69	CHECK	01/16/2024	Uncategorized	Amwins Auto Ins 800-856-0191		321.88		Purchase authorized on 01/11 Amwins Auto Ins 800-856-0191 TX S384011548183960 Card 4273	N							
+ENDTRNS
+TRNS	70	CHECK	01/16/2024	Wells Fargo Checking	Madero LLC 29351 SW 15 Homestead		-42.85		Purchase authorized on 01/13 Madero LLC 29351 SW 15 Homestead FL P000000985982048 Card 4273	N	N					
+SPL	70	CHECK	01/16/2024	Uncategorized	Madero LLC 29351 SW 15 Homestead		42.85		Purchase authorized on 01/13 Madero LLC 29351 SW 15 Homestead FL P000000985982048 Card 4273	N							
+ENDTRNS
+TRNS	71	CHECK	01/16/2024	Wells Fargo Checking	Rodriguez R Everyday Checking xxxxxx0842		-200		Online Transfer to Rodriguez R Everyday Checking xxxxxx0842 Ref #Ib0Lx8Whp5 on 01/13/24	N	N					
+SPL	71	CHECK	01/16/2024	Uncategorized	Rodriguez R Everyday Checking xxxxxx0842		200		Online Transfer to Rodriguez R Everyday Checking xxxxxx0842 Ref #Ib0Lx8Whp5 on 01/13/24	N							
+ENDTRNS
+TRNS	72	CHECK	01/16/2024	Wells Fargo Checking	Sunshine 129 Miami Beach		-41.02		Purchase authorized on 01/14 Sunshine 129 Miami Beach FL P000000577541548 Card 4273	N	N					
+SPL	72	CHECK	01/16/2024	Uncategorized	Sunshine 129 Miami Beach		41.02		Purchase authorized on 01/14 Sunshine 129 Miami Beach FL P000000577541548 Card 4273	N							
+ENDTRNS
+TRNS	73	CHECK	01/16/2024	Wells Fargo Checking	Sunshine 129 Miami Beach		-15.31		Purchase authorized on 01/14 Sunshine 129 Miami Beach FL P000000376061448 Card 4273	N	N					
+SPL	73	CHECK	01/16/2024	Uncategorized	Sunshine 129 Miami Beach		15.31		Purchase authorized on 01/14 Sunshine 129 Miami Beach FL P000000376061448 Card 4273	N							
+ENDTRNS
+TRNS	74	CHECK	01/16/2024	Wells Fargo Checking	Marshalls Homestead to Homestead		-56.61		Purchase authorized on 01/14 Marshalls Homestead to Homestead FL P000000671340729 Card 2563	N	N					
+SPL	74	CHECK	01/16/2024	Uncategorized	Marshalls Homestead to Homestead		56.61		Purchase authorized on 01/14 Marshalls Homestead to Homestead FL P000000671340729 Card 2563	N							
+ENDTRNS
+TRNS	75	CHECK	01/16/2024	Wells Fargo Checking	Sq *Tacos Los Roch Homestead		-27.56		Purchase authorized on 01/14 Sq *Tacos Los Roch Homestead FL S464015006814363 Card 2563	N	N					
+SPL	75	CHECK	01/16/2024	Uncategorized	Sq *Tacos Los Roch Homestead		27.56		Purchase authorized on 01/14 Sq *Tacos Los Roch Homestead FL S464015006814363 Card 2563	N							
+ENDTRNS
+TRNS	76	CHECK	01/16/2024	Wells Fargo Checking	Wendy's #10954 Homestead		-12.84		Purchase authorized on 01/14 Wendy's #10954 Homestead FL S584015009921979 Card 2563	N	N					
+SPL	76	CHECK	01/16/2024	Uncategorized	Wendy's #10954 Homestead		12.84		Purchase authorized on 01/14 Wendy's #10954 Homestead FL S584015009921979 Card 2563	N							
+ENDTRNS
+TRNS	77	CHECK	01/16/2024	Wells Fargo Checking	Rodriguez R Everyday Checking xxxxxx0842		-140		Online Transfer to Rodriguez R Everyday Checking xxxxxx0842 Ref #Ib0LxIhdph on 01/15/24	N	N					
+SPL	77	CHECK	01/16/2024	Uncategorized	Rodriguez R Everyday Checking xxxxxx0842		140		Online Transfer to Rodriguez R Everyday Checking xxxxxx0842 Ref #Ib0LxIhdph on 01/15/24	N							
+ENDTRNS
+TRNS	78	CHECK	01/16/2024	Wells Fargo Checking	Los Taquitos Mexic Lehigh Acres		-54.85		Purchase authorized on 01/15 Los Taquitos Mexic Lehigh Acres FL S304015852821692 Card 4273	N	N					
+SPL	78	CHECK	01/16/2024	Uncategorized	Los Taquitos Mexic Lehigh Acres		54.85		Purchase authorized on 01/15 Los Taquitos Mexic Lehigh Acres FL S304015852821692 Card 4273	N							
+ENDTRNS
+TRNS	79	CHECK	01/16/2024	Wells Fargo Checking	Estero Food Mar Estero		-71.01		Purchase authorized on 01/15 Estero Food Mar Estero FL P000000470345375 Card 4273	N	N					
+SPL	79	CHECK	01/16/2024	Uncategorized	Estero Food Mar Estero		71.01		Purchase authorized on 01/15 Estero Food Mar Estero FL P000000470345375 Card 4273	N							
+ENDTRNS
+TRNS	80	CHECK	01/16/2024	Wells Fargo Checking	Chevron 0200188 Miami		-23.81		Purchase authorized on 01/15 Chevron 0200188 Miami FL S384016104771405 Card 4273	N	N					
+SPL	80	CHECK	01/16/2024	Uncategorized	Chevron 0200188 Miami		23.81		Purchase authorized on 01/15 Chevron 0200188 Miami FL S384016104771405 Card 4273	N							
+ENDTRNS
+TRNS	81	CHECK	01/16/2024	Wells Fargo Checking	WM Superc Wal-Mart Sup Homestead		-61.76		Purchase authorized on 01/16 WM Superc Wal-Mart Sup Homestead FL P000000570496356 Card 2563	N	N					
+SPL	81	CHECK	01/16/2024	Uncategorized	WM Superc Wal-Mart Sup Homestead		61.76		Purchase authorized on 01/16 WM Superc Wal-Mart Sup Homestead FL P000000570496356 Card 2563	N							
+ENDTRNS
+TRNS	82	CHECK	01/16/2024	Wells Fargo Checking	Rodriguez R Everyday Checking xxxxxx0842		-100		Online Transfer to Rodriguez R Everyday Checking xxxxxx0842 Ref #Ib0Lxw69Pz on 01/16/24	N	N					
+SPL	82	CHECK	01/16/2024	Uncategorized	Rodriguez R Everyday Checking xxxxxx0842		100		Online Transfer to Rodriguez R Everyday Checking xxxxxx0842 Ref #Ib0Lxw69Pz on 01/16/24	N							
+ENDTRNS
+TRNS	83	CHECK	01/16/2024	Wells Fargo Checking	Rodriguez R Everyday Checking xxxxxx0842		-30		Online Transfer to Rodriguez R Everyday Checking xxxxxx0842 Ref #Ib0Lxyq9Sz on 01/16/24	N	N					
+SPL	83	CHECK	01/16/2024	Uncategorized	Rodriguez R Everyday Checking xxxxxx0842		30		Online Transfer to Rodriguez R Everyday Checking xxxxxx0842 Ref #Ib0Lxyq9Sz on 01/16/24	N							
+ENDTRNS
+TRNS	84	DEPOSIT	01/17/2024	Wells Fargo Checking	ATM Check Deposit on 01/17 907 N Homeste		1280		ATM Check Deposit on 01/17 907 N Homestead Blvd Homestead FL 0007244 ATM ID 67171 Card 4273	N	N					
+SPL	84	DEPOSIT	01/17/2024	Uncategorized	ATM Check Deposit on 01/17 907 N Homeste		-1280		ATM Check Deposit on 01/17 907 N Homestead Blvd Homestead FL 0007244 ATM ID 67171 Card 4273	N							
+ENDTRNS
+TRNS	85	CHECK	01/17/2024	Wells Fargo Checking	Racetrac 2576 0002 Miami		-57		Purchase authorized on 01/15 Racetrac 2576 0002 Miami FL S304015377499557 Card 4273	N	N					
+SPL	85	CHECK	01/17/2024	Uncategorized	Racetrac 2576 0002 Miami		57		Purchase authorized on 01/15 Racetrac 2576 0002 Miami FL S304015377499557 Card 4273	N							
+ENDTRNS
+TRNS	86	CHECK	01/17/2024	Wells Fargo Checking	Panda Express 1733 Florida City		-25.79		Purchase authorized on 01/16 Panda Express 1733 Florida City FL S464016648668025 Card 2563	N	N					
+SPL	86	CHECK	01/17/2024	Uncategorized	Panda Express 1733 Florida City		25.79		Purchase authorized on 01/16 Panda Express 1733 Florida City FL S464016648668025 Card 2563	N							
+ENDTRNS
+TRNS	87	CHECK	01/17/2024	Wells Fargo Checking	Nama Foodmart Miami		-15.3		Purchase authorized on 01/16 Nama Foodmart Miami FL S584016785831439 Card 4273	N	N					
+SPL	87	CHECK	01/17/2024	Uncategorized	Nama Foodmart Miami		15.3		Purchase authorized on 01/16 Nama Foodmart Miami FL S584016785831439 Card 4273	N							
+ENDTRNS
+TRNS	88	CHECK	01/17/2024	Wells Fargo Checking	WM Superc Wal-Mart Sup Homestead		-64.77		Purchase authorized on 01/17 WM Superc Wal-Mart Sup Homestead FL P000000687258282 Card 2563	N	N					
+SPL	88	CHECK	01/17/2024	Uncategorized	WM Superc Wal-Mart Sup Homestead		64.77		Purchase authorized on 01/17 WM Superc Wal-Mart Sup Homestead FL P000000687258282 Card 2563	N							
+ENDTRNS
+TRNS	89	CHECK	01/17/2024	Wells Fargo Checking	Rodriguez R Everyday Checking XXXXXX0842		-100		Online Transfer to Rodriguez R Everyday Checking XXXXXX0842 Ref #lb0Ly3Zlw3 on 01/17/24	N	N					
+SPL	89	CHECK	01/17/2024	Uncategorized	Rodriguez R Everyday Checking XXXXXX0842		100		Online Transfer to Rodriguez R Everyday Checking XXXXXX0842 Ref #lb0Ly3Zlw3 on 01/17/24	N							
+ENDTRNS
+TRNS	90	CHECK	01/18/2024	Wells Fargo Checking	Ulta.Com 866-983-8582		-65.59		Purchase authorized on 01/12 Ulta.Com 866-983-8582 IL S464013093054858 Card 2563	N	N					
+SPL	90	CHECK	01/18/2024	Uncategorized	Ulta.Com 866-983-8582		65.59		Purchase authorized on 01/12 Ulta.Com 866-983-8582 IL S464013093054858 Card 2563	N							
+ENDTRNS
+TRNS	91	CHECK	01/18/2024	Wells Fargo Checking	Starbucks Store 62 Homestead		-17.44		Purchase authorized on 01/16 Starbucks Store 62 Homestead FL S464016450824069 Card 2563	N	N					
+SPL	91	CHECK	01/18/2024	Uncategorized	Starbucks Store 62 Homestead		17.44		Purchase authorized on 01/16 Starbucks Store 62 Homestead FL S464016450824069 Card 2563	N							
+ENDTRNS
+TRNS	92	CHECK	01/18/2024	Wells Fargo Checking	72814 777 Bricke Miami		-3		Purchase authorized on 01/16 72814 777 Bricke Miami FL S384016729412483 Card 4273	N	N					
+SPL	92	CHECK	01/18/2024	Uncategorized	72814 777 Bricke Miami		3		Purchase authorized on 01/16 72814 777 Bricke Miami FL S384016729412483 Card 4273	N							
+ENDTRNS
+TRNS	93	CHECK	01/18/2024	Wells Fargo Checking	President 3322 NE 7th Homestead		-37.82		Purchase authorized on 01/18 President 3322 NE 7th Homestead FL P000000182633774 Card 2563	N	N					
+SPL	93	CHECK	01/18/2024	Uncategorized	President 3322 NE 7th Homestead		37.82		Purchase authorized on 01/18 President 3322 NE 7th Homestead FL P000000182633774 Card 2563	N							
+ENDTRNS
+TRNS	94	CHECK	01/19/2024	Wells Fargo Checking	Amzn Mktp US*R84JP Amzn.Com/Bill		-165.79		Purchase authorized on 01/16 Amzn Mktp US*R84JP Amzn.Com/Bill WA S384016674269410 Card 2563	N	N					
+SPL	94	CHECK	01/19/2024	Uncategorized	Amzn Mktp US*R84JP Amzn.Com/Bill		165.79		Purchase authorized on 01/16 Amzn Mktp US*R84JP Amzn.Com/Bill WA S384016674269410 Card 2563	N							
+ENDTRNS
+TRNS	95	CHECK	01/19/2024	Wells Fargo Checking	Shell Oil 57543704 Miami		-60.01		Purchase authorized on 01/17 Shell Oil 57543704 Miami FL S304017856930237 Card 4273	N	N					
+SPL	95	CHECK	01/19/2024	Uncategorized	Shell Oil 57543704 Miami		60.01		Purchase authorized on 01/17 Shell Oil 57543704 Miami FL S304017856930237 Card 4273	N							
+ENDTRNS
+TRNS	96	CHECK	01/19/2024	Wells Fargo Checking	Amzn Mktp US*Rt7ME Seattle		-27.68		Purchase authorized on 01/17 Amzn Mktp US*Rt7ME Seattle WA S304018237925344 Card 4273	N	N					
+SPL	96	CHECK	01/19/2024	Uncategorized	Amzn Mktp US*Rt7ME Seattle		27.68		Purchase authorized on 01/17 Amzn Mktp US*Rt7ME Seattle WA S304018237925344 Card 4273	N							
+ENDTRNS
+TRNS	97	CHECK	01/19/2024	Wells Fargo Checking	Tmobile*Postpaid P 800-937-8997		-426.98		Purchase authorized on 01/17 Tmobile*Postpaid P 800-937-8997 WA S304018244544284 Card 4273	N	N					
+SPL	97	CHECK	01/19/2024	Uncategorized	Tmobile*Postpaid P 800-937-8997		426.98		Purchase authorized on 01/17 Tmobile*Postpaid P 800-937-8997 WA S304018244544284 Card 4273	N							
+ENDTRNS
+TRNS	98	CHECK	01/19/2024	Wells Fargo Checking	Martin Luther King Homestead		-40		Purchase authorized on 01/18 Martin Luther King Homestead FL S384018567986602 Card 2563	N	N					
+SPL	98	CHECK	01/19/2024	Uncategorized	Martin Luther King Homestead		40		Purchase authorized on 01/18 Martin Luther King Homestead FL S384018567986602 Card 2563	N							
+ENDTRNS
+TRNS	99	CHECK	01/19/2024	Wells Fargo Checking	Chipotle 2606 Homestead		-11.83		Purchase authorized on 01/18 Chipotle 2606 Homestead FL S584018673555966 Card 2563	N	N					
+SPL	99	CHECK	01/19/2024	Uncategorized	Chipotle 2606 Homestead		11.83		Purchase authorized on 01/18 Chipotle 2606 Homestead FL S584018673555966 Card 2563	N							
+ENDTRNS
+TRNS	100	CHECK	01/19/2024	Wells Fargo Checking	24 Hour Fitness US 800-4326348		-32.09		Purchase authorized on 01/18 24 Hour Fitness US 800-4326348 CA S384018720110345 Card 4273	N	N					
+SPL	100	CHECK	01/19/2024	Uncategorized	24 Hour Fitness US 800-4326348		32.09		Purchase authorized on 01/18 24 Hour Fitness US 800-4326348 CA S384018720110345 Card 4273	N							
+ENDTRNS
+TRNS	101	CHECK	01/19/2024	Wells Fargo Checking	Gasdoral Manage Doral		-16.27		Purchase authorized on 01/19 Gasdoral Manage Doral FL P000000287648043 Card 4273	N	N					
+SPL	101	CHECK	01/19/2024	Uncategorized	Gasdoral Manage Doral		16.27		Purchase authorized on 01/19 Gasdoral Manage Doral FL P000000287648043 Card 4273	N							
+ENDTRNS
+TRNS	102	CHECK	01/19/2024	Wells Fargo Checking	Rodriguez R Everyday Checking XXXXXX0842		-200		Online Transfer to Rodriguez R Everyday Checking XXXXXX0842 Ref #Ib0Lytnm6J on 01/19/24	N	N					
+SPL	102	CHECK	01/19/2024	Uncategorized	Rodriguez R Everyday Checking XXXXXX0842		200		Online Transfer to Rodriguez R Everyday Checking XXXXXX0842 Ref #Ib0Lytnm6J on 01/19/24	N							
+ENDTRNS
+TRNS	103	CHECK	01/19/2024	Wells Fargo Checking	Circle K 02384 13300 S Homestead		-10.69		Purchase authorized on 01/19 Circle K 02384 13300 S Homestead FL P000000986265053 Card 4273	N	N					
+SPL	103	CHECK	01/19/2024	Uncategorized	Circle K 02384 13300 S Homestead		10.69		Purchase authorized on 01/19 Circle K 02384 13300 S Homestead FL P000000986265053 Card 4273	N							
+ENDTRNS
+TRNS	104	CHECK	01/19/2024	Wells Fargo Checking	Rodriguez R Everyday Checking xxxxxx0842		-100		Online Transfer to Rodriguez R Everyday Checking xxxxxx0842 Ref #Ib0Lyxzh2L on 01/19/24	N	N					
+SPL	104	CHECK	01/19/2024	Uncategorized	Rodriguez R Everyday Checking xxxxxx0842		100		Online Transfer to Rodriguez R Everyday Checking xxxxxx0842 Ref #Ib0Lyxzh2L on 01/19/24	N							
+ENDTRNS
+TRNS	105	DEPOSIT	01/22/2024	Wells Fargo Checking	Online Transfer From Rodriguez R Everyda		1600		Online Transfer From Rodriguez R Everyday Checking XXXXXX0842 Ref #Ib0Lzmcs7B on 01/22/24	N	N					
+SPL	105	DEPOSIT	01/22/2024	Uncategorized	Online Transfer From Rodriguez R Everyda		-1600		Online Transfer From Rodriguez R Everyday Checking XXXXXX0842 Ref #Ib0Lzmcs7B on 01/22/24	N							
+ENDTRNS
+TRNS	106	CHECK	01/22/2024	Wells Fargo Checking	Wendy's #10954 Homestead		-8.56		Purchase authorized on 01/18 Wendy's #10954 Homestead FL S304018726963476 Card 2563	N	N					
+SPL	106	CHECK	01/22/2024	Uncategorized	Wendy's #10954 Homestead		8.56		Purchase authorized on 01/18 Wendy's #10954 Homestead FL S304018726963476 Card 2563	N							
+ENDTRNS
+TRNS	107	CHECK	01/22/2024	Wells Fargo Checking	Hidalgo's Cafeteri Homestead		-20.84		Purchase authorized on 01/19 Hidalgo's Cafeteri Homestead FL S304019533500059 Card 4273	N	N					
+SPL	107	CHECK	01/22/2024	Uncategorized	Hidalgo's Cafeteri Homestead		20.84		Purchase authorized on 01/19 Hidalgo's Cafeteri Homestead FL S304019533500059 Card 4273	N							
+ENDTRNS
+TRNS	108	CHECK	01/22/2024	Wells Fargo Checking	Mpa Parking Pay By 305-373-6789		-6.3		Purchase authorized on 01/19 Mpa Parking Pay By 305-373-6789 FL S304019587467116 Card 4273	N	N					
+SPL	108	CHECK	01/22/2024	Uncategorized	Mpa Parking Pay By 305-373-6789		6.3		Purchase authorized on 01/19 Mpa Parking Pay By 305-373-6789 FL S304019587467116 Card 4273	N							
+ENDTRNS
+TRNS	109	CHECK	01/22/2024	Wells Fargo Checking	Marcos Pizza 861 Doral		-15.5		Purchase authorized on 01/19 Marcos Pizza 861 Doral FL S584019677217347 Card 4273	N	N					
+SPL	109	CHECK	01/22/2024	Uncategorized	Marcos Pizza 861 Doral		15.5		Purchase authorized on 01/19 Marcos Pizza 861 Doral FL S584019677217347 Card 4273	N							
+ENDTRNS
+TRNS	110	CHECK	01/22/2024	Wells Fargo Checking	Sq *Daily Thread Miami		-12.84		Purchase authorized on 01/19 Sq *Daily Thread Miami FL S464019785264997 Card 2563	N	N					
+SPL	110	CHECK	01/22/2024	Uncategorized	Sq *Daily Thread Miami		12.84		Purchase authorized on 01/19 Sq *Daily Thread Miami FL S464019785264997 Card 2563	N							
+ENDTRNS
+TRNS	111	CHECK	01/22/2024	Wells Fargo Checking	Madero LLC 29351 SW 15 Homestead		-66.1		Purchase authorized on 01/20 Madero LLC 29351 SW 15 Homestead FL P000000686730550 Card 4273	N	N					
+SPL	111	CHECK	01/22/2024	Uncategorized	Madero LLC 29351 SW 15 Homestead		66.1		Purchase authorized on 01/20 Madero LLC 29351 SW 15 Homestead FL P000000686730550 Card 4273	N							
+ENDTRNS
+TRNS	112	CHECK	01/22/2024	Wells Fargo Checking	24420 S Dixie Hwy Princeton FL 584021530		-202.95		Non-WF ATM Withdrawal authorized on 01/21 24420 S Dixie Hwy Princeton FL 584021530238661 ATM ID P687	N	N					
+SPL	112	CHECK	01/22/2024	Uncategorized	24420 S Dixie Hwy Princeton FL 584021530		202.95		Non-WF ATM Withdrawal authorized on 01/21 24420 S Dixie Hwy Princeton FL 584021530238661 ATM ID P687	N							
+ENDTRNS
+TRNS	113	CHECK	01/22/2024	Wells Fargo Checking	Non-Wells Fargo ATM Transaction Fee		-2.5		Non-Wells Fargo ATM Transaction Fee	N	N					
+SPL	113	CHECK	01/22/2024	Uncategorized	Non-Wells Fargo ATM Transaction Fee		2.5		Non-Wells Fargo ATM Transaction Fee	N							
+ENDTRNS
+TRNS	114	CHECK	01/22/2024	Wells Fargo Checking	Mpa Parking Pay By 305-373-6789		-12.3		Purchase authorized on 01/21 Mpa Parking Pay By 305-373-6789 FL S584021651027915 Card 4273	N	N					
+SPL	114	CHECK	01/22/2024	Uncategorized	Mpa Parking Pay By 305-373-6789		12.3		Purchase authorized on 01/21 Mpa Parking Pay By 305-373-6789 FL S584021651027915 Card 4273	N							
+ENDTRNS
+TRNS	115	CHECK	01/22/2024	Wells Fargo Checking	Dollar Tr 33497 S Dixi Florida City		-18.11		Purchase authorized on 01/21 Dollar Tr 33497 S Dixi Florida City FL P000000072962797 Card 2563	N	N					
+SPL	115	CHECK	01/22/2024	Uncategorized	Dollar Tr 33497 S Dixi Florida City		18.11		Purchase authorized on 01/21 Dollar Tr 33497 S Dixi Florida City FL P000000072962797 Card 2563	N							
+ENDTRNS
+TRNS	116	CHECK	01/22/2024	Wells Fargo Checking	Publix Super Mar 3060 NE Homestead		-60.94		Purchase authorized on 01/21 Publix Super Mar 3060 NE Homestead FL P464021693964028 Card 2563	N	N					
+SPL	116	CHECK	01/22/2024	Uncategorized	Publix Super Mar 3060 NE Homestead		60.94		Purchase authorized on 01/21 Publix Super Mar 3060 NE Homestead FL P464021693964028 Card 2563	N							
+ENDTRNS
+TRNS	117	CHECK	01/22/2024	Wells Fargo Checking	Rodriguez R Everyday Checking XXXXXX0842		-100		Online Transfer to Rodriguez R Everyday Checking XXXXXX0842 Ref #Ib0Lzcjdfd on 01/21/24	N	N					
+SPL	117	CHECK	01/22/2024	Uncategorized	Rodriguez R Everyday Checking XXXXXX0842		100		Online Transfer to Rodriguez R Everyday Checking XXXXXX0842 Ref #Ib0Lzcjdfd on 01/21/24	N							
+ENDTRNS
+TRNS	118	CHECK	01/22/2024	Wells Fargo Checking	Publix Super Mar 15755 SW Miami		-1402.97		Purchase authorized on 01/22 Publix Super Mar 15755 SW Miami FL P584023039319135 Card 4273	N	N					
+SPL	118	CHECK	01/22/2024	Uncategorized	Publix Super Mar 15755 SW Miami		1402.97		Purchase authorized on 01/22 Publix Super Mar 15755 SW Miami FL P584023039319135 Card 4273	N							
+ENDTRNS
+TRNS	119	CHECK	01/23/2024	Wells Fargo Checking	WM Superc Wal-Mart Sup Homestead		-38.65		Purchase authorized on 01/23 WM Superc Wal-Mart Sup Homestead FL P000000874709309 Card 2563	N	N					
+SPL	119	CHECK	01/23/2024	Uncategorized	WM Superc Wal-Mart Sup Homestead		38.65		Purchase authorized on 01/23 WM Superc Wal-Mart Sup Homestead FL P000000874709309 Card 2563	N							
+ENDTRNS
+TRNS	120	CHECK	01/23/2024	Wells Fargo Checking	WM Superc Wal-Mart Sup Homestead		-62.76		Purchase authorized on 01/23 WM Superc Wal-Mart Sup Homestead FL P000000974709292 Card 2563	N	N					
+SPL	120	CHECK	01/23/2024	Uncategorized	WM Superc Wal-Mart Sup Homestead		62.76		Purchase authorized on 01/23 WM Superc Wal-Mart Sup Homestead FL P000000974709292 Card 2563	N							
+ENDTRNS
+TRNS	121	CHECK	01/24/2024	Wells Fargo Checking	Amzn Mktp US*R81R4 Seattle		-8.55		Purchase authorized on 01/22 Amzn Mktp US*R81R4 Seattle WA S384023283037393 Card 4273	N	N					
+SPL	121	CHECK	01/24/2024	Uncategorized	Amzn Mktp US*R81R4 Seattle		8.55		Purchase authorized on 01/22 Amzn Mktp US*R81R4 Seattle WA S384023283037393 Card 4273	N							
+ENDTRNS
+TRNS	122	CHECK	01/24/2024	Wells Fargo Checking	Amzn Mktp US*R06RI Amzn.Com/Bill		-29.61		Purchase authorized on 01/23 Amzn Mktp US*R06RI Amzn.Com/Bill WA S464023710658724 Card 4273	N	N					
+SPL	122	CHECK	01/24/2024	Uncategorized	Amzn Mktp US*R06RI Amzn.Com/Bill		29.61		Purchase authorized on 01/23 Amzn Mktp US*R06RI Amzn.Com/Bill WA S464023710658724 Card 4273	N							
+ENDTRNS
+TRNS	123	CHECK	01/25/2024	Wells Fargo Checking	Raising Canes 0677 Homestead		-23.42		Purchase authorized on 01/23 Raising Canes 0677 Homestead FL S304023753469263 Card 2563	N	N					
+SPL	123	CHECK	01/25/2024	Uncategorized	Raising Canes 0677 Homestead		23.42		Purchase authorized on 01/23 Raising Canes 0677 Homestead FL S304023753469263 Card 2563	N							
+ENDTRNS
+TRNS	124	CHECK	01/25/2024	Wells Fargo Checking	Amzn Mktp US*RO4Ty Amzn.Com/Bill		-8.51		Purchase authorized on 01/23 Amzn Mktp US*RO4Ty Amzn.Com/Bill WA S384023799181095 Card 4273	N	N					
+SPL	124	CHECK	01/25/2024	Uncategorized	Amzn Mktp US*RO4Ty Amzn.Com/Bill		8.51		Purchase authorized on 01/23 Amzn Mktp US*RO4Ty Amzn.Com/Bill WA S384023799181095 Card 4273	N							
+ENDTRNS
+TRNS	125	CHECK	01/25/2024	Wells Fargo Checking	Rodriguez R Everyday Checking XXXXXX0842		-30		Online Transfer to Rodriguez R Everyday Checking XXXXXX0842 Ref #Ib0M2Dnd7T on 01/25/24	N	N					
+SPL	125	CHECK	01/25/2024	Uncategorized	Rodriguez R Everyday Checking XXXXXX0842		30		Online Transfer to Rodriguez R Everyday Checking XXXXXX0842 Ref #Ib0M2Dnd7T on 01/25/24	N							
+ENDTRNS
+TRNS	126	CHECK	01/26/2024	Wells Fargo Checking	V Gelato Cafe Miami		-24.08		Purchase authorized on 01/25 V Gelato Cafe Miami FL S384025696472195 Card 4273	N	N					
+SPL	126	CHECK	01/26/2024	Uncategorized	V Gelato Cafe Miami		24.08		Purchase authorized on 01/25 V Gelato Cafe Miami FL S384025696472195 Card 4273	N							
+ENDTRNS
+TRNS	127	CHECK	01/26/2024	Wells Fargo Checking	Rodriguez R Everyday Checking XXXXXX0842		-30		Online Transfer to Rodriguez R Everyday Checking XXXXXX0842 Ref #Ib0M2Kxm3D on 01/26/24	N	N					
+SPL	127	CHECK	01/26/2024	Uncategorized	Rodriguez R Everyday Checking XXXXXX0842		30		Online Transfer to Rodriguez R Everyday Checking XXXXXX0842 Ref #Ib0M2Kxm3D on 01/26/24	N							
+ENDTRNS
+TRNS	128	DEPOSIT	01/29/2024	Wells Fargo Checking	Mobile Deposit Ref Number :008290690712		1200		Mobile Deposit Ref Number :008290690712	N	N					
+SPL	128	DEPOSIT	01/29/2024	Uncategorized	Mobile Deposit Ref Number :008290690712		-1200		Mobile Deposit Ref Number :008290690712	N							
+ENDTRNS
+TRNS	129	CHECK	01/29/2024	Wells Fargo Checking	Publix Super Mar 3060 NE Homestead		-48.11		Purchase authorized on 01/29 Publix Super Mar 3060 NE Homestead FL P464029629355885 Card 2563	N	N					
+SPL	129	CHECK	01/29/2024	Uncategorized	Publix Super Mar 3060 NE Homestead		48.11		Purchase authorized on 01/29 Publix Super Mar 3060 NE Homestead FL P464029629355885 Card 2563	N							
+ENDTRNS
+TRNS	130	CHECK	01/29/2024	Wells Fargo Checking	Publix Super Mar 3060 NE Homestead		-28.98		Purchase authorized on 01/29 Publix Super Mar 3060 NE Homestead FL P384029631022735 Card 2563	N	N					
+SPL	130	CHECK	01/29/2024	Uncategorized	Publix Super Mar 3060 NE Homestead		28.98		Purchase authorized on 01/29 Publix Super Mar 3060 NE Homestead FL P384029631022735 Card 2563	N							
+ENDTRNS
+TRNS	131	CHECK	01/29/2024	Wells Fargo Checking	Rodriguez R Everyday Checking XXXXXX0842		-200		Online Transfer to Rodriguez R Everyday Checking XXXXXX0842 Ref #Ib0M3F3x7S on 01/29/24	N	N					
+SPL	131	CHECK	01/29/2024	Uncategorized	Rodriguez R Everyday Checking XXXXXX0842		200		Online Transfer to Rodriguez R Everyday Checking XXXXXX0842 Ref #Ib0M3F3x7S on 01/29/24	N							
+ENDTRNS
+TRNS	132	CHECK	01/29/2024	Wells Fargo Checking	Publix Super Mar 3060 NE Homestead		-33.72		Purchase authorized on 01/29 Publix Super Mar 3060 NE Homestead FL P584029762189456 Card 4273	N	N					
+SPL	132	CHECK	01/29/2024	Uncategorized	Publix Super Mar 3060 NE Homestead		33.72		Purchase authorized on 01/29 Publix Super Mar 3060 NE Homestead FL P584029762189456 Card 4273	N							
+ENDTRNS
+TRNS	133	CHECK	01/29/2024	Wells Fargo Checking	Rodriguez R Everyday Checking XXXXXX0842		-500		Online Transfer to Rodriguez R Everyday Checking XXXXXX0842 Ref #Ib0M3Hhbxd on 01/29/24	N	N					
+SPL	133	CHECK	01/29/2024	Uncategorized	Rodriguez R Everyday Checking XXXXXX0842		500		Online Transfer to Rodriguez R Everyday Checking XXXXXX0842 Ref #Ib0M3Hhbxd on 01/29/24	N							
+ENDTRNS
+TRNS	134	CHECK	01/30/2024	Wells Fargo Checking	T-Mobile Store # 2 Homestead		-207.88		Purchase authorized on 01/29 T-Mobile Store # 2 Homestead FL S584029734359769 Card 4273	N	N					
+SPL	134	CHECK	01/30/2024	Uncategorized	T-Mobile Store # 2 Homestead		207.88		Purchase authorized on 01/29 T-Mobile Store # 2 Homestead FL S584029734359769 Card 4273	N							
+ENDTRNS
+TRNS	135	CHECK	01/30/2024	Wells Fargo Checking	Mexico Market Homestead		-33.09		Purchase authorized on 01/30 Mexico Market Homestead FL P000000670655673 Card 2563	N	N					
+SPL	135	CHECK	01/30/2024	Uncategorized	Mexico Market Homestead		33.09		Purchase authorized on 01/30 Mexico Market Homestead FL P000000670655673 Card 2563	N							
+ENDTRNS
+TRNS	136	CHECK	01/30/2024	Wells Fargo Checking	13449 SW 288th St Homestead FL 0000299 A		-50		ATM Withdrawal authorized on 01/30 13449 SW 288th St Homestead FL 0000299 ATM ID 0837B Card 4273	N	N					
+SPL	136	CHECK	01/30/2024	Uncategorized	13449 SW 288th St Homestead FL 0000299 A		50		ATM Withdrawal authorized on 01/30 13449 SW 288th St Homestead FL 0000299 ATM ID 0837B Card 4273	N							
+ENDTRNS
+TRNS	137	CHECK	01/30/2024	Wells Fargo Checking	Walgreens Store 3090 NE 4 Homestead		-13.18		Purchase authorized on 01/30 Walgreens Store 3090 NE 4 Homestead FL P464030655627219 Card 2563	N	N					
+SPL	137	CHECK	01/30/2024	Uncategorized	Walgreens Store 3090 NE 4 Homestead		13.18		Purchase authorized on 01/30 Walgreens Store 3090 NE 4 Homestead FL P464030655627219 Card 2563	N							
+ENDTRNS
+TRNS	138	CHECK	01/30/2024	Wells Fargo Checking	Dollar Tr 2552 NE 10th Homestead		-29.43		Purchase authorized on 01/30 Dollar Tr 2552 NE 10th Homestead FL P000000189636234 Card 2563	N	N					
+SPL	138	CHECK	01/30/2024	Uncategorized	Dollar Tr 2552 NE 10th Homestead		29.43		Purchase authorized on 01/30 Dollar Tr 2552 NE 10th Homestead FL P000000189636234 Card 2563	N							
+ENDTRNS
+TRNS	139	CHECK	01/30/2024	Wells Fargo Checking	Racetrac2520 Homestead		-23.6		Purchase authorized on 01/30 Racetrac2520 Homestead FL P384031041929291 Card 4273	N	N					
+SPL	139	CHECK	01/30/2024	Uncategorized	Racetrac2520 Homestead		23.6		Purchase authorized on 01/30 Racetrac2520 Homestead FL P384031041929291 Card 4273	N							
+ENDTRNS
+TRNS	140	CHECK	01/30/2024	Wells Fargo Checking	Rodriguez R Everyday Checking xxxxxx0842		-40		Online Transfer to Rodriguez R Everyday Checking xxxxxx0842 Ref #Ib0M3S9Rrx on 01/30/24	N	N					
+SPL	140	CHECK	01/30/2024	Uncategorized	Rodriguez R Everyday Checking xxxxxx0842		40		Online Transfer to Rodriguez R Everyday Checking xxxxxx0842 Ref #Ib0M3S9Rrx on 01/30/24	N							
+ENDTRNS
+TRNS	141	DEPOSIT	01/31/2024	Wells Fargo Checking	Online Transfer From Rodriguez R Everyda		100		Online Transfer From Rodriguez R Everyday Checking xxxxxx0842 Ref #Ib0M3Y56V2 on 01/31/24	N	N					
+SPL	141	DEPOSIT	01/31/2024	Uncategorized	Online Transfer From Rodriguez R Everyda		-100		Online Transfer From Rodriguez R Everyday Checking xxxxxx0842 Ref #Ib0M3Y56V2 on 01/31/24	N							
+ENDTRNS
+TRNS	142	CHECK	01/31/2024	Wells Fargo Checking	Chevron 0202651 Homestead		-26.08		Purchase authorized on 01/30 Chevron 0202651 Homestead FL S384030680958930 Card 4273	N	N					
+SPL	142	CHECK	01/31/2024	Uncategorized	Chevron 0202651 Homestead		26.08		Purchase authorized on 01/30 Chevron 0202651 Homestead FL S384030680958930 Card 4273	N							
+ENDTRNS
+TRNS	143	CHECK	01/31/2024	Wells Fargo Checking	Circle K # 07689 1085 North Port		-23.06		Purchase authorized on 01/31 Circle K # 07689 1085 North Port FL P000000580382877 Card 4273	N	N					
+SPL	143	CHECK	01/31/2024	Uncategorized	Circle K # 07689 1085 North Port		23.06		Purchase authorized on 01/31 Circle K # 07689 1085 North Port FL P000000580382877 Card 4273	N							
+ENDTRNS
+TRNS	144	CHECK	01/31/2024	Wells Fargo Checking	Wal-Mart #5671 Homestead		-50.94		Purchase authorized on 01/31 Wal-Mart #5671 Homestead FL P000000170186034 Card 2563	N	N					
+SPL	144	CHECK	01/31/2024	Uncategorized	Wal-Mart #5671 Homestead		50.94		Purchase authorized on 01/31 Wal-Mart #5671 Homestead FL P000000170186034 Card 2563	N							
+ENDTRNS
+TRNS	145	CHECK	Saldo final/undefined/2024	Wells Fargo Checking			0	al 1/31		N	N					
+SPL	145	CHECK	Saldo final/undefined/2024	Uncategorized			0	al 1/31		N							
+ENDTRNS
+TRNS	146	DEPOSIT	Totales/undefined/2024	Wells Fargo Checking			12822.16			N	N					
+SPL	146	DEPOSIT	Totales/undefined/2024	Uncategorized			-12822.16			N							
+ENDTRNS

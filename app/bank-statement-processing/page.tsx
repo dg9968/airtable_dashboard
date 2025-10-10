@@ -2,6 +2,7 @@
 
 import { useState, useRef } from 'react'
 import { useSession } from 'next-auth/react'
+import CsvCombiner from '@/components/CsvCombiner'
 
 export default function BankStatementProcessing() {
   const { data: session } = useSession()
@@ -434,6 +435,11 @@ export default function BankStatementProcessing() {
               </ol>
             </div>
           </div>
+        </div>
+
+        {/* CSV to QBO Converter Section */}
+        <div className="mt-8">
+          <CsvCombiner />
         </div>
       </div>
     </div>
