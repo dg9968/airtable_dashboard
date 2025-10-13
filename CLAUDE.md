@@ -4,14 +4,32 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Development Commands
 
-- `npm run dev` - Start development server on http://localhost:3000
-- `npm run build` - Build production bundle
-- `npm run start` - Start production server
-- `npm run lint` - Run ESLint on codebase
+- `bun run dev` - Start client development server on http://localhost:3000
+- `bun run dev:server` - Start API server on http://localhost:3001
+- `bun run dev:all` - Start both client and server in parallel
+- `bun run build` - Build both packages for production
+- `bun run start` - Start production server
+- `bun run lint` - Run ESLint on both packages
 
 ## Architecture Overview
 
-This is a Next.js 15 App Router application serving as a business management dashboard for tax preparation services. The system integrates with Airtable as the primary database and uses NextAuth.js for authentication.
+This is a **Bun monorepo** with separate client and server packages. The client is a Next.js 15 App Router application, and the server is a Bun + Hono API. The system serves as a business management dashboard for tax preparation services, integrating with Airtable as the primary database and using NextAuth.js for authentication.
+
+### Monorepo Structure
+
+```
+packages/
+├── client/          # Next.js 15 frontend
+│   ├── app/        # Next.js App Router pages and layouts
+│   ├── components/ # Reusable React components
+│   ├── hooks/      # Custom React hooks
+│   └── public/     # Static assets
+└── server/          # Bun + Hono API
+    └── src/
+        ├── api/    # API route handlers (from Next.js API routes)
+        ├── lib/    # Utility libraries (auth, airtable, googleDrive)
+        └── index.ts # Server entry point
+```
 
 ### Authentication & Authorization
 - NextAuth.js with credentials provider using Airtable for user storage
@@ -50,22 +68,34 @@ This is a Next.js 15 App Router application serving as a business management das
 - API routes in `/api/` for backend operations
 
 ### Environment Variables Required
+
+**Client (packages/client/.env.local):**
 ```
-AIRTABLE_PERSONAL_ACCESS_TOKEN
-AIRTABLE_BASE_ID  
-AIRTABLE_USERS_TABLE=Users
 NEXTAUTH_SECRET
-NEXTAUTH_URL
+NEXTAUTH_URL=http://localhost:3000
+NEXT_PUBLIC_API_URL=http://localhost:3001
 ```
 
-### Key Directories
-- `/app` - Next.js App Router pages and API routes
-- `/components` - Reusable React components
-- `/lib` - Utility libraries (auth, airtable, googleDrive)
-- Styling uses global CSS with Tailwind and component-level styling
+**Server (packages/server/.env):**
+```
+PORT=3001
+CLIENT_URL=http://localhost:3000
+AIRTABLE_PERSONAL_ACCESS_TOKEN
+AIRTABLE_BASE_ID
+AIRTABLE_USERS_TABLE=Users
+AWS_ACCESS_KEY_ID
+AWS_SECRET_ACCESS_KEY
+AWS_REGION
+AWS_S3_BUCKET
+GOOGLE_DRIVE_CREDENTIALS_JSON
+GOOGLE_DRIVE_FOLDER_ID
+```
 
 ### Development Notes
-- Uses TypeScript with strict mode enabled
-- Path alias `@/*` maps to project root
+- Uses **Bun** as the runtime and package manager
+- **Client**: Next.js 15 with TypeScript strict mode, path alias `@/*` maps to client root
+- **Server**: Bun + Hono framework with hot reload for fast development
+- Styling uses global CSS with Tailwind and component-level styling
 - Image optimization configured for YouTube thumbnails
 - Deployment configured for Render.com with specific build/start commands
+- API routes migrated from Next.js API routes to Hono server routes

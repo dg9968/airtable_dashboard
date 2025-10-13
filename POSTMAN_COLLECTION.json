@@ -1,0 +1,144 @@
+{
+  "info": {
+    "name": "Airtable Dashboard API",
+    "description": "API collection for Airtable Dashboard monorepo",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@example.com\",\n  \"password\": \"your-password\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3000/api/auth/callback/credentials",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["api", "auth", "callback", "credentials"]
+            },
+            "description": "Login with email and password"
+          }
+        },
+        {
+          "name": "Get Session",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/auth/session",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["api", "auth", "session"]
+            },
+            "description": "Get current session information"
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/auth/signout",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["api", "auth", "signout"]
+            },
+            "description": "Sign out current user"
+          }
+        },
+        {
+          "name": "Create User (Admin Only)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"newuser@example.com\",\n  \"name\": \"New User\",\n  \"password\": \"securepassword123\",\n  \"role\": \"user\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3000/api/auth/create-user",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["api", "auth", "create-user"]
+            },
+            "description": "Create a new user (requires admin authentication)"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Server Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3001/health",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3001",
+              "path": ["health"]
+            },
+            "description": "Check server health status"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Airtable (To be migrated)",
+      "item": [
+        {
+          "name": "Get Airtable Records",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3001/api/airtable",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3001",
+              "path": ["api", "airtable"]
+            },
+            "description": "Get records from Airtable (route needs Hono migration)"
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "client_url",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "server_url",
+      "value": "http://localhost:3001",
+      "type": "string"
+    }
+  ]
+}
