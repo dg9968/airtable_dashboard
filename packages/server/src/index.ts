@@ -3,8 +3,20 @@ import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 
 // Import routes
+import authRoutes from './routes/auth';
 import airtableRoutes from './routes/airtable';
 import documentsRoutes from './routes/documents';
+import bankStatementRoutes from './routes/bank-statement-processing';
+import customerSubscriptionsRoutes from './routes/customer-subscriptions';
+import processorBillingRoutes from './routes/processor-billing';
+import servicesRoutes from './routes/services';
+import servicesCachedRoutes from './routes/services-cached';
+import subscriptionsRoutes from './routes/subscriptions';
+import youtubeVideosRoutes from './routes/youtube-videos';
+import serviceByClientRoutes from './routes/service-by-client';
+import companyContactsRoutes from './routes/company-contacts';
+import contactsRoutes from './routes/contacts';
+import companiesRoutes from './routes/companies';
 
 const app = new Hono();
 
@@ -21,8 +33,20 @@ app.get('/health', (c) => {
 });
 
 // API Routes
+app.route('/api/auth', authRoutes);
 app.route('/api/airtable', airtableRoutes);
 app.route('/api/documents', documentsRoutes);
+app.route('/api/bank-statement-processing', bankStatementRoutes);
+app.route('/api/customer-subscriptions', customerSubscriptionsRoutes);
+app.route('/api/processor-billing', processorBillingRoutes);
+app.route('/api/services', servicesRoutes);
+app.route('/api/services-cached', servicesCachedRoutes);
+app.route('/api/subscriptions', subscriptionsRoutes);
+app.route('/api/youtube-videos', youtubeVideosRoutes);
+app.route('/api/service-by-client', serviceByClientRoutes);
+app.route('/api/company-contacts', companyContactsRoutes);
+app.route('/api/contacts', contactsRoutes);
+app.route('/api/companies', companiesRoutes);
 
 // 404 handler
 app.notFound((c) => {
@@ -40,12 +64,41 @@ const port = process.env.PORT || 3001;
 console.log(`🚀 Server running on http://localhost:${port}`);
 console.log(`📚 API routes available:`);
 console.log(`   - GET  /health`);
+console.log(`   - POST /api/auth/login`);
+console.log(`   - GET  /api/auth/me`);
+console.log(`   - POST /api/auth/register`);
+console.log(`   - POST /api/auth/refresh`);
 console.log(`   - GET  /api/airtable`);
 console.log(`   - POST /api/airtable`);
 console.log(`   - GET  /api/documents`);
 console.log(`   - POST /api/documents`);
 console.log(`   - DELETE /api/documents`);
 console.log(`   - GET  /api/documents/generate-code`);
+console.log(`   - POST /api/bank-statement-processing`);
+console.log(`   - GET  /api/bank-statement-processing/status`);
+console.log(`   - GET  /api/bank-statement-processing/download`);
+console.log(`   - GET  /api/customer-subscriptions`);
+console.log(`   - GET  /api/processor-billing`);
+console.log(`   - GET  /api/services`);
+console.log(`   - GET  /api/services-cached`);
+console.log(`   - DELETE /api/services-cached`);
+console.log(`   - POST /api/subscriptions`);
+console.log(`   - PATCH /api/subscriptions`);
+console.log(`   - DELETE /api/subscriptions`);
+console.log(`   - GET  /api/youtube-videos`);
+console.log(`   - GET  /api/service-by-client`);
+console.log(`   - GET  /api/company-contacts`);
+console.log(`   - POST /api/company-contacts`);
+console.log(`   - GET  /api/company-contacts/:id`);
+console.log(`   - PATCH /api/company-contacts/:id`);
+console.log(`   - DELETE /api/company-contacts/:id`);
+console.log(`   - GET  /api/company-contacts/contact/:contactId/companies`);
+console.log(`   - GET  /api/company-contacts/company/:companyId/contacts`);
+console.log(`   - POST /api/company-contacts/contact/:contactId/set-primary`);
+console.log(`   - GET  /api/contacts`);
+console.log(`   - GET  /api/contacts/:id`);
+console.log(`   - GET  /api/companies`);
+console.log(`   - GET  /api/companies/:id`);
 
 export default {
   port,

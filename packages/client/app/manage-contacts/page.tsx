@@ -1,11 +1,11 @@
-// app/processor-billing/page.tsx
+// app/manage-contacts/page.tsx
 'use client';
 
 import { Suspense } from 'react';
 import { useRequireAuth } from '@/hooks/useAuth';
-import ProcessorBilling from '@/components/ProcessorBilling';
+import ManageContacts from '@/components/ManageContacts';
 
-export default function ProcessorBillingPage() {
+export default function ManageContactsPage() {
   const { session, status } = useRequireAuth();
 
   if (status === 'loading') {
@@ -25,7 +25,7 @@ export default function ProcessorBillingPage() {
 
   return (
     <Suspense fallback={<div>Loading...</div>}>
-      <ProcessorBilling />
+      <ManageContacts />
     </Suspense>
   );
 }

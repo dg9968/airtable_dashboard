@@ -1,23 +1,30 @@
-// app/api/services/route.ts - FIXED VERSION
-import { NextResponse } from 'next/server';
-import { fetchAllTableData, testConnection } from '@/lib/airtable';
+/**
+ * Services Routes
+ */
 
-export async function GET() {
+import { Hono } from 'hono';
+import { fetchAllTableData, testConnection } from '../airtable';
+
+const app = new Hono();
+
+/**
+ * GET /api/services
+ * Fetch all services from Services Corporate table with flexible field detection
+ */
+app.get('/', async (c) => {
   try {
-    // Test connection first
     const connectionTest = await testConnection();
     if (!connectionTest.success) {
-      return NextResponse.json(
-        { 
-          success: false, 
+      return c.json(
+        {
+          success: false,
           error: `Connection failed: ${connectionTest.message}`,
           suggestion: 'Please check your AIRTABLE_PERSONAL_ACCESS_TOKEN and AIRTABLE_BASE_ID in .env.local'
         },
-        { status: 401 }
+        401
       );
     }
 
-    // Try to find the Services Corporate table
     const possibleServiceTableNames = [
       'Services Corporate',
       'Corporate Services',
@@ -26,16 +33,15 @@ export async function GET() {
       'Service Categories',
       'Service Offerings'
     ];
-    
-    // FIXED: Initialize with proper type and default value
+
     let serviceRecords: any[] = [];
     let actualServiceTableName = '';
     let serviceTableFound = false;
-    
+
     for (const tableName of possibleServiceTableNames) {
       try {
         console.log(`Trying services table: ${tableName}`);
-        serviceRecords = await fetchAllTableData(tableName); // Fetch ALL service records
+        serviceRecords = await fetchAllTableData(tableName);
         actualServiceTableName = tableName;
         serviceTableFound = true;
         console.log(`Successfully found services table: ${tableName} with ${serviceRecords.length} total records`);
@@ -45,34 +51,30 @@ export async function GET() {
         continue;
       }
     }
-    
+
     if (!serviceTableFound) {
-      return NextResponse.json({
+      return c.json({
         success: false,
         error: 'No Services Corporate table found',
         suggestion: 'Please check that you have a table for services (e.g., "Services Corporate", "Services", etc.)',
         searchedFor: possibleServiceTableNames
-      }, { status: 404 });
+      }, 404);
     }
 
-    // Extract service names and analyze the structure
-    // FIXED: Now serviceRecords is guaranteed to be an array
     const services = serviceRecords.map(record => {
-      // Try multiple possible field names for the service name
       const possibleNameFields = [
         'Name',
-        'Service Name', 
+        'Service Name',
         'Service',
         'Title',
         'Service Type',
         'Service Title',
         'Description'
       ];
-      
+
       let serviceName = 'Unnamed Service';
       let foundField = null;
-      
-      // Find the first field that has a value
+
       for (const fieldName of possibleNameFields) {
         if (record.fields[fieldName] && record.fields[fieldName].toString().trim()) {
           serviceName = record.fields[fieldName].toString().trim();
@@ -80,10 +82,9 @@ export async function GET() {
           break;
         }
       }
-      
-      // If still unnamed, try to find any text field
+
       if (serviceName === 'Unnamed Service') {
-        const textFields = Object.entries(record.fields).filter(([key, value]) => 
+        const textFields = Object.entries(record.fields).filter(([key, value]) =>
           typeof value === 'string' && value.trim().length > 0
         );
         if (textFields.length > 0) {
@@ -91,7 +92,7 @@ export async function GET() {
           foundField = textFields[0][0];
         }
       }
-      
+
       return {
         id: record.id,
         name: serviceName,
@@ -101,13 +102,12 @@ export async function GET() {
       };
     });
 
-    // Check if "Bookkeeping Clients" exists
-    const bookkeepingService = services.find(service => 
-      service.name === 'Bookkeeping Clients' || 
+    const bookkeepingService = services.find(service =>
+      service.name === 'Bookkeeping Clients' ||
       service.name.toLowerCase() === 'bookkeeping clients'
     );
 
-    return NextResponse.json({
+    return c.json({
       success: true,
       data: {
         services: services,
@@ -120,7 +120,7 @@ export async function GET() {
           nameFields: services.map(s => ({ id: s.id, nameField: s.nameField, allFields: s.allFields })),
           allUniqueFields: [...new Set(services.flatMap(s => s.allFields))]
         },
-        message: bookkeepingService 
+        message: bookkeepingService
           ? 'Found "Bookkeeping Clients" service in your Services table'
           : 'Could not find "Bookkeeping Clients" service in your Services table'
       }
@@ -128,14 +128,16 @@ export async function GET() {
 
   } catch (error) {
     console.error('Error in services API route:', error);
-    
-    return NextResponse.json(
-      { 
-        success: false, 
+
+    return c.json(
+      {
+        success: false,
         error: error instanceof Error ? error.message : 'Failed to fetch services data',
         suggestion: 'Check your Airtable connection and Services Corporate table'
       },
-      { status: 500 }
+      500
     );
   }
-}
+});
+
+export default app;

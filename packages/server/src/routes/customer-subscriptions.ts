@@ -1,0 +1,79 @@
+/**
+ * Customer Subscriptions Routes
+ */
+
+import { Hono } from 'hono';
+import Airtable from 'airtable';
+
+const app = new Hono();
+
+const airtable = new Airtable({
+  apiKey: process.env.AIRTABLE_PERSONAL_ACCESS_TOKEN,
+});
+
+const base = airtable.base(process.env.AIRTABLE_BASE_ID || '');
+
+/**
+ * GET /api/customer-subscriptions?customer=CustomerName
+ * Fetch all subscriptions for a specific customer
+ */
+app.get('/', async (c) => {
+  try {
+    const customerName = c.req.query('customer');
+
+    if (!customerName) {
+      return c.json(
+        { success: false, error: 'Customer name is required' },
+        400
+      );
+    }
+
+    console.log(`Fetching subscriptions for customer: ${customerName}`);
+
+    const subscriptions: any[] = [];
+
+    await base('Subscriptions Corporate')
+      .select({
+        view: 'Services by Client All',
+        filterByFormula: `SEARCH("${customerName} - ", {Name}) = 1`,
+        maxRecords: 100
+      })
+      .eachPage((records, fetchNextPage) => {
+        records.forEach((record) => {
+          const subscriptionName = String(record.fields['Name'] || '');
+          const serviceName = subscriptionName.replace(customerName + ' - ', '');
+
+          subscriptions.push({
+            id: record.id,
+            clientId: customerName,
+            serviceId: serviceName,
+            status: Array.isArray(record.fields['Status']) ? record.fields['Status'] : [],
+            price: Number(record.fields['Billing Amount']) || 0,
+            fields: record.fields
+          });
+        });
+        fetchNextPage();
+      });
+
+    console.log(`Found ${subscriptions.length} subscriptions for ${customerName}`);
+
+    return c.json({
+      success: true,
+      data: subscriptions,
+      customerName: customerName,
+      totalRecords: subscriptions.length
+    });
+
+  } catch (error) {
+    console.error('Error fetching customer subscriptions:', error);
+    return c.json(
+      {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to fetch customer subscriptions'
+      },
+      500
+    );
+  }
+});
+
+export default app;

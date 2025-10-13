@@ -21,6 +21,13 @@ export default function HomePage() {
       buttonClass: "btn-primary"
     },
     {
+      title: "Manage Contacts",
+      description: "Link contacts to companies and manage work relationships with role, department, and contact information",
+      href: "/manage-contacts",
+      icon: "👥",
+      buttonClass: "btn-success"
+    },
+    {
       title: "View Display",
       description: "Display and configure any Airtable view with custom filters, sorting, and advanced options",
       href: "/view-display",
@@ -189,7 +196,7 @@ export default function HomePage() {
           <div className="stats stats-vertical lg:stats-horizontal shadow w-full">
             <div className="stat place-items-center">
               <div className="stat-title">Dashboards</div>
-              <div className="stat-value text-primary">4</div>
+              <div className="stat-value text-primary">5</div>
               <div className="stat-desc">Comprehensive tools</div>
             </div>
             

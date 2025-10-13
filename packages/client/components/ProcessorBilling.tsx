@@ -136,8 +136,9 @@ export default function ProcessorBilling() {
       setLoading(true);
       setError(null);
       setSuggestion(null);
-      
-      const response = await fetch(currentView.endpoint);
+
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+      const response = await fetch(`${apiUrl}${currentView.endpoint}`);
       const result: ApiResponse = await response.json();
       
       if (result.success && result.data) {

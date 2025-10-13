@@ -1,5 +1,10 @@
-// app/api/youtube-videos/route.ts
-import { NextResponse } from 'next/server';
+/**
+ * YouTube Videos Routes
+ */
+
+import { Hono } from 'hono';
+
+const app = new Hono();
 
 interface YouTubeVideo {
   kind: string;
@@ -57,16 +62,14 @@ interface YouTubeApiResponse {
   };
 }
 
-// Function to fetch videos from a YouTube channel
 async function fetchChannelVideos(channelId: string, maxResults: number = 50): Promise<YouTubeVideo[]> {
   const apiKey = process.env.YOUTUBE_API_KEY;
-  
+
   if (!apiKey) {
     throw new Error('YouTube API key not configured');
   }
 
   try {
-    // Step 1: Get the channel's uploads playlist ID
     const channelResponse = await fetch(
       `https://www.googleapis.com/youtube/v3/channels?part=contentDetails&id=${channelId}&key=${apiKey}`
     );
@@ -76,14 +79,13 @@ async function fetchChannelVideos(channelId: string, maxResults: number = 50): P
     }
 
     const channelData = await channelResponse.json();
-    
+
     if (!channelData.items || channelData.items.length === 0) {
       throw new Error('Channel not found');
     }
 
     const uploadsPlaylistId = channelData.items[0].contentDetails.relatedPlaylists.uploads;
 
-    // Step 2: Get videos from the uploads playlist
     const playlistResponse = await fetch(
       `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&playlistId=${uploadsPlaylistId}&maxResults=${maxResults}&key=${apiKey}`
     );
@@ -93,14 +95,13 @@ async function fetchChannelVideos(channelId: string, maxResults: number = 50): P
     }
 
     const playlistData = await playlistResponse.json();
-    
+
     if (!playlistData.items || playlistData.items.length === 0) {
       return [];
     }
 
-    // Step 3: Get detailed video information
     const videoIds = playlistData.items.map((item: any) => item.snippet.resourceId.videoId).join(',');
-    
+
     const videosResponse = await fetch(
       `https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics,contentDetails&id=${videoIds}&key=${apiKey}`
     );
@@ -110,7 +111,7 @@ async function fetchChannelVideos(channelId: string, maxResults: number = 50): P
     }
 
     const videosData: YouTubeApiResponse = await videosResponse.json();
-    
+
     return videosData.items || [];
 
   } catch (error) {
@@ -119,18 +120,16 @@ async function fetchChannelVideos(channelId: string, maxResults: number = 50): P
   }
 }
 
-// Function to search for videos by query
 async function searchVideos(query: string, channelId?: string, maxResults: number = 25): Promise<YouTubeVideo[]> {
   const apiKey = process.env.YOUTUBE_API_KEY;
-  
+
   if (!apiKey) {
     throw new Error('YouTube API key not configured');
   }
 
   try {
-    // Build search URL
     let searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&q=${encodeURIComponent(query)}&maxResults=${maxResults}&key=${apiKey}`;
-    
+
     if (channelId) {
       searchUrl += `&channelId=${channelId}`;
     }
@@ -142,14 +141,13 @@ async function searchVideos(query: string, channelId?: string, maxResults: numbe
     }
 
     const searchData = await searchResponse.json();
-    
+
     if (!searchData.items || searchData.items.length === 0) {
       return [];
     }
 
-    // Get detailed video information
     const videoIds = searchData.items.map((item: any) => item.id.videoId).join(',');
-    
+
     const videosResponse = await fetch(
       `https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics,contentDetails&id=${videoIds}&key=${apiKey}`
     );
@@ -159,7 +157,7 @@ async function searchVideos(query: string, channelId?: string, maxResults: numbe
     }
 
     const videosData: YouTubeApiResponse = await videosResponse.json();
-    
+
     return videosData.items || [];
 
   } catch (error) {
@@ -168,35 +166,35 @@ async function searchVideos(query: string, channelId?: string, maxResults: numbe
   }
 }
 
-export async function GET(request: Request) {
+/**
+ * GET /api/youtube-videos?channelId=xxx&query=xxx&maxResults=50
+ * Fetch YouTube videos from a channel or search query
+ */
+app.get('/', async (c) => {
   try {
-    const { searchParams } = new URL(request.url);
-    const channelId = searchParams.get('channelId') || process.env.YOUTUBE_CHANNEL_ID;
-    const query = searchParams.get('query');
-    const maxResults = parseInt(searchParams.get('maxResults') || '50');
+    const channelId = c.req.query('channelId') || process.env.YOUTUBE_CHANNEL_ID;
+    const query = c.req.query('query');
+    const maxResults = parseInt(c.req.query('maxResults') || '50');
 
     if (!channelId && !query) {
-      return NextResponse.json(
-        { 
-          success: false, 
+      return c.json(
+        {
+          success: false,
           error: 'Channel ID or search query is required',
           suggestion: 'Set YOUTUBE_CHANNEL_ID in environment variables or provide channelId parameter'
         },
-        { status: 400 }
+        400
       );
     }
 
     let videos: YouTubeVideo[] = [];
 
     if (query) {
-      // Search for videos by query
       videos = await searchVideos(query, channelId, maxResults);
     } else if (channelId) {
-      // Fetch videos from specific channel
       videos = await fetchChannelVideos(channelId, maxResults);
     }
 
-    // Sort videos by publish date (newest first)
     videos.sort((a, b) => new Date(b.snippet.publishedAt).getTime() - new Date(a.snippet.publishedAt).getTime());
 
     const stats = {
@@ -207,7 +205,7 @@ export async function GET(request: Request) {
       lastUpdated: new Date().toISOString()
     };
 
-    return NextResponse.json({
+    return c.json({
       success: true,
       videos,
       stats,
@@ -217,13 +215,13 @@ export async function GET(request: Request) {
 
   } catch (error) {
     console.error('Error in YouTube API route:', error);
-    
+
     let errorMessage = 'Failed to fetch YouTube videos';
     let suggestion = 'Please check your YouTube API configuration';
-    
+
     if (error instanceof Error) {
       errorMessage = error.message;
-      
+
       if (error.message.includes('API key')) {
         suggestion = 'Set YOUTUBE_API_KEY in your environment variables. Get an API key from Google Cloud Console.';
       } else if (error.message.includes('Channel not found')) {
@@ -232,14 +230,16 @@ export async function GET(request: Request) {
         suggestion = 'YouTube API quota exceeded. Try again later or increase your quota limits.';
       }
     }
-    
-    return NextResponse.json(
-      { 
-        success: false, 
+
+    return c.json(
+      {
+        success: false,
         error: errorMessage,
         suggestion
       },
-      { status: 500 }
+      500
     );
   }
-}
+});
+
+export default app;
