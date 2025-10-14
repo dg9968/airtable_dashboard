@@ -63,12 +63,13 @@ app.get('/', async (c) => {
 
     const services = serviceRecords.map(record => {
       const possibleNameFields = [
-        'Name',
-        'Service Name',
+        'Services',
         'Service',
-        'Title',
+        'Service Name',
+        'Name',
         'Service Type',
         'Service Title',
+        'Title',
         'Description'
       ];
 

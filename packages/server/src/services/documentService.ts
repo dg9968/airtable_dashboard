@@ -9,6 +9,11 @@ import { existsSync } from 'fs';
 import { writeFile, readFile, mkdir, unlink, readdir, lstat } from 'fs/promises';
 import path from 'path';
 import { generateClientCode, isValidClientCode } from '../utils/helpers';
+import {
+  uploadFileToGoogleDrive,
+  deleteFileFromGoogleDrive,
+  getFileMetadata,
+} from '../googleDrive';
 
 const airtable = new Airtable({
   apiKey: process.env.AIRTABLE_PERSONAL_ACCESS_TOKEN || 'dummy',
@@ -26,6 +31,9 @@ export interface DocumentMetadata {
   clientCode: string;
   taxYear: string;
   uploadedBy?: string;
+  googleDriveFileId?: string;
+  webViewLink?: string;
+  webContentLink?: string;
 }
 
 /**
@@ -137,6 +145,9 @@ export async function getDocuments(
       clientCode: record.fields['Client Code'] as string,
       taxYear: record.fields['Tax Year'] as string,
       uploadedBy: record.fields['Uploaded By'] as string,
+      googleDriveFileId: record.fields['Google Drive File ID'] as string,
+      webViewLink: record.fields['Web View Link'] as string,
+      webContentLink: record.fields['Web Content Link'] as string,
     }));
   } catch (error) {
     console.error('Airtable fetch failed, using local metadata:', error);
@@ -152,37 +163,43 @@ export async function saveDocument(
   clientCode: string,
   taxYear: string,
   uploadedBy: string
-): Promise<{ id: string; fileName: string }> {
-  // Create directory structure
-  const documentsDir = path.join(process.cwd(), 'documents');
-  if (!existsSync(documentsDir)) {
-    await mkdir(documentsDir, { recursive: true });
-  }
-
-  const taxYearDir = path.join(documentsDir, taxYear);
-  if (!existsSync(taxYearDir)) {
-    await mkdir(taxYearDir, { recursive: true });
-  }
-
-  const clientDir = path.join(taxYearDir, clientCode);
-  if (!existsSync(clientDir)) {
-    await mkdir(clientDir, { recursive: true });
-  }
-
+): Promise<{ id: string; fileName: string; googleDriveFileId?: string }> {
   // Generate unique filename
   const timestamp = Date.now();
   const fileExtension = path.extname(file.name);
   const fileName = `${timestamp}${fileExtension}`;
-  const filePath = path.join(clientDir, fileName);
 
-  // Save file
+  // Convert File to Buffer for Google Drive upload
   const bytes = await file.arrayBuffer();
   const buffer = Buffer.from(bytes);
-  await writeFile(filePath, buffer);
+
+  let googleDriveFileId: string | undefined;
+  let webViewLink: string | undefined;
+  let webContentLink: string | undefined;
+
+  try {
+    // Upload to Google Drive
+    const driveUpload = await uploadFileToGoogleDrive(
+      buffer,
+      file.name,
+      file.type,
+      clientCode,
+      taxYear
+    );
+
+    googleDriveFileId = driveUpload.fileId;
+    webViewLink = driveUpload.webViewLink;
+    webContentLink = driveUpload.webContentLink;
+
+    console.log('Successfully uploaded to Google Drive:', googleDriveFileId);
+  } catch (error) {
+    console.error('Google Drive upload failed:', error);
+    // Continue without Google Drive - will save locally
+  }
 
   // Create metadata
   const documentMetadata: DocumentMetadata = {
-    id: `local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    id: `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
     fileName,
     originalName: file.name,
     uploadDate: new Date().toISOString(),
@@ -191,6 +208,9 @@ export async function saveDocument(
     clientCode,
     taxYear,
     uploadedBy,
+    googleDriveFileId,
+    webViewLink,
+    webContentLink,
   };
 
   let recordId = documentMetadata.id;
@@ -208,6 +228,9 @@ export async function saveDocument(
           'File Size': file.size,
           'File Type': file.type,
           'Uploaded By': uploadedBy,
+          ...(googleDriveFileId && { 'Google Drive File ID': googleDriveFileId }),
+          ...(webViewLink && { 'Web View Link': webViewLink }),
+          ...(webContentLink && { 'Web Content Link': webContentLink }),
         }
       }
     ]);
@@ -215,95 +238,67 @@ export async function saveDocument(
     recordId = record[0].id;
     documentMetadata.id = recordId;
   } catch (error) {
-    console.error('Airtable save failed, using local metadata:', error);
-
-    // Fallback to local storage
-    const existingMetadata = await getLocalMetadata(clientCode, taxYear);
-    existingMetadata.push(documentMetadata);
-    await saveLocalMetadata(clientCode, taxYear, existingMetadata);
+    console.error('Airtable save failed:', error);
+    // Still return the Google Drive ID if upload succeeded
   }
 
-  return { id: recordId, fileName };
+  return { id: recordId, fileName, googleDriveFileId };
+}
+
+/**
+ * Get document metadata by record ID
+ */
+export async function getDocumentById(recordId: string): Promise<DocumentMetadata | null> {
+  try {
+    const record = await base(DOCUMENTS_TABLE).find(recordId);
+
+    return {
+      id: record.id,
+      fileName: record.fields['File Name'] as string,
+      originalName: record.fields['Original Name'] as string,
+      uploadDate: record.fields['Upload Date'] as string,
+      fileSize: record.fields['File Size'] as number,
+      fileType: record.fields['File Type'] as string,
+      clientCode: record.fields['Client Code'] as string,
+      taxYear: record.fields['Tax Year'] as string,
+      uploadedBy: record.fields['Uploaded By'] as string,
+      googleDriveFileId: record.fields['Google Drive File ID'] as string,
+      webViewLink: record.fields['Web View Link'] as string,
+      webContentLink: record.fields['Web Content Link'] as string,
+    };
+  } catch (error) {
+    console.error('Error fetching document:', error);
+    return null;
+  }
 }
 
 /**
  * Delete document
  */
 export async function deleteDocument(recordId: string): Promise<boolean> {
-  let clientCode = '';
-  let fileName = '';
-  let taxYear = '';
-  let found = false;
+  let googleDriveFileId: string | undefined;
 
   try {
-    // Try Airtable first
+    // Get document metadata first
     const record = await base(DOCUMENTS_TABLE).find(recordId);
+    googleDriveFileId = record.fields['Google Drive File ID'] as string;
 
-    clientCode = record.fields['Client Code'] as string;
-    fileName = record.fields['File Name'] as string;
-    taxYear = record.fields['Tax Year'] as string;
-
-    await base(DOCUMENTS_TABLE).destroy([recordId]);
-    found = true;
-  } catch (error) {
-    console.error('Airtable deletion failed, trying local metadata:', error);
-
-    // Search in local metadata
-    const documentsDir = path.join(process.cwd(), 'documents');
-
-    if (existsSync(documentsDir)) {
-      const taxYearDirs = await readdir(documentsDir);
-
-      for (const taxYearDir of taxYearDirs) {
-        const taxYearPath = path.join(documentsDir, taxYearDir);
-
-        try {
-          const stat = await lstat(taxYearPath);
-          if (!stat.isDirectory()) continue;
-
-          const clientDirs = await readdir(taxYearPath);
-
-          for (const clientDir of clientDirs) {
-            const metadataPath = path.join(taxYearPath, clientDir, 'metadata.json');
-
-            if (existsSync(metadataPath)) {
-              const metadataContent = await readFile(metadataPath, 'utf8');
-              const metadata = JSON.parse(metadataContent);
-              const docIndex = metadata.findIndex((doc: DocumentMetadata) => doc.id === recordId);
-
-              if (docIndex !== -1) {
-                const doc = metadata[docIndex];
-                clientCode = doc.clientCode;
-                fileName = doc.fileName;
-                taxYear = doc.taxYear;
-
-                // Remove from metadata
-                metadata.splice(docIndex, 1);
-                await writeFile(metadataPath, JSON.stringify(metadata, null, 2));
-                found = true;
-                break;
-              }
-            }
-          }
-
-          if (found) break;
-        } catch (error) {
-          console.error(`Error processing ${taxYearDir}:`, error);
-        }
+    // Delete from Google Drive if file ID exists
+    if (googleDriveFileId) {
+      try {
+        await deleteFileFromGoogleDrive(googleDriveFileId);
+        console.log('Successfully deleted from Google Drive:', googleDriveFileId);
+      } catch (error) {
+        console.error('Google Drive deletion failed:', error);
+        // Continue with Airtable deletion even if Google Drive fails
       }
     }
-  }
 
-  if (!found) {
+    // Delete from Airtable
+    await base(DOCUMENTS_TABLE).destroy([recordId]);
+    return true;
+  } catch (error) {
+    console.error('Error deleting document:', error);
     throw new Error('Document not found');
   }
-
-  // Delete the actual file
-  const filePath = path.join(process.cwd(), 'documents', taxYear, clientCode, fileName);
-
-  if (existsSync(filePath)) {
-    await unlink(filePath);
-  }
-
-  return true;
 }

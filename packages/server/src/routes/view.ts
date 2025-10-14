@@ -1,7 +1,14 @@
-// app/api/view/route.ts
-import { NextResponse } from 'next/server';
-import { testConnection } from '@/lib/airtable';
+/**
+ * View API Routes
+ *
+ * Handles fetching Airtable views with various query parameters
+ */
+
+import { Hono } from 'hono';
+import { testConnection } from '../airtable';
 import Airtable from 'airtable';
+
+const app = new Hono();
 
 // Initialize Airtable
 const airtable = new Airtable({
@@ -10,50 +17,56 @@ const airtable = new Airtable({
 
 const base = airtable.base(process.env.AIRTABLE_BASE_ID || '');
 
-export async function GET(request: Request) {
+/**
+ * GET /api/view
+ * Fetch Airtable view data with optional filtering, sorting, and pagination
+ */
+app.get('/', async (c) => {
   try {
     // Test connection first
     const connectionTest = await testConnection();
     if (!connectionTest.success) {
-      return NextResponse.json(
-        { 
-          success: false, 
+      return c.json(
+        {
+          success: false,
           error: `Connection failed: ${connectionTest.message}`,
-          suggestion: 'Please check your AIRTABLE_PERSONAL_ACCESS_TOKEN and AIRTABLE_BASE_ID in .env.local'
+          suggestion: 'Please check your AIRTABLE_PERSONAL_ACCESS_TOKEN and AIRTABLE_BASE_ID in .env',
         },
-        { status: 401 }
+        401
       );
     }
 
     // Get query parameters
-    const { searchParams } = new URL(request.url);
-    const tableName = searchParams.get('table') || 'Subscriptions Corporate';
-    const viewName = searchParams.get('view') || 'Grid view';
-    const maxRecords = searchParams.get('maxRecords') ? parseInt(searchParams.get('maxRecords')!) : undefined;
-    const sortField = searchParams.get('sortField');
-    const sortDirection = searchParams.get('sortDirection') as 'asc' | 'desc' || 'asc';
-    const filterByFormula = searchParams.get('filterByFormula');
+    const tableName = c.req.query('table') || 'Subscriptions Corporate';
+    const viewName = c.req.query('view') || 'Grid view';
+    const maxRecordsParam = c.req.query('maxRecords');
+    const maxRecords = maxRecordsParam ? parseInt(maxRecordsParam) : undefined;
+    const sortField = c.req.query('sortField');
+    const sortDirection = (c.req.query('sortDirection') as 'asc' | 'desc') || 'asc';
+    const filterByFormula = c.req.query('filterByFormula');
 
     console.log(`Fetching view "${viewName}" from table "${tableName}"`);
 
     const records: any[] = [];
-    
+
     // Build select options
     const selectOptions: any = {
-      view: viewName
+      view: viewName,
     };
-    
+
     if (maxRecords && maxRecords > 0) {
       selectOptions.maxRecords = maxRecords;
     }
-    
+
     if (sortField) {
-      selectOptions.sort = [{
-        field: sortField,
-        direction: sortDirection
-      }];
+      selectOptions.sort = [
+        {
+          field: sortField,
+          direction: sortDirection,
+        },
+      ];
     }
-    
+
     if (filterByFormula) {
       selectOptions.filterByFormula = filterByFormula;
     }
@@ -66,14 +79,14 @@ export async function GET(request: Request) {
           records.push({
             id: record.id,
             fields: record.fields,
-            createdTime: record._rawJson.createdTime
+            createdTime: record._rawJson.createdTime,
           });
         });
-        
+
         if (records.length % 100 === 0) {
           console.log(`Fetched ${records.length} records so far...`);
         }
-        
+
         fetchNextPage();
       });
 
@@ -82,9 +95,9 @@ export async function GET(request: Request) {
     // Analyze the data structure
     const fieldNames = records.length > 0 ? Object.keys(records[0].fields) : [];
     const fieldTypes: Record<string, string> = {};
-    
+
     if (records.length > 0) {
-      fieldNames.forEach(field => {
+      fieldNames.forEach((field) => {
         const sampleValue = records[0].fields[field];
         if (Array.isArray(sampleValue)) {
           fieldTypes[field] = 'array';
@@ -114,12 +127,13 @@ export async function GET(request: Request) {
       tableName,
       viewName,
       lastUpdated: new Date().toISOString(),
-      recentActivity: recentRecords.length > 0 
-        ? new Date(recentRecords[0].createdTime).toLocaleString()
-        : 'No recent activity'
+      recentActivity:
+        recentRecords.length > 0
+          ? new Date(recentRecords[0].createdTime).toLocaleString()
+          : 'No recent activity',
     };
 
-    return NextResponse.json({
+    return c.json({
       success: true,
       data: {
         records,
@@ -133,20 +147,19 @@ export async function GET(request: Request) {
           maxRecords,
           sortField,
           sortDirection,
-          filterByFormula
-        }
-      }
+          filterByFormula,
+        },
+      },
     });
-
   } catch (error) {
     console.error('Error in view API route:', error);
-    
+
     let errorMessage = 'Failed to fetch view data';
     let suggestion = 'Please check your configuration and try again';
-    
+
     if (error instanceof Error) {
       errorMessage = error.message;
-      
+
       if (error.message.includes('Table') && error.message.includes('not found')) {
         suggestion = 'Please check that the table name exists in your Airtable base';
       } else if (error.message.includes('View') && error.message.includes('not found')) {
@@ -157,14 +170,16 @@ export async function GET(request: Request) {
         suggestion = 'Check your Base ID in the Airtable URL or API documentation';
       }
     }
-    
-    return NextResponse.json(
-      { 
-        success: false, 
+
+    return c.json(
+      {
+        success: false,
         error: errorMessage,
-        suggestion
+        suggestion,
       },
-      { status: 500 }
+      500
     );
   }
-}
+});
+
+export default app;

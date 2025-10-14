@@ -47,6 +47,31 @@ interface RelationshipFormData {
   startDate: string;
 }
 
+interface ServiceContact {
+  relationshipId: string;
+  contactId: string;
+  name: string;
+  personalEmail?: string;
+  personalPhone?: string;
+  workEmail?: string;
+  workPhone?: string;
+  role?: string;
+  department?: string;
+  isPrimary: boolean;
+  status: string;
+}
+
+interface ServiceSubscriber {
+  companyId: string;
+  companyName: string;
+  companyEmail?: string;
+  companyPhone?: string;
+  ein?: string;
+  subscriptions: string[];
+  contacts: ServiceContact[];
+  primaryContact: ServiceContact | null;
+}
+
 // ===== COMPONENT =====
 export default function ManageContacts() {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
@@ -69,6 +94,13 @@ export default function ManageContacts() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
+  // Service Subscribers View State
+  const [viewMode, setViewMode] = useState<'relationships' | 'subscribers'>('relationships');
+  const [serviceName, setServiceName] = useState('');
+  const [subscribers, setSubscribers] = useState<ServiceSubscriber[]>([]);
+  const [subscribersLoading, setSubscribersLoading] = useState(false);
+  const [availableServices, setAvailableServices] = useState<string[]>([]);
+
   const [formData, setFormData] = useState<RelationshipFormData>({
     contactId: '',
     companyId: '',
@@ -84,6 +116,7 @@ export default function ManageContacts() {
   useEffect(() => {
     fetchContacts();
     fetchCompanies();
+    fetchServices();
   }, []);
 
   useEffect(() => {
@@ -116,6 +149,20 @@ export default function ManageContacts() {
       }
     } catch (err) {
       console.error('Error fetching companies:', err);
+    }
+  };
+
+  const fetchServices = async () => {
+    try {
+      const response = await fetch(`${apiUrl}/api/services`);
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success && result.data.serviceNames) {
+          setAvailableServices(result.data.serviceNames);
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching services:', err);
     }
   };
 
@@ -260,6 +307,33 @@ export default function ManageContacts() {
     }
   };
 
+  const fetchServiceSubscribers = async (service: string) => {
+    if (!service.trim()) {
+      setError('Please enter a service name');
+      return;
+    }
+
+    try {
+      setSubscribersLoading(true);
+      setError(null);
+      const response = await fetch(`${apiUrl}/api/company-contacts/service/${encodeURIComponent(service)}/subscribers`);
+
+      if (response.ok) {
+        const result = await response.json();
+        setSubscribers(result.subscribers || []);
+        setSuccess(`Found ${result.count} subscribers with ${result.totalContacts} contacts`);
+        setTimeout(() => setSuccess(null), 3000);
+      } else {
+        setError('Failed to fetch service subscribers');
+      }
+    } catch (err) {
+      console.error('Error fetching service subscribers:', err);
+      setError(err instanceof Error ? err.message : 'Failed to fetch service subscribers');
+    } finally {
+      setSubscribersLoading(false);
+    }
+  };
+
   // ===== HANDLERS =====
   const handleCreateNew = () => {
     if (!selectedContact && !selectedCompany) {
@@ -326,14 +400,14 @@ export default function ManageContacts() {
   };
 
   // ===== FILTERED DATA =====
-  const filteredContacts = contacts.filter(c =>
+  const filteredContacts = Array.isArray(contacts) ? contacts.filter(c =>
     c.name.toLowerCase().includes(contactSearch.toLowerCase()) ||
     c.email?.toLowerCase().includes(contactSearch.toLowerCase())
-  );
+  ) : [];
 
-  const filteredCompanies = companies.filter(c =>
+  const filteredCompanies = Array.isArray(companies) ? companies.filter(c =>
     c.name.toLowerCase().includes(companySearch.toLowerCase())
-  );
+  ) : [];
 
   // ===== RENDER =====
   return (
@@ -370,7 +444,32 @@ export default function ManageContacts() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* View Mode Tabs */}
+        <div className="mb-6 flex space-x-2 border-b border-gray-700">
+          <button
+            onClick={() => setViewMode('relationships')}
+            className={`px-6 py-3 font-medium transition-colors ${
+              viewMode === 'relationships'
+                ? 'text-blue-400 border-b-2 border-blue-400'
+                : 'text-gray-400 hover:text-gray-300'
+            }`}
+          >
+            Manage Relationships
+          </button>
+          <button
+            onClick={() => setViewMode('subscribers')}
+            className={`px-6 py-3 font-medium transition-colors ${
+              viewMode === 'subscribers'
+                ? 'text-blue-400 border-b-2 border-blue-400'
+                : 'text-gray-400 hover:text-gray-300'
+            }`}
+          >
+            Service Subscribers
+          </button>
+        </div>
+
+        {viewMode === 'relationships' ? (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left Column - Search */}
           <div className="lg:col-span-1 space-y-6">
             {/* Contact Search */}
@@ -388,7 +487,7 @@ export default function ManageContacts() {
                 {filteredContacts.length === 0 ? (
                   <p className="text-gray-400 text-sm">No contacts found</p>
                 ) : (
-                  filteredContacts.map((contact) => (
+                  Array.isArray(filteredContacts) && filteredContacts.map((contact) => (
                     <div
                       key={contact.id}
                       onClick={() => setSelectedContact(contact)}
@@ -423,7 +522,7 @@ export default function ManageContacts() {
                 {filteredCompanies.length === 0 ? (
                   <p className="text-gray-400 text-sm">No companies found</p>
                 ) : (
-                  filteredCompanies.map((company) => (
+                  Array.isArray(filteredCompanies) && filteredCompanies.map((company) => (
                     <div
                       key={company.id}
                       onClick={() => setSelectedCompany(company)}
@@ -637,7 +736,7 @@ export default function ManageContacts() {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {relationships.map((rel) => (
+                  {Array.isArray(relationships) && relationships.map((rel) => (
                     <div key={rel.id} className="bg-gray-700 rounded-lg p-4">
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
@@ -728,7 +827,196 @@ export default function ManageContacts() {
               )}
             </div>
           </div>
-        </div>
+          </div>
+        ) : (
+          /* Service Subscribers View */
+          <div className="space-y-6">
+            {/* Service Search */}
+            <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
+              <h2 className="text-xl font-semibold text-white mb-4">Search Service Subscribers</h2>
+              <p className="text-gray-400 text-sm mb-4">
+                Enter a service name or select from the available services below.
+              </p>
+              <div className="flex space-x-4 mb-4">
+                <input
+                  type="text"
+                  placeholder="e.g., Bookkeeping, Tax Prep, Payroll"
+                  value={serviceName}
+                  onChange={(e) => setServiceName(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && fetchServiceSubscribers(serviceName)}
+                  className="flex-1 px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <button
+                  onClick={() => fetchServiceSubscribers(serviceName)}
+                  disabled={subscribersLoading || !serviceName.trim()}
+                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {subscribersLoading ? 'Searching...' : 'Search'}
+                </button>
+              </div>
+
+              {/* Available Services */}
+              {availableServices.length > 0 && (
+                <div>
+                  <p className="text-sm text-gray-400 mb-2">Available Services:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {availableServices.map((service, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => {
+                          setServiceName(service);
+                          fetchServiceSubscribers(service);
+                        }}
+                        disabled={subscribersLoading}
+                        className="px-3 py-1.5 bg-gray-700 text-gray-200 text-sm rounded-lg hover:bg-blue-600 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {service}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Subscribers Results */}
+            {subscribers.length > 0 && (
+              <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
+                <h2 className="text-xl font-semibold text-white mb-4">
+                  Subscribers ({subscribers.length})
+                </h2>
+
+                <div className="space-y-6">
+                  {subscribers.map((subscriber) => (
+                    <div key={subscriber.companyId} className="bg-gray-700 rounded-lg p-5">
+                      {/* Company Header */}
+                      <div className="mb-4 pb-4 border-b border-gray-600">
+                        <h3 className="text-lg font-semibold text-white mb-2">{subscriber.companyName}</h3>
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-2 text-sm">
+                          {subscriber.companyEmail && (
+                            <div>
+                              <span className="text-gray-400">Email:</span>
+                              <span className="ml-2 text-white">{subscriber.companyEmail}</span>
+                            </div>
+                          )}
+                          {subscriber.companyPhone && (
+                            <div>
+                              <span className="text-gray-400">Phone:</span>
+                              <span className="ml-2 text-white">{subscriber.companyPhone}</span>
+                            </div>
+                          )}
+                          {subscriber.ein && (
+                            <div>
+                              <span className="text-gray-400">EIN:</span>
+                              <span className="ml-2 text-white">{subscriber.ein}</span>
+                            </div>
+                          )}
+                        </div>
+                        {subscriber.subscriptions.length > 0 && (
+                          <div className="mt-2">
+                            <span className="text-gray-400 text-sm">Services:</span>
+                            <div className="flex flex-wrap gap-2 mt-1">
+                              {subscriber.subscriptions.map((service, idx) => (
+                                <span key={idx} className="px-2 py-1 bg-blue-900 text-blue-300 text-xs rounded">
+                                  {service}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Contacts */}
+                      <div>
+                        <h4 className="text-md font-medium text-white mb-3">
+                          Contacts ({subscriber.contacts.length})
+                        </h4>
+
+                        {subscriber.contacts.length === 0 ? (
+                          <p className="text-gray-400 text-sm italic">No contacts found for this company</p>
+                        ) : (
+                          <div className="space-y-3">
+                            {subscriber.contacts.map((contact) => (
+                              <div
+                                key={contact.relationshipId}
+                                className={`p-3 rounded-lg ${
+                                  contact.isPrimary
+                                    ? 'bg-blue-900/30 border-2 border-blue-500'
+                                    : 'bg-gray-600'
+                                }`}
+                              >
+                                <div className="flex items-start justify-between mb-2">
+                                  <div className="flex items-center space-x-2">
+                                    <p className="font-medium text-white">{contact.name}</p>
+                                    {contact.isPrimary && (
+                                      <span className="px-2 py-1 bg-blue-600 text-white text-xs rounded-full">
+                                        Primary
+                                      </span>
+                                    )}
+                                    <span className={`px-2 py-1 text-xs rounded-full ${
+                                      contact.status === 'Active'
+                                        ? 'bg-green-900 text-green-300'
+                                        : 'bg-gray-500 text-gray-300'
+                                    }`}>
+                                      {contact.status}
+                                    </span>
+                                  </div>
+                                  {contact.role && (
+                                    <span className="text-sm text-gray-300">{contact.role}</span>
+                                  )}
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1 text-sm">
+                                  {contact.personalEmail && (
+                                    <div>
+                                      <span className="text-gray-400">Personal Email:</span>
+                                      <span className="ml-2 text-white">{contact.personalEmail}</span>
+                                    </div>
+                                  )}
+                                  {contact.workEmail && (
+                                    <div>
+                                      <span className="text-gray-400">Work Email:</span>
+                                      <span className="ml-2 text-white">{contact.workEmail}</span>
+                                    </div>
+                                  )}
+                                  {contact.personalPhone && (
+                                    <div>
+                                      <span className="text-gray-400">Personal Phone:</span>
+                                      <span className="ml-2 text-white">{contact.personalPhone}</span>
+                                    </div>
+                                  )}
+                                  {contact.workPhone && (
+                                    <div>
+                                      <span className="text-gray-400">Work Phone:</span>
+                                      <span className="ml-2 text-white">{contact.workPhone}</span>
+                                    </div>
+                                  )}
+                                  {contact.department && (
+                                    <div>
+                                      <span className="text-gray-400">Department:</span>
+                                      <span className="ml-2 text-white">{contact.department}</span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Empty State */}
+            {!subscribersLoading && subscribers.length === 0 && serviceName && (
+              <div className="bg-gray-800 rounded-lg border border-gray-700 p-12 text-center">
+                <p className="text-gray-400 text-lg">No subscribers found for "{serviceName}"</p>
+                <p className="text-gray-500 text-sm mt-2">Try a different service name</p>
+              </div>
+            )}
+          </div>
+        )}
       </main>
     </div>
   );

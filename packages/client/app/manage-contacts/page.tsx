@@ -1,12 +1,20 @@
 // app/manage-contacts/page.tsx
 'use client';
 
-import { Suspense } from 'react';
-import { useRequireAuth } from '@/hooks/useAuth';
+import { useSession } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
+import { useEffect } from 'react';
 import ManageContacts from '@/components/ManageContacts';
 
 export default function ManageContactsPage() {
-  const { session, status } = useRequireAuth();
+  const { data: session, status } = useSession();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (status === 'unauthenticated') {
+      router.push('/auth/signin');
+    }
+  }, [status, router]);
 
   if (status === 'loading') {
     return (
@@ -20,12 +28,8 @@ export default function ManageContactsPage() {
   }
 
   if (!session) {
-    return null; // Will redirect to signin
+    return null;
   }
 
-  return (
-    <Suspense fallback={<div>Loading...</div>}>
-      <ManageContacts />
-    </Suspense>
-  );
+  return <ManageContacts />;
 }

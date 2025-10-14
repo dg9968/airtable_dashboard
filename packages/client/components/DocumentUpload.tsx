@@ -85,8 +85,9 @@ export default function DocumentUpload({ onUploadComplete, useGoogleDrive = fals
         formData.append('isCorporate', 'true');
       }
 
-      const apiEndpoint = useGoogleDrive ? '/api/documents-gdrive' : '/api/documents';
-      const response = await fetch(apiEndpoint, {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+      // TODO: Implement separate Google Drive upload endpoint when needed
+      const response = await fetch(`${apiUrl}/api/documents`, {
         method: 'POST',
         body: formData,
       });

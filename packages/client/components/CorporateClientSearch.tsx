@@ -82,23 +82,24 @@ export default function CorporateClientSearch({
       setLoading(true);
       setError(null);
 
-      const response = await fetch('/api/view?table=Corporations');
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+      const response = await fetch(`${apiUrl}/api/companies`);
       if (!response.ok) throw new Error('Failed to load corporate clients');
 
       const data = await response.json();
 
-      if (data.success && data.data?.records) {
-        const clientsList: CorporateClient[] = data.data.records
-          .map((record: any) => ({
-            id: record.id,
-            name: (record.fields['Company'] || '').toString().trim(),
-            ein: (record.fields['EIN'] || '').toString().trim(),
-            entityNumber: (record.fields['Entity Number'] || record.fields['Business Partner Number'] || '').toString().trim(),
-            address: (record.fields['ADDRESS'] || '').toString().trim(),
-            city: (record.fields['CITY'] || '').toString().trim(),
-            state: (record.fields['STATE'] || '').toString().trim(),
-            zipCode: (record.fields['ZIP CODE'] || '').toString().trim(),
-            phone: (record.fields['Phone'] || '').toString().trim()
+      if (data.success && data.data) {
+        const clientsList: CorporateClient[] = data.data
+          .map((company: any) => ({
+            id: company.id,
+            name: (company.name || '').toString().trim(),
+            ein: (company.taxId || '').toString().trim(),
+            entityNumber: (company.entityNumber || '').toString().trim(),
+            address: (company.address || '').toString().trim(),
+            city: (company.city || '').toString().trim(),
+            state: (company.state || '').toString().trim(),
+            zipCode: (company.zipCode || '').toString().trim(),
+            phone: (company.phone || '').toString().trim()
           }))
           .filter((client: CorporateClient) => client.name) // Only include clients with names
           .sort((a: CorporateClient, b: CorporateClient) => a.name.localeCompare(b.name));

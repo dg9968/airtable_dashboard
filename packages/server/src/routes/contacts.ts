@@ -25,18 +25,23 @@ app.get('/', async (c) => {
 
     await base(CONTACTS_TABLE)
       .select({
-        view: 'Grid view', // Adjust based on your Airtable view
-        maxRecords: 100
+        view: 'Grid view' // Adjust based on your Airtable view
+        // Removed maxRecords to fetch all contacts
       })
       .eachPage((records, fetchNextPage) => {
         records.forEach((record) => {
+          // Log first record to see actual field names
+          if (contacts.length === 0) {
+            console.log('Sample contact record fields:', Object.keys(record.fields));
+          }
+
           contacts.push({
             id: record.id,
-            name: record.fields['Name'] || record.fields['Full Name'] || 'Unknown',
+            name: record.fields['Full Name'] || record.fields['Name'] || 'Unknown',
             email: record.fields['Email'] || record.fields['Personal Email'],
-            phone: record.fields['Phone'] || record.fields['Personal Phone'],
+            phone: record.fields['📞Phone number'] || record.fields['Phone'] || record.fields['Personal Phone'],
             type: record.fields['Type'] || record.fields['Contact Type'],
-            status: record.fields['Status'] || 'Active'
+            status: record.fields['Status'] || record.fields['❓Status'] || 'Active'
           });
         });
         fetchNextPage();
@@ -85,11 +90,11 @@ app.get('/:id', async (c) => {
       success: true,
       data: {
         id: record.id,
-        name: record.fields['Name'] || record.fields['Full Name'],
+        name: record.fields['Full Name'] || record.fields['Name'],
         email: record.fields['Email'] || record.fields['Personal Email'],
-        phone: record.fields['Phone'] || record.fields['Personal Phone'],
+        phone: record.fields['📞Phone number'] || record.fields['Phone'] || record.fields['Personal Phone'],
         type: record.fields['Type'] || record.fields['Contact Type'],
-        status: record.fields['Status'],
+        status: record.fields['Status'] || record.fields['❓Status'],
         fields: record.fields
       }
     });

@@ -17,13 +17,22 @@ import serviceByClientRoutes from './routes/service-by-client';
 import companyContactsRoutes from './routes/company-contacts';
 import contactsRoutes from './routes/contacts';
 import companiesRoutes from './routes/companies';
+import viewRoutes from './routes/view';
+import syncGdriveRoutes from './routes/sync-gdrive';
 
 const app = new Hono();
 
 // Middleware
 app.use('*', logger());
 app.use('*', cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:3000',
+  origin: (origin) => {
+    // Allow requests from any localhost port in development
+    if (origin && origin.match(/^http:\/\/localhost:\d+$/)) {
+      return origin;
+    }
+    // Allow configured CLIENT_URL in production
+    return process.env.CLIENT_URL || 'http://localhost:3000';
+  },
   credentials: true,
 }));
 
@@ -47,6 +56,8 @@ app.route('/api/service-by-client', serviceByClientRoutes);
 app.route('/api/company-contacts', companyContactsRoutes);
 app.route('/api/contacts', contactsRoutes);
 app.route('/api/companies', companiesRoutes);
+app.route('/api/view', viewRoutes);
+app.route('/api/sync-gdrive', syncGdriveRoutes);
 
 // 404 handler
 app.notFound((c) => {
@@ -73,6 +84,8 @@ console.log(`   - POST /api/airtable`);
 console.log(`   - GET  /api/documents`);
 console.log(`   - POST /api/documents`);
 console.log(`   - DELETE /api/documents`);
+console.log(`   - GET  /api/documents/view`);
+console.log(`   - GET  /api/documents/download`);
 console.log(`   - GET  /api/documents/generate-code`);
 console.log(`   - POST /api/bank-statement-processing`);
 console.log(`   - GET  /api/bank-statement-processing/status`);
@@ -95,10 +108,14 @@ console.log(`   - DELETE /api/company-contacts/:id`);
 console.log(`   - GET  /api/company-contacts/contact/:contactId/companies`);
 console.log(`   - GET  /api/company-contacts/company/:companyId/contacts`);
 console.log(`   - POST /api/company-contacts/contact/:contactId/set-primary`);
+console.log(`   - GET  /api/company-contacts/service/:serviceName/subscribers`);
 console.log(`   - GET  /api/contacts`);
 console.log(`   - GET  /api/contacts/:id`);
 console.log(`   - GET  /api/companies`);
 console.log(`   - GET  /api/companies/:id`);
+console.log(`   - GET  /api/view`);
+console.log(`   - GET  /api/sync-gdrive/preview`);
+console.log(`   - POST /api/sync-gdrive`);
 
 export default {
   port,

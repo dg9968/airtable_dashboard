@@ -5,8 +5,8 @@ import { Readable } from 'stream';
 
 // Initialize Google Auth
 const auth = new GoogleAuth({
-  credentials: process.env.GOOGLE_SERVICE_ACCOUNT_KEY ? 
-    JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY) : undefined,
+  credentials: process.env.GOOGLE_DRIVE_CREDENTIALS_JSON ?
+    JSON.parse(process.env.GOOGLE_DRIVE_CREDENTIALS_JSON) : undefined,
   scopes: ['https://www.googleapis.com/auth/drive'],
 });
 
@@ -15,11 +15,11 @@ const drive = google.drive({ version: 'v3', auth });
 
 // Validate environment variables
 function validateGoogleDriveEnvironment() {
-  if (!process.env.GOOGLE_SERVICE_ACCOUNT_KEY) {
-    throw new Error('GOOGLE_SERVICE_ACCOUNT_KEY is required. Please set it in your .env.local file.');
+  if (!process.env.GOOGLE_DRIVE_CREDENTIALS_JSON) {
+    throw new Error('GOOGLE_DRIVE_CREDENTIALS_JSON is required. Please set it in your .env file.');
   }
-  if (!process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID) {
-    throw new Error('GOOGLE_DRIVE_ROOT_FOLDER_ID is required. Please set it in your .env.local file.');
+  if (!process.env.GOOGLE_DRIVE_FOLDER_ID) {
+    throw new Error('GOOGLE_DRIVE_FOLDER_ID is required. Please set it in your .env file.');
   }
 }
 
@@ -27,8 +27,8 @@ function validateGoogleDriveEnvironment() {
 export async function getOrCreateTaxYearFolder(taxYear: string): Promise<string> {
   try {
     validateGoogleDriveEnvironment();
-    
-    const rootFolderId = process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID!;
+
+    const rootFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID!;
     const folderName = `Tax Year ${taxYear}`;
 
     // Search for existing tax year folder

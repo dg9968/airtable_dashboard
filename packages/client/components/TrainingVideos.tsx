@@ -286,8 +286,9 @@ export default function TrainingVideos() {
     try {
       setLoading(true);
       setError(null);
-      
-      const response = await fetch('/api/youtube-videos');
+
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+      const response = await fetch(`${apiUrl}/api/youtube-videos`);
       const data = await response.json();
       
       if (data.success) {

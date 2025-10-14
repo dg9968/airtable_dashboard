@@ -58,8 +58,11 @@ export default function DocumentBrowser({ useGoogleDrive = false, documentCatego
     setError('');
 
     try {
-      const apiEndpoint = useGoogleDrive ? '/api/documents-gdrive' : '/api/documents';
-      
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+      // TODO: Implement separate Google Drive endpoint when needed
+      // For now, both use the same documents API
+      const apiEndpoint = `${apiUrl}/api/documents`;
+
       // For business credentials, use 'N/A' as tax year
       const effectiveTaxYear = (isCorporate && documentCategory === 'business-credentials') ? 'N/A' : taxYear;
       let queryParams = `clientCode=${clientCode.trim()}&taxYear=${effectiveTaxYear}`;
@@ -87,8 +90,9 @@ export default function DocumentBrowser({ useGoogleDrive = false, documentCatego
 
   const downloadDocument = async (document: Document) => {
     try {
-      const apiEndpoint = useGoogleDrive ? '/api/documents-gdrive/download' : '/api/documents/download';
-      const response = await fetch(`${apiEndpoint}?recordId=${document.id}`);
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+      // TODO: Implement separate Google Drive download endpoint when needed
+      const response = await fetch(`${apiUrl}/api/documents/download?recordId=${document.id}`);
       
       if (!response.ok) {
         const result = await response.json();
@@ -114,8 +118,9 @@ export default function DocumentBrowser({ useGoogleDrive = false, documentCatego
   const viewDocument = (document: Document) => {
     try {
       // Open document in new tab for viewing
-      const apiEndpoint = useGoogleDrive ? '/api/documents-gdrive/view' : '/api/documents/view';
-      const viewUrl = `${apiEndpoint}?recordId=${document.id}`;
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+      // TODO: Implement separate Google Drive view endpoint when needed
+      const viewUrl = `${apiUrl}/api/documents/view?recordId=${document.id}`;
       window.open(viewUrl, '_blank');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'View failed');
@@ -133,8 +138,9 @@ export default function DocumentBrowser({ useGoogleDrive = false, documentCatego
     setError('');
 
     try {
-      const apiEndpoint = useGoogleDrive ? '/api/documents-gdrive' : '/api/documents';
-      const response = await fetch(`${apiEndpoint}?recordId=${deleteConfirm.document.id}`, {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+      // TODO: Implement separate Google Drive delete endpoint when needed
+      const response = await fetch(`${apiUrl}/api/documents?recordId=${deleteConfirm.document.id}`, {
         method: 'DELETE'
       });
 
@@ -313,8 +319,7 @@ export default function DocumentBrowser({ useGoogleDrive = false, documentCatego
         ) : documents.length === 0 && !isLoading && clientCode && taxYear ? (
           <div className="text-center py-8 text-gray-500">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-12 h-12 mx-auto mb-4">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-4.5B1.5 11.625 3 10.125 3 8.25v-1.875a3.375 3.375 0 013.375-3.375H16.5a1.125 1.125 0 011.125 1.125v1.875" />
-              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25l-2.625 2.625a3.375 3.375 0 01-2.375 1.125H8.25a1.125 1.125 0 01-1.125-1.125V10.5" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-4.5A1.5 1.5 0 0 0 10.125 10.125v1.5c0 .621.504 1.125 1.125 1.125h2.25a2.25 2.25 0 0 1 2.25 2.25v2.25a2.25 2.25 0 0 1-2.25 2.25H9a2.25 2.25 0 0 1-2.25-2.25v-4.5" />
             </svg>
             <p>No documents found for client code: {clientCode}</p>
             <p className="text-sm">Tax filing year: {taxYearOptions.find(opt => opt.value === taxYear)?.label}</p>
