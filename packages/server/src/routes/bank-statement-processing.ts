@@ -57,9 +57,9 @@ app.post('/', async (c) => {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    const bucketName = process.env.AWS_S3_BUCKET_NAME;
+    const bucketName = process.env.AWS_S3_BUCKET || process.env.AWS_S3_BUCKET_NAME;
     if (!bucketName) {
-      return c.json({ error: 'AWS S3 bucket not configured' }, 500);
+      return c.json({ error: 'AWS S3 bucket not configured. Set AWS_S3_BUCKET in your .env file.' }, 500);
     }
 
     try {
@@ -128,9 +128,9 @@ app.get('/status', async (c) => {
       .replace('incoming/', 'parsed/')
       .replace(/\.(pdf|csv|xlsx?)$/i, '.qbo');
 
-    const bucketName = process.env.AWS_S3_BUCKET_NAME;
+    const bucketName = process.env.AWS_S3_BUCKET || process.env.AWS_S3_BUCKET_NAME;
     if (!bucketName) {
-      return c.json({ error: 'AWS S3 bucket not configured' }, 500);
+      return c.json({ error: 'AWS S3 bucket not configured. Set AWS_S3_BUCKET in your .env file.' }, 500);
     }
 
     const uploadTime = extractTimestampFromFileKey(fileKey);
@@ -192,9 +192,9 @@ app.get('/download', async (c) => {
       .replace('incoming/', 'parsed/')
       .replace(/\.(pdf|csv|xlsx?)$/i, '.qbo');
 
-    const bucketName = process.env.AWS_S3_BUCKET_NAME;
+    const bucketName = process.env.AWS_S3_BUCKET || process.env.AWS_S3_BUCKET_NAME;
     if (!bucketName) {
-      return c.json({ error: 'AWS S3 bucket not configured' }, 500);
+      return c.json({ error: 'AWS S3 bucket not configured. Set AWS_S3_BUCKET in your .env file.' }, 500);
     }
 
     try {

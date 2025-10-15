@@ -52,7 +52,8 @@ export default function BankStatementProcessing() {
       formData.append('file', file)
       formData.append('processingType', 'bank-statement')
 
-      const response = await fetch('/api/bank-statement-processing', {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const response = await fetch(`${apiUrl}/api/bank-statement-processing`, {
         method: 'POST',
         body: formData,
       })
@@ -90,7 +91,8 @@ export default function BankStatementProcessing() {
 
     const poll = async () => {
       try {
-        const response = await fetch(`/api/bank-statement-processing/status?fileKey=${encodeURIComponent(fileKey)}`)
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+        const response = await fetch(`${apiUrl}/api/bank-statement-processing/status?fileKey=${encodeURIComponent(fileKey)}`)
         const statusResult = await response.json()
 
         if (response.ok) {
