@@ -117,7 +117,11 @@ export default function BankStatementProcessing() {
             setProcessingStatus('Processing complete! QBO file ready for download.')
             setProcessingStage(5)
             setEstimatedTimeRemaining(0)
-            setQboDownloadUrl(statusResult.qboUrl)
+            // Prepend API URL if the qboUrl is a relative path
+            const fullQboUrl = statusResult.qboUrl.startsWith('http')
+              ? statusResult.qboUrl
+              : `${apiUrl}${statusResult.qboUrl}`
+            setQboDownloadUrl(fullQboUrl)
             return
           }
 
