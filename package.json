@@ -13,7 +13,7 @@
     "build": "cd packages/client && bun run build && cd ../server && bun run build",
     "build:client": "cd packages/client && bun run build",
     "build:server": "cd packages/server && bun run build",
-    "start": "concurrently \"cd packages/server && npm run start\" \"cd packages/client && npm run start\"",
+    "start": "bash start-production.sh",
     "lint": "cd packages/client && bun run lint && cd ../server && bun run lint",
     "clean": "rm -rf node_modules packages/*/node_modules packages/*/.next packages/*/dist bun.lockb"
   },
