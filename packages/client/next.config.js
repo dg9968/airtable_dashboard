@@ -28,14 +28,26 @@ const nextConfig = {
     ],
   },
 
-  // Proxy API requests to Hono server in production
+  // Proxy API requests to Hono server (excluding NextAuth routes)
   async rewrites() {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+    // In production, don't rewrite - both servers run and client uses NEXT_PUBLIC_API_URL
+    // In development, proxy to local Hono server
+    if (process.env.NODE_ENV === 'production') {
+      return [];
+    }
 
     return [
       {
-        source: '/api/:path*',
-        destination: `${apiUrl}/api/:path*`,
+        source: '/api/personal/:path*',
+        destination: 'http://localhost:3001/api/personal/:path*',
+      },
+      {
+        source: '/api/services-personal/:path*',
+        destination: 'http://localhost:3001/api/services-personal/:path*',
+      },
+      {
+        source: '/api/subscriptions-personal/:path*',
+        destination: 'http://localhost:3001/api/subscriptions-personal/:path*',
       },
     ];
   },
