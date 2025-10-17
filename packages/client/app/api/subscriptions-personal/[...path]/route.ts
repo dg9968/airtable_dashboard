@@ -4,9 +4,10 @@ const HONO_API_URL = process.env.HONO_API_URL || 'http://localhost:3001';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { path?: string[] } }
+  { params }: { params: Promise<{ path?: string[] }> }
 ) {
-  const path = params.path?.join('/') || '';
+  const { path: pathArray } = await params;
+  const path = pathArray?.join('/') || '';
   const searchParams = request.nextUrl.searchParams.toString();
   const url = `${HONO_API_URL}/api/subscriptions-personal${path ? '/' + path : ''}${searchParams ? '?' + searchParams : ''}`;
 
@@ -31,9 +32,10 @@ export async function GET(
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { path?: string[] } }
+  { params }: { params: Promise<{ path?: string[] }> }
 ) {
-  const path = params.path?.join('/') || '';
+  const { path: pathArray } = await params;
+  const path = pathArray?.join('/') || '';
   const url = `${HONO_API_URL}/api/subscriptions-personal${path ? '/' + path : ''}`;
 
   try {
@@ -59,9 +61,10 @@ export async function POST(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { path?: string[] } }
+  { params }: { params: Promise<{ path?: string[] }> }
 ) {
-  const path = params.path?.join('/') || '';
+  const { path: pathArray } = await params;
+  const path = pathArray?.join('/') || '';
   const url = `${HONO_API_URL}/api/subscriptions-personal${path ? '/' + path : ''}`;
 
   try {
