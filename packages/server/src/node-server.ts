@@ -80,11 +80,12 @@ app.onError((err, c) => {
 
 const port = Number(process.env.PORT) || 3001;
 
-console.log(`🚀 Server starting on http://localhost:${port}`);
+console.log(`🚀 Server starting on http://0.0.0.0:${port}`);
 
 serve({
   fetch: app.fetch,
   port,
+  hostname: '0.0.0.0',
 });
 
 console.log(`✅ Server running on http://localhost:${port}`);
