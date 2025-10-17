@@ -145,7 +145,7 @@ export default function Header() {
               )}
             </div>
             <button
-              onClick={() => signOut()}
+              onClick={() => signOut({ callbackUrl: "/" })}
               className="btn btn-secondary btn-sm"
             >
               Sign Out
