@@ -5,25 +5,25 @@ import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 
 // Import routes
-import authRoutes from './routes/auth.js';
-import airtableRoutes from './routes/airtable.js';
-import documentsRoutes from './routes/documents.js';
-import bankStatementRoutes from './routes/bank-statement-processing.js';
-import customerSubscriptionsRoutes from './routes/customer-subscriptions.js';
-import processorBillingRoutes from './routes/processor-billing.js';
-import servicesRoutes from './routes/services.js';
-import servicesCachedRoutes from './routes/services-cached.js';
-import servicesPersonalRoutes from './routes/services-personal.js';
-import subscriptionsRoutes from './routes/subscriptions.js';
-import youtubeVideosRoutes from './routes/youtube-videos.js';
-import serviceByClientRoutes from './routes/service-by-client.js';
-import companyContactsRoutes from './routes/company-contacts.js';
-import contactsRoutes from './routes/contacts.js';
-import companiesRoutes from './routes/companies.js';
-import viewRoutes from './routes/view.js';
-import syncGdriveRoutes from './routes/sync-gdrive.js';
-import personalRoutes from './routes/personal.js';
-import subscriptionsPersonalRoutes from './routes/subscriptions-personal.js';
+import authRoutes from './routes/auth';
+import airtableRoutes from './routes/airtable';
+import documentsRoutes from './routes/documents';
+import bankStatementRoutes from './routes/bank-statement-processing';
+import customerSubscriptionsRoutes from './routes/customer-subscriptions';
+import processorBillingRoutes from './routes/processor-billing';
+import servicesRoutes from './routes/services';
+import servicesCachedRoutes from './routes/services-cached';
+import servicesPersonalRoutes from './routes/services-personal';
+import subscriptionsRoutes from './routes/subscriptions';
+import youtubeVideosRoutes from './routes/youtube-videos';
+import serviceByClientRoutes from './routes/service-by-client';
+import companyContactsRoutes from './routes/company-contacts';
+import contactsRoutes from './routes/contacts';
+import companiesRoutes from './routes/companies';
+import viewRoutes from './routes/view';
+import syncGdriveRoutes from './routes/sync-gdrive';
+import personalRoutes from './routes/personal';
+import subscriptionsPersonalRoutes from './routes/subscriptions-personal';
 
 const app = new Hono();
 
