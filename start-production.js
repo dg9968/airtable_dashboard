@@ -9,10 +9,12 @@ console.log('Starting production servers...');
 const serverPath = path.join(__dirname, 'packages', 'server', 'dist', 'node-server.js');
 console.log('Starting Hono server from:', serverPath);
 
+// Run Hono server on internal port 3001, Next.js will use the public PORT
+const serverEnv = { ...process.env, PORT: '3001' };
 const server = spawn('node', [serverPath], {
   cwd: path.join(__dirname, 'packages', 'server'),
   stdio: 'inherit',
-  env: { ...process.env }
+  env: serverEnv
 });
 
 server.on('error', (err) => {
