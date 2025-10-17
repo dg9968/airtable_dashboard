@@ -4,34 +4,56 @@ const { spawn } = require('child_process');
 const path = require('path');
 
 console.log('Starting production servers...');
+console.log('Render PORT:', process.env.PORT || 'not set');
+
+// Store the original PORT for Next.js (Render's public port, usually 10000)
+const publicPort = process.env.PORT || '3000';
+const internalPort = '3001';
 
 // Start Hono server
 const serverPath = path.join(__dirname, 'packages', 'server', 'dist', 'node-server.js');
-console.log('Starting Hono server from:', serverPath);
+console.log(`Starting Hono server on internal port ${internalPort}...`);
 
-// Run Hono server on internal port 3001, Next.js will use the public PORT
-const serverEnv = { ...process.env, PORT: '3001' };
+// Run Hono server on internal port 3001
+const serverEnv = { ...process.env, PORT: internalPort };
 const server = spawn('node', [serverPath], {
   cwd: path.join(__dirname, 'packages', 'server'),
-  stdio: 'inherit',
+  stdio: ['ignore', 'pipe', 'pipe'],
   env: serverEnv
 });
 
+server.stdout.on('data', (data) => {
+  console.log(`[Hono] ${data.toString().trim()}`);
+});
+
+server.stderr.on('data', (data) => {
+  console.error(`[Hono Error] ${data.toString().trim()}`);
+});
+
 server.on('error', (err) => {
-  console.error('Failed to start server:', err);
+  console.error('Failed to start Hono server:', err);
   process.exit(1);
 });
 
 // Wait 3 seconds for server to start
 setTimeout(() => {
-  console.log('Starting Next.js client...');
+  console.log(`Starting Next.js client on public port ${publicPort}...`);
 
-  // Start Next.js client
+  // Start Next.js client with the original public PORT
+  const clientEnv = { ...process.env, PORT: publicPort };
   const client = spawn('npm', ['run', 'start'], {
     cwd: path.join(__dirname, 'packages', 'client'),
-    stdio: 'inherit',
+    stdio: ['ignore', 'pipe', 'pipe'],
     shell: true,
-    env: { ...process.env }
+    env: clientEnv
+  });
+
+  client.stdout.on('data', (data) => {
+    console.log(`[Next.js] ${data.toString().trim()}`);
+  });
+
+  client.stderr.on('data', (data) => {
+    console.error(`[Next.js Error] ${data.toString().trim()}`);
   });
 
   client.on('error', (err) => {
