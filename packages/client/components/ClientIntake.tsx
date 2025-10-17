@@ -91,8 +91,7 @@ export default function ClientIntake() {
   useEffect(() => {
     const fetchPipeline = async () => {
       try {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-        const response = await fetch(`${apiUrl}/api/subscriptions-personal`);
+        const response = await fetch('/api/subscriptions-personal');
         const data = await response.json();
 
         if (data.success) {
@@ -137,9 +136,8 @@ export default function ClientIntake() {
 
     try {
       setLoading(true);
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
       const response = await fetch(
-        `${apiUrl}/api/personal/search?q=${encodeURIComponent(searchTerm)}`
+        `/api/personal/search?q=${encodeURIComponent(searchTerm)}`
       );
       const data = await response.json();
 
@@ -188,10 +186,9 @@ export default function ClientIntake() {
       setSaving(true);
       setError(null);
 
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
       const url = isNewClient
-        ? `${apiUrl}/api/personal`
-        : `${apiUrl}/api/personal/${selectedClient?.id}`;
+        ? '/api/personal'
+        : `/api/personal/${selectedClient?.id}`;
 
       // Filter out computed fields that Airtable doesn't accept
       const {
@@ -276,10 +273,9 @@ export default function ClientIntake() {
 
     try {
       setSaving(true);
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
       // First, fetch all personal services to find "Tax Prep Pipeline" service ID
-      const servicesResponse = await fetch(`${apiUrl}/api/services-personal`);
+      const servicesResponse = await fetch('/api/services-personal');
       const servicesData = await servicesResponse.json();
 
       if (!servicesData.success) {
@@ -298,7 +294,7 @@ export default function ClientIntake() {
       }
 
       // Create the junction record in Subscriptions Personal
-      const subscriptionResponse = await fetch(`${apiUrl}/api/subscriptions-personal`, {
+      const subscriptionResponse = await fetch('/api/subscriptions-personal', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -316,7 +312,7 @@ export default function ClientIntake() {
       }
 
       // Refresh pipeline from Airtable
-      const pipelineResponse = await fetch(`${apiUrl}/api/subscriptions-personal`);
+      const pipelineResponse = await fetch('/api/subscriptions-personal');
       const pipelineData = await pipelineResponse.json();
 
       if (pipelineData.success) {
@@ -1053,15 +1049,14 @@ export default function ClientIntake() {
                               className="btn btn-error btn-xs"
                               onClick={async () => {
                                 try {
-                                  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
                                   const response = await fetch(
-                                    `${apiUrl}/api/subscriptions-personal/${client.id}`,
+                                    `/api/subscriptions-personal/${client.id}`,
                                     { method: 'DELETE' }
                                   );
 
                                   if (response.ok) {
                                     // Refresh pipeline from Airtable
-                                    const pipelineResponse = await fetch(`${apiUrl}/api/subscriptions-personal`);
+                                    const pipelineResponse = await fetch('/api/subscriptions-personal');
                                     const pipelineData = await pipelineResponse.json();
 
                                     if (pipelineData.success) {
