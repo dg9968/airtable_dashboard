@@ -86,7 +86,8 @@ export default function ViewDisplay() {
         params.append('filterByFormula', filterByFormula);
       }
       
-      const response = await fetch(`/api/view?${params.toString()}`);
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+      const response = await fetch(`${apiUrl}/api/view?${params.toString()}`);
       const data = await response.json();
       
       if (data.success) {

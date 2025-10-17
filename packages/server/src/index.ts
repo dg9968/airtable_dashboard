@@ -11,6 +11,7 @@ import customerSubscriptionsRoutes from './routes/customer-subscriptions';
 import processorBillingRoutes from './routes/processor-billing';
 import servicesRoutes from './routes/services';
 import servicesCachedRoutes from './routes/services-cached';
+import servicesPersonalRoutes from './routes/services-personal';
 import subscriptionsRoutes from './routes/subscriptions';
 import youtubeVideosRoutes from './routes/youtube-videos';
 import serviceByClientRoutes from './routes/service-by-client';
@@ -19,6 +20,8 @@ import contactsRoutes from './routes/contacts';
 import companiesRoutes from './routes/companies';
 import viewRoutes from './routes/view';
 import syncGdriveRoutes from './routes/sync-gdrive';
+import personalRoutes from './routes/personal';
+import subscriptionsPersonalRoutes from './routes/subscriptions-personal';
 
 const app = new Hono();
 
@@ -50,6 +53,7 @@ app.route('/api/customer-subscriptions', customerSubscriptionsRoutes);
 app.route('/api/processor-billing', processorBillingRoutes);
 app.route('/api/services', servicesRoutes);
 app.route('/api/services-cached', servicesCachedRoutes);
+app.route('/api/services-personal', servicesPersonalRoutes);
 app.route('/api/subscriptions', subscriptionsRoutes);
 app.route('/api/youtube-videos', youtubeVideosRoutes);
 app.route('/api/service-by-client', serviceByClientRoutes);
@@ -58,6 +62,8 @@ app.route('/api/contacts', contactsRoutes);
 app.route('/api/companies', companiesRoutes);
 app.route('/api/view', viewRoutes);
 app.route('/api/sync-gdrive', syncGdriveRoutes);
+app.route('/api/personal', personalRoutes);
+app.route('/api/subscriptions-personal', subscriptionsPersonalRoutes);
 
 // 404 handler
 app.notFound((c) => {

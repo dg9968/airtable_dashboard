@@ -26,35 +26,36 @@ export default withAuth(
         }
         
         // Protected routes - require authentication
-        if (pathname.startsWith('/dashboard') || 
+        if (pathname.startsWith('/dashboard') ||
             pathname.startsWith('/airtable') ||
             pathname.startsWith('/bookkeeping') ||
             pathname.startsWith('/processor-billing') ||
             pathname.startsWith('/view-display') || // Add view-display protection
             pathname.startsWith('/document-management') ||
+            pathname.startsWith('/client-intake') ||
             pathname.startsWith('/admin')) {
-          
+
           // Check if user is authenticated
           if (!token) return false
-          
+
           // Admin-only routes
-          if (pathname.startsWith('/admin')) {
+          if (pathname.startsWith('/admin') || pathname.startsWith('/client-intake')) {
             return token.role === 'admin'
           }
-          
+
           // Staff and admin only routes (including view-display and document-management)
-          if (pathname.startsWith('/airtable') || 
+          if (pathname.startsWith('/airtable') ||
               pathname.startsWith('/bookkeeping') ||
               pathname.startsWith('/view-display') ||
               pathname.startsWith('/document-management')) {
             return token.role === 'admin' || token.role === 'staff'
           }
-          
+
           // Processor billing - staff and admin only
           if (pathname.startsWith('/processor-billing')) {
             return token.role === 'admin' || token.role === 'staff'
           }
-          
+
           return true // Any authenticated user for other dashboard routes
         }
         
