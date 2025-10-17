@@ -6,7 +6,7 @@ const path = require('path');
 console.log('Starting production servers...');
 
 // Start Hono server
-const serverPath = path.join(__dirname, 'packages', 'server', 'dist', 'index.js');
+const serverPath = path.join(__dirname, 'packages', 'server', 'dist', 'node-server.js');
 console.log('Starting Hono server from:', serverPath);
 
 const server = spawn('node', [serverPath], {
