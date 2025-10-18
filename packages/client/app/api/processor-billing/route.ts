@@ -1,16 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-
-const HONO_API_URL = process.env.HONO_API_URL || 'http://localhost:3001';
+import { getApiHeaders, getHonoApiUrl } from '@/lib/api-client';
 
 export async function GET(request: NextRequest) {
-  const url = `${HONO_API_URL}/api/processor-billing`;
+  const url = getHonoApiUrl('/api/processor-billing');
 
   try {
     const response = await fetch(url, {
       method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: getApiHeaders(),
     });
 
     const data = await response.json();

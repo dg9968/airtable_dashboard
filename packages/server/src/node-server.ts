@@ -49,7 +49,26 @@ app.use('*', cors({
   credentials: true,
 }));
 
-// Health check
+// API Key Authentication Middleware
+app.use('/api/*', async (c, next) => {
+  const apiKey = c.req.header('X-API-Key');
+  const expectedApiKey = process.env.API_SECRET_KEY;
+
+  // Skip auth check if no API key is configured (development)
+  if (!expectedApiKey) {
+    console.warn('⚠️ API_SECRET_KEY not set - API is unprotected!');
+    return next();
+  }
+
+  // Verify API key
+  if (!apiKey || apiKey !== expectedApiKey) {
+    return c.json({ error: 'Unauthorized - Invalid or missing API key' }, 401);
+  }
+
+  return next();
+});
+
+// Health check (no auth required)
 app.get('/health', (c) => {
   return c.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
