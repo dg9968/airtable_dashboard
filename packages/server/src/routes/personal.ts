@@ -35,7 +35,8 @@ app.get("/", async (c) => {
       );
     }
 
-    const records = await fetchAllRecords(base, "Personal", {
+    const baseId = process.env.AIRTABLE_BASE_ID || "";
+    const records = await fetchAllRecords(baseId, "Personal", {
       view: "Grid view",
     });
 
@@ -73,7 +74,8 @@ app.get("/search", async (c) => {
       });
     }
 
-    const allRecords = await fetchAllRecords(base, "Personal", {
+    const baseId = process.env.AIRTABLE_BASE_ID || "";
+    const allRecords = await fetchAllRecords(baseId, "Personal", {
       view: "Grid view",
     });
 
