@@ -5,18 +5,10 @@
  */
 
 import { Hono } from "hono";
-import Airtable from "airtable";
 import { testConnection } from "../airtable";
-import { fetchAllRecords } from "../lib/airtable-helpers";
+import { fetchAllRecords, createRecords, updateRecords, deleteRecords, getRecord } from "../lib/airtable-helpers";
 
 const app = new Hono();
-
-// Initialize Airtable
-const airtable = new Airtable({
-  apiKey: process.env.AIRTABLE_PERSONAL_ACCESS_TOKEN,
-});
-
-const base = airtable.base(process.env.AIRTABLE_BASE_ID || "");
 
 /**
  * GET /api/personal
@@ -124,15 +116,13 @@ app.get("/search", async (c) => {
 app.get("/:id", async (c) => {
   try {
     const id = c.req.param("id");
-    const record = await base("Personal").find(id);
+    const baseId = process.env.AIRTABLE_BASE_ID || "";
+
+    const record = await getRecord(baseId, "Personal", id);
 
     return c.json({
       success: true,
-      data: {
-        id: record.id,
-        fields: record.fields,
-        createdTime: record._rawJson.createdTime,
-      },
+      data: record,
     });
   } catch (error) {
     console.error("Error fetching personal record:", error);
@@ -187,17 +177,16 @@ app.post("/", async (c) => {
       Object.keys(cleanedFields)
     );
 
-    const record = await base("Personal").create([
-      {
-        fields: cleanedFields,
-      },
+    const baseId = process.env.AIRTABLE_BASE_ID || "";
+    const records = await createRecords(baseId, "Personal", [
+      { fields: cleanedFields },
     ]);
 
     return c.json({
       success: true,
       data: {
-        id: record[0].id,
-        fields: record[0].fields,
+        id: records[0].id,
+        fields: records[0].fields,
       },
     });
   } catch (error) {
@@ -256,7 +245,8 @@ app.patch("/:id", async (c) => {
     console.log("Updating personal record:", id);
     console.log("Cleaned fields:", Object.keys(cleanedFields));
 
-    const record = await base("Personal").update([
+    const baseId = process.env.AIRTABLE_BASE_ID || "";
+    const records = await updateRecords(baseId, "Personal", [
       {
         id,
         fields: cleanedFields,
@@ -266,8 +256,8 @@ app.patch("/:id", async (c) => {
     return c.json({
       success: true,
       data: {
-        id: record[0].id,
-        fields: record[0].fields,
+        id: records[0].id,
+        fields: records[0].fields,
       },
     });
   } catch (error) {
@@ -296,7 +286,9 @@ app.patch("/:id", async (c) => {
 app.delete("/:id", async (c) => {
   try {
     const id = c.req.param("id");
-    await base("Personal").destroy([id]);
+    const baseId = process.env.AIRTABLE_BASE_ID || "";
+
+    await deleteRecords(baseId, "Personal", [id]);
 
     return c.json({
       success: true,

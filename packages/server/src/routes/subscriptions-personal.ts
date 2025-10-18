@@ -5,18 +5,10 @@
  */
 
 import { Hono } from 'hono';
-import Airtable from 'airtable';
 import { testConnection } from '../airtable';
-import { fetchAllRecords } from '../lib/airtable-helpers';
+import { fetchAllRecords, createRecords, deleteRecords } from '../lib/airtable-helpers';
 
 const app = new Hono();
-
-// Initialize Airtable
-const airtable = new Airtable({
-  apiKey: process.env.AIRTABLE_PERSONAL_ACCESS_TOKEN,
-});
-
-const base = airtable.base(process.env.AIRTABLE_BASE_ID || '');
 
 /**
  * POST /api/subscriptions-personal
@@ -55,6 +47,8 @@ app.post('/', async (c) => {
 
     console.log('Creating Subscriptions Personal record:', { personalId, serviceId });
 
+    const baseId = process.env.AIRTABLE_BASE_ID || '';
+
     // Create the junction record
     // Field names: "Last Name" links to Personal, "Service" links to Personal Services
     const recordData: any = {
@@ -62,17 +56,15 @@ app.post('/', async (c) => {
       'Service': [serviceId],      // Link to Personal Services table
     };
 
-    const record = await base('Subscriptions Personal').create([
-      {
-        fields: recordData,
-      },
+    const records = await createRecords(baseId, 'Subscriptions Personal', [
+      { fields: recordData },
     ]);
 
     return c.json({
       success: true,
       data: {
-        id: record[0].id,
-        fields: record[0].fields,
+        id: records[0].id,
+        fields: records[0].fields,
       },
     });
   } catch (error) {
@@ -151,7 +143,9 @@ app.get('/personal/:personalId', async (c) => {
 app.delete('/:id', async (c) => {
   try {
     const id = c.req.param('id');
-    await base('Subscriptions Personal').destroy([id]);
+    const baseId = process.env.AIRTABLE_BASE_ID || '';
+
+    await deleteRecords(baseId, 'Subscriptions Personal', [id]);
 
     return c.json({
       success: true,
