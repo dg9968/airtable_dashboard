@@ -4,15 +4,9 @@
 
 import { Hono } from 'hono';
 import { testConnection } from '../airtable';
-import Airtable from 'airtable';
+import { fetchAllRecords } from '../lib/airtable-helpers';
 
 const app = new Hono();
-
-const airtable = new Airtable({
-  apiKey: process.env.AIRTABLE_PERSONAL_ACCESS_TOKEN,
-});
-
-const base = airtable.base(process.env.AIRTABLE_BASE_ID || '');
 
 /**
  * GET /api/processor-billing
@@ -34,30 +28,13 @@ app.get('/', async (c) => {
 
     const tableName = 'Subscriptions Corporate';
     const viewName = 'Bookkeeping Billing';
+    const baseId = process.env.AIRTABLE_BASE_ID || '';
 
     console.log(`Fetching view "${viewName}" from table "${tableName}"`);
 
-    const records: any[] = [];
-
-    await base(tableName)
-      .select({
-        view: viewName
-      })
-      .eachPage((pageRecords, fetchNextPage) => {
-        pageRecords.forEach((record) => {
-          records.push({
-            id: record.id,
-            fields: record.fields,
-            createdTime: record._rawJson.createdTime
-          });
-        });
-
-        if (records.length % 100 === 0) {
-          console.log(`Fetched ${records.length} records so far...`);
-        }
-
-        fetchNextPage();
-      });
+    const records = await fetchAllRecords(baseId, tableName, {
+      view: viewName
+    });
 
     console.log(`Total records fetched: ${records.length}`);
 

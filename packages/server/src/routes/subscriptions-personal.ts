@@ -7,6 +7,7 @@
 import { Hono } from 'hono';
 import Airtable from 'airtable';
 import { testConnection } from '../airtable';
+import { fetchAllRecords } from '../lib/airtable-helpers';
 
 const app = new Hono();
 
@@ -93,24 +94,10 @@ app.post('/', async (c) => {
  */
 app.get('/', async (c) => {
   try {
-    const records: any[] = [];
-
-    // Fetch from the "Tax Prep Pipeline" view in Subscriptions Personal table
-    // This lets Airtable do the filtering for us
-    await base('Subscriptions Personal')
-      .select({
-        view: 'Tax Prep Pipeline',
-      })
-      .eachPage((pageRecords, fetchNextPage) => {
-        pageRecords.forEach((record) => {
-          records.push({
-            id: record.id,
-            fields: record.fields,
-            createdTime: record._rawJson.createdTime,
-          });
-        });
-        fetchNextPage();
-      });
+    const baseId = process.env.AIRTABLE_BASE_ID || '';
+    const records = await fetchAllRecords(baseId, 'Subscriptions Personal', {
+      view: 'Tax Prep Pipeline',
+    });
 
     return c.json({
       success: true,
@@ -135,22 +122,11 @@ app.get('/', async (c) => {
 app.get('/personal/:personalId', async (c) => {
   try {
     const personalId = c.req.param('personalId');
-    const records: any[] = [];
+    const baseId = process.env.AIRTABLE_BASE_ID || '';
 
-    await base('Subscriptions Personal')
-      .select({
-        filterByFormula: `FIND("${personalId}", ARRAYJOIN({Personal}))`,
-      })
-      .eachPage((pageRecords, fetchNextPage) => {
-        pageRecords.forEach((record) => {
-          records.push({
-            id: record.id,
-            fields: record.fields,
-            createdTime: record._rawJson.createdTime,
-          });
-        });
-        fetchNextPage();
-      });
+    const records = await fetchAllRecords(baseId, 'Subscriptions Personal', {
+      filterByFormula: `FIND("${personalId}", ARRAYJOIN({Personal}))`,
+    });
 
     return c.json({
       success: true,
