@@ -7,6 +7,7 @@
 import { Hono } from "hono";
 import Airtable from "airtable";
 import { testConnection } from "../airtable";
+import { fetchAllRecords } from "../lib/airtable-helpers";
 
 const app = new Hono();
 
@@ -34,22 +35,9 @@ app.get("/", async (c) => {
       );
     }
 
-    const records: any[] = [];
-
-    await base("Personal")
-      .select({
-        view: "Grid view",
-      })
-      .eachPage((pageRecords, fetchNextPage) => {
-        pageRecords.forEach((record) => {
-          records.push({
-            id: record.id,
-            fields: record.fields,
-            createdTime: record._rawJson.createdTime,
-          });
-        });
-        fetchNextPage();
-      });
+    const records = await fetchAllRecords(base, "Personal", {
+      view: "Grid view",
+    });
 
     return c.json({
       success: true,
@@ -85,38 +73,28 @@ app.get("/search", async (c) => {
       });
     }
 
-    const records: any[] = [];
+    const allRecords = await fetchAllRecords(base, "Personal", {
+      view: "Grid view",
+    });
 
-    await base("Personal")
-      .select({
-        view: "Grid view",
-      })
-      .eachPage((pageRecords, fetchNextPage) => {
-        pageRecords.forEach((record) => {
-          const fields = record.fields;
-          const searchableText = [
-            fields["Full Name"],
-            fields["First Name"],
-            fields["Last Name"],
-            fields["Email"],
-            fields["📞Phone number"],
-            fields["SSN"]?.slice(-4), // Last 4 of SSN only
-            fields["Spouse Name"],
-          ]
-            .filter(Boolean)
-            .join(" ")
-            .toLowerCase();
+    // Filter records based on search term
+    const records = allRecords.filter((record) => {
+      const fields = record.fields;
+      const searchableText = [
+        fields["Full Name"],
+        fields["First Name"],
+        fields["Last Name"],
+        fields["Email"],
+        fields["📞Phone number"],
+        fields["SSN"]?.slice(-4), // Last 4 of SSN only
+        fields["Spouse Name"],
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
 
-          if (searchableText.includes(searchTerm)) {
-            records.push({
-              id: record.id,
-              fields: record.fields,
-              createdTime: record._rawJson.createdTime,
-            });
-          }
-        });
-        fetchNextPage();
-      });
+      return searchableText.includes(searchTerm);
+    });
 
     return c.json({
       success: true,
