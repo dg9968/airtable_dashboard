@@ -10,12 +10,12 @@
     "dev:client": "cd packages/client && bun run dev",
     "dev:server": "cd packages/server && bun run dev",
     "dev:all": "concurrently \"bun run dev:client\" \"bun run dev:server\"",
-    "build": "cd packages/client && bun run build",
-    "build:client": "cd packages/client && bun run build",
-    "build:server": "cd packages/server && bun run build",
+    "build": "cd packages/client && npm run build",
+    "build:client": "cd packages/client && npm run build",
+    "build:server": "cd packages/server && npm run build",
     "start": "cd packages/client && npm run start",
     "start:server": "cd packages/server && npm run start",
-    "lint": "cd packages/client && bun run lint && cd ../server && bun run lint",
+    "lint": "cd packages/client && npm run lint && cd ../server && npm run lint",
     "clean": "rm -rf node_modules packages/*/node_modules packages/*/.next packages/*/dist bun.lockb"
   },
   "devDependencies": {
