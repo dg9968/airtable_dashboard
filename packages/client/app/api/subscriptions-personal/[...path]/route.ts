@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-
-const HONO_API_URL = process.env.HONO_API_URL || 'http://localhost:3001';
+import { getApiHeaders, getHonoApiUrl } from '@/lib/api-client';
 
 export async function GET(
   request: NextRequest,
@@ -9,14 +8,12 @@ export async function GET(
   const { path: pathArray } = await params;
   const path = pathArray?.join('/') || '';
   const searchParams = request.nextUrl.searchParams.toString();
-  const url = `${HONO_API_URL}/api/subscriptions-personal${path ? '/' + path : ''}${searchParams ? '?' + searchParams : ''}`;
+  const url = getHonoApiUrl(`/api/subscriptions-personal${path ? '/' + path : ''}${searchParams ? '?' + searchParams : ''}`);
 
   try {
     const response = await fetch(url, {
       method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: getApiHeaders(),
     });
 
     const data = await response.json();
@@ -36,15 +33,13 @@ export async function POST(
 ) {
   const { path: pathArray } = await params;
   const path = pathArray?.join('/') || '';
-  const url = `${HONO_API_URL}/api/subscriptions-personal${path ? '/' + path : ''}`;
+  const url = getHonoApiUrl(`/api/subscriptions-personal${path ? '/' + path : ''}`);
 
   try {
     const body = await request.json();
     const response = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: getApiHeaders(),
       body: JSON.stringify(body),
     });
 
@@ -65,14 +60,12 @@ export async function DELETE(
 ) {
   const { path: pathArray } = await params;
   const path = pathArray?.join('/') || '';
-  const url = `${HONO_API_URL}/api/subscriptions-personal${path ? '/' + path : ''}`;
+  const url = getHonoApiUrl(`/api/subscriptions-personal${path ? '/' + path : ''}`);
 
   try {
     const response = await fetch(url, {
       method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: getApiHeaders(),
     });
 
     const data = await response.json();

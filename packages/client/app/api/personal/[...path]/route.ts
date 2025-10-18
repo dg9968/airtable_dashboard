@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-
-const HONO_API_URL = process.env.HONO_API_URL || 'http://localhost:3001';
+import { getApiHeaders, getHonoApiUrl } from '@/lib/api-client';
 
 export async function GET(
   request: NextRequest,
