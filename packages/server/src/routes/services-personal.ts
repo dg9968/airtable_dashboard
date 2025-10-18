@@ -3,7 +3,8 @@
  */
 
 import { Hono } from 'hono';
-import { fetchAllTableData, testConnection } from '../airtable';
+import { testConnection } from '../airtable';
+import { fetchAllRecords } from '../lib/airtable-helpers';
 
 const app = new Hono();
 
@@ -32,6 +33,7 @@ app.get('/', async (c) => {
       'Personal Service Types',
     ];
 
+    const baseId = process.env.AIRTABLE_BASE_ID || '';
     let serviceRecords: any[] = [];
     let actualServiceTableName = '';
     let serviceTableFound = false;
@@ -39,7 +41,7 @@ app.get('/', async (c) => {
     for (const tableName of possibleServiceTableNames) {
       try {
         console.log(`Trying personal services table: ${tableName}`);
-        serviceRecords = await fetchAllTableData(tableName);
+        serviceRecords = await fetchAllRecords(baseId, tableName);
         actualServiceTableName = tableName;
         serviceTableFound = true;
         console.log(`Successfully found personal services table: ${tableName} with ${serviceRecords.length} total records`);
