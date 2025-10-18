@@ -18,31 +18,15 @@ export async function fetchAllRecords(
     sort?: Array<{ field: string; direction?: 'asc' | 'desc' }>;
   }
 ): Promise<any[]> {
-  const records: any[] = [];
+  // Use .all() instead of .eachPage() to avoid AbortSignal issues
+  const airtableRecords = await base(tableName)
+    .select(options || {})
+    .all();
 
-  await new Promise<void>((resolve, reject) => {
-    base(tableName)
-      .select(options || {})
-      .eachPage(
-        (pageRecords, fetchNextPage) => {
-          pageRecords.forEach((record) => {
-            records.push({
-              id: record.id,
-              fields: record.fields,
-              createdTime: record._rawJson.createdTime,
-            });
-          });
-          fetchNextPage();
-        },
-        (err) => {
-          if (err) {
-            reject(err);
-          } else {
-            resolve();
-          }
-        }
-      );
-  });
-
-  return records;
+  // Map to consistent format
+  return airtableRecords.map((record) => ({
+    id: record.id,
+    fields: record.fields,
+    createdTime: record._rawJson.createdTime,
+  }));
 }
