@@ -35,7 +35,15 @@ app.use('*', cors({
     if (origin && origin.match(/^http:\/\/localhost:\d+$/)) {
       return origin;
     }
-    // Allow configured CLIENT_URL in production
+    // Allow configured CLIENT_URL in production (e.g., https://airtable-dashboard.onrender.com)
+    if (process.env.CLIENT_URL && origin === process.env.CLIENT_URL) {
+      return origin;
+    }
+    // Allow Render.com preview deployments
+    if (origin && origin.match(/^https:\/\/.*\.onrender\.com$/)) {
+      return origin;
+    }
+    // Default fallback
     return process.env.CLIENT_URL || 'http://localhost:3000';
   },
   credentials: true,
