@@ -11,7 +11,9 @@ services:
       - key: NODE_ENV
         value: production
       - key: HONO_API_URL
-        sync: false  # Set this to your Hono server URL (e.g., https://airtable-api.onrender.com)
+        sync: false  # Set this to your Hono server URL (e.g., https://vault-api.onrender.com)
+      - key: API_SECRET_KEY
+        sync: false  # Set this in Render dashboard - must match vault-api API_SECRET_KEY
       - key: AIRTABLE_PERSONAL_ACCESS_TOKEN
         sync: false  # Set this in Render dashboard
       - key: AIRTABLE_BASE_ID
