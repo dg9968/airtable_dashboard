@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: airtable-api
+    name: vault-api
     env: node
     plan: free
     rootDirectory: packages/server

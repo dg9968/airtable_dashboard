@@ -10,7 +10,7 @@ This application uses a **two-service architecture** on Render:
 2. Click **"New +"** → **"Web Service"**
 3. Connect your GitHub repository
 4. Use these settings:
-   - **Name**: `airtable-api` (or your preferred name)
+   - **Name**: `vault-api`
    - **Root Directory**: Leave blank (will use render-server.yaml)
    - **Environment**: `Node`
    - **Build Command**: `cd packages/server && npm install && npm run build`
@@ -35,7 +35,7 @@ This application uses a **two-service architecture** on Render:
 
 6. Click **"Create Web Service"**
 7. Wait for deployment to complete
-8. **Copy the service URL** (e.g., `https://airtable-api.onrender.com`)
+8. **Copy the service URL** (e.g., `https://vault-api.onrender.com`)
 
 ## Step 2: Deploy Next.js Client
 
@@ -45,7 +45,7 @@ Your existing Render service should already be configured for the client using `
 2. Go to **Environment** tab
 3. Add/Update the `HONO_API_URL` environment variable:
    ```
-   HONO_API_URL=https://airtable-api.onrender.com
+   HONO_API_URL=https://vault-api.onrender.com
    ```
    (Use the URL from Step 1)
 
@@ -55,7 +55,7 @@ Your existing Render service should already be configured for the client using `
 
 1. Visit your Next.js app: `https://airtable-dashboard.onrender.com`
 2. Check that API calls work (sign in, view data, etc.)
-3. Check Hono API health: `https://airtable-api.onrender.com/health`
+3. Check Hono API health: `https://vault-api.onrender.com/health`
 
 ## Alternative: Manual Service Creation
 
