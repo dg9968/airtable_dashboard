@@ -62,6 +62,35 @@ export default function ClientIntake() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [activeSection, setActiveSection] = useState("primary-taxpayer");
+
+  // Form navigation sections
+  const formSections = [
+    { id: "tax-info", label: "Tax Information", icon: "📋" },
+    { id: "primary-taxpayer", label: "Primary Taxpayer", icon: "👤" },
+    { id: "spouse-info", label: "Spouse Information", icon: "💑" },
+    { id: "contact-info", label: "Contact Information", icon: "📞" },
+    { id: "bank-info", label: "Bank Information", icon: "🏦" },
+    { id: "prior-year", label: "Prior Year Info", icon: "📅" },
+    { id: "document-checklist", label: "Document Checklist", icon: "📄" },
+    { id: "tax-prep-pipeline", label: "Tax Prep Pipeline", icon: "📊" },
+  ];
+
+  // Smooth scroll to section
+  const scrollToSection = (sectionId: string) => {
+    const element = document.getElementById(sectionId);
+    if (element) {
+      const headerOffset = 100;
+      const elementPosition = element.getBoundingClientRect().top;
+      const offsetPosition = elementPosition + window.pageYOffset - headerOffset;
+
+      window.scrollTo({
+        top: offsetPosition,
+        behavior: "smooth",
+      });
+      setActiveSection(sectionId);
+    }
+  };
 
   // Form state
   const [formData, setFormData] = useState<PersonalRecord["fields"]>({
@@ -397,6 +426,24 @@ export default function ClientIntake() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Form Navigation */}
+        <div className="sticky top-0 z-10 bg-base-200 pb-4 mb-8">
+          <div className="flex gap-2 overflow-x-auto py-2">
+            {formSections.map((section) => (
+              <button
+                key={section.id}
+                onClick={() => scrollToSection(section.id)}
+                className={`btn btn-sm whitespace-nowrap ${
+                  activeSection === section.id ? "btn-primary" : "btn-ghost"
+                }`}
+              >
+                <span className="mr-1">{section.icon}</span>
+                {section.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* Search Existing Clients */}
         <div className="card bg-base-100 shadow-xl mb-8">
           <div className="card-body">
@@ -462,6 +509,11 @@ export default function ClientIntake() {
             <h2 className="card-title text-base-content">Personal Information</h2>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+              {/* Tax Information Section */}
+              <div id="tax-info" className="col-span-2 scroll-mt-24">
+                <div className="h-1"></div>
+              </div>
+
               {/* Tax Year */}
               <div className="form-control">
                 <label className="label">
@@ -506,7 +558,7 @@ export default function ClientIntake() {
               </div>
 
               {/* Primary Taxpayer Information */}
-              <div className="col-span-2">
+              <div id="primary-taxpayer" className="col-span-2 scroll-mt-24">
                 <h3 className="text-xl font-semibold text-base-content mb-4 border-b border-base-300 pb-2">
                   Primary Taxpayer
                 </h3>
@@ -609,7 +661,7 @@ export default function ClientIntake() {
               {(formData["Filing Status"] === "Married Filing Jointly" ||
                 formData["Filing Status"] === "Married Filing Separately") && (
                 <>
-                  <div className="col-span-2">
+                  <div id="spouse-info" className="col-span-2 scroll-mt-24">
                     <h3 className="text-xl font-semibold text-base-content mb-4 mt-6 border-b border-base-300 pb-2">
                       Spouse Information
                     </h3>
@@ -702,7 +754,7 @@ export default function ClientIntake() {
               )}
 
               {/* Contact Information */}
-              <div className="col-span-2">
+              <div id="contact-info" className="col-span-2 scroll-mt-24">
                 <h3 className="text-xl font-semibold text-base-content mb-4 mt-6 border-b border-base-300 pb-2">
                   Contact Information
                 </h3>
@@ -825,7 +877,7 @@ export default function ClientIntake() {
               </div>
 
               {/* Bank Information */}
-              <div className="col-span-2">
+              <div id="bank-info" className="col-span-2 scroll-mt-24">
                 <h3 className="text-xl font-semibold text-base-content mb-4 mt-6 border-b border-base-300 pb-2">
                   Bank Information (for Direct Deposit/Withdrawal)
                 </h3>
@@ -894,7 +946,7 @@ export default function ClientIntake() {
               </div>
 
               {/* Prior Year Information */}
-              <div className="col-span-2">
+              <div id="prior-year" className="col-span-2 scroll-mt-24">
                 <h3 className="text-xl font-semibold text-base-content mb-4 mt-6 border-b border-base-300 pb-2">
                   Prior Year Information
                 </h3>
@@ -987,7 +1039,7 @@ export default function ClientIntake() {
         {/* Document Checklist and Tax Prep Pipeline - Two Column Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
           {/* Document Checklist */}
-          <div className="card bg-base-100 shadow-xl">
+          <div id="document-checklist" className="card bg-base-100 shadow-xl scroll-mt-24">
             <div className="card-body">
               <h2 className="card-title text-base-content mb-4">Document Checklist</h2>
               <p className="text-base-content/60 mb-6">
@@ -1000,7 +1052,7 @@ export default function ClientIntake() {
           </div>
 
           {/* Tax Prep Pipeline */}
-          <div className="card bg-base-100 shadow-xl">
+          <div id="tax-prep-pipeline" className="card bg-base-100 shadow-xl scroll-mt-24">
             <div className="card-body">
               <h2 className="card-title text-base-content mb-4">
                 📋 Tax Prep Pipeline ({pipelineClients.length} clients)

@@ -153,11 +153,8 @@ export default function Header() {
           </div>
         ) : (
           <div className="space-x-2">
-            <Link href="/auth/signin" className="btn btn-ghost btn-sm">
+            <Link href="/auth/signin" className="btn btn-primary btn-sm">
               Sign In
-            </Link>
-            <Link href="/auth/signup" className="btn btn-accent btn-sm">
-              Sign Up
             </Link>
           </div>
         )}
