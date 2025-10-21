@@ -82,7 +82,8 @@ export default function ClientIntake() {
     if (element) {
       const headerOffset = 100;
       const elementPosition = element.getBoundingClientRect().top;
-      const offsetPosition = elementPosition + window.pageYOffset - headerOffset;
+      const offsetPosition =
+        elementPosition + window.pageYOffset - headerOffset;
 
       window.scrollTo({
         top: offsetPosition,
@@ -120,22 +121,25 @@ export default function ClientIntake() {
   useEffect(() => {
     const fetchPipeline = async () => {
       try {
-        const response = await fetch('/api/subscriptions-personal');
+        const response = await fetch("/api/subscriptions-personal");
         const data = await response.json();
 
         if (data.success) {
           // Transform Airtable records to pipeline format
           const pipeline = data.data.map((record: any) => {
             // Full Name is a lookup field in Subscriptions Personal
-            const fullName = record.fields['Full Name'];
-            const fullNameStr = Array.isArray(fullName) ? fullName[0] : fullName || '';
+            const fullName = record.fields["Full Name"];
+            const fullNameStr = Array.isArray(fullName)
+              ? fullName[0]
+              : fullName || "";
 
             // Split Full Name into First Name and Last Name
-            const nameParts = fullNameStr.split(' ');
-            const firstName = nameParts[0] || '';
-            const lastName = nameParts.slice(1).join(' ') || '';
+            const nameParts = fullNameStr.split(" ");
+            const firstName = nameParts[0] || "";
+            const lastName = nameParts.slice(1).join(" ") || "";
 
-            const phone = record.fields['Phone'] || record.fields['📞Phone number'] || '';
+            const phone =
+              record.fields["Phone"] || record.fields["📞Phone number"] || "";
             const phoneStr = Array.isArray(phone) ? phone[0] : phone;
 
             return {
@@ -149,7 +153,7 @@ export default function ClientIntake() {
           setPipelineClients(pipeline);
         }
       } catch (error) {
-        console.error('Failed to fetch pipeline data:', error);
+        console.error("Failed to fetch pipeline data:", error);
       }
     };
 
@@ -189,8 +193,11 @@ export default function ClientIntake() {
     setIsNewClient(false);
     setSearchResults([]);
     setSearchTerm("");
-    const fullName = client.fields["Full Name"] ||
-      `${client.fields["First Name"] || ""} ${client.fields["Last Name"] || ""}`.trim();
+    const fullName =
+      client.fields["Full Name"] ||
+      `${client.fields["First Name"] || ""} ${
+        client.fields["Last Name"] || ""
+      }`.trim();
     setSuccessMessage(`Loaded client: ${fullName}`);
     setTimeout(() => setSuccessMessage(null), 3000);
   };
@@ -216,7 +223,7 @@ export default function ClientIntake() {
       setError(null);
 
       const url = isNewClient
-        ? '/api/personal'
+        ? "/api/personal"
         : `/api/personal/${selectedClient?.id}`;
 
       // Filter out computed fields that Airtable doesn't accept
@@ -262,6 +269,40 @@ export default function ClientIntake() {
     }
   };
 
+  // Format phone number as (XXX) XXX-XXXX
+  const formatPhoneNumber = (value: string) => {
+    // Remove all non-numeric characters
+    const phoneNumber = value.replace(/\D/g, '');
+
+    // Format based on length
+    if (phoneNumber.length === 0) {
+      return '';
+    } else if (phoneNumber.length <= 3) {
+      return `(${phoneNumber}`;
+    } else if (phoneNumber.length <= 6) {
+      return `(${phoneNumber.slice(0, 3)}) ${phoneNumber.slice(3)}`;
+    } else {
+      return `(${phoneNumber.slice(0, 3)}) ${phoneNumber.slice(3, 6)}-${phoneNumber.slice(6, 10)}`;
+    }
+  };
+
+  // Format SSN as XXX-XX-XXXX
+  const formatSSN = (value: string) => {
+    // Remove all non-numeric characters
+    const ssn = value.replace(/\D/g, '');
+
+    // Format based on length
+    if (ssn.length === 0) {
+      return '';
+    } else if (ssn.length <= 3) {
+      return ssn;
+    } else if (ssn.length <= 5) {
+      return `${ssn.slice(0, 3)}-${ssn.slice(3)}`;
+    } else {
+      return `${ssn.slice(0, 3)}-${ssn.slice(3, 5)}-${ssn.slice(5, 9)}`;
+    }
+  };
+
   // Handle form input changes
   const handleInputChange = (field: string, value: string) => {
     setFormData((prev) => ({
@@ -277,7 +318,9 @@ export default function ClientIntake() {
     const phone = formData["📞Phone number"];
 
     if (!firstName || !phone) {
-      setError("Please enter both First Name and Phone Number before adding to pipeline");
+      setError(
+        "Please enter both First Name and Phone Number before adding to pipeline"
+      );
       setTimeout(() => setError(null), 3000);
       return;
     }
@@ -304,29 +347,31 @@ export default function ClientIntake() {
       setSaving(true);
 
       // First, fetch all personal services to find "Tax Prep Pipeline" service ID
-      const servicesResponse = await fetch('/api/services-personal');
+      const servicesResponse = await fetch("/api/services-personal");
       const servicesData = await servicesResponse.json();
 
       if (!servicesData.success) {
-        throw new Error('Failed to fetch personal services');
+        throw new Error("Failed to fetch personal services");
       }
 
       // Find the Tax Prep Pipeline service
       const taxPrepService = servicesData.services?.find(
-        (service: any) => service.name === 'Tax Prep Pipeline'
+        (service: any) => service.name === "Tax Prep Pipeline"
       );
 
       if (!taxPrepService) {
-        setError('Tax Prep Pipeline service not found in Personal Services table. Please create it first.');
+        setError(
+          "Tax Prep Pipeline service not found in Personal Services table. Please create it first."
+        );
         setTimeout(() => setError(null), 5000);
         return;
       }
 
       // Create the junction record in Subscriptions Personal
-      const subscriptionResponse = await fetch('/api/subscriptions-personal', {
-        method: 'POST',
+      const subscriptionResponse = await fetch("/api/subscriptions-personal", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
           personalId: selectedClient.id,
@@ -337,25 +382,30 @@ export default function ClientIntake() {
       const subscriptionData = await subscriptionResponse.json();
 
       if (!subscriptionData.success) {
-        throw new Error(subscriptionData.error || 'Failed to create subscription');
+        throw new Error(
+          subscriptionData.error || "Failed to create subscription"
+        );
       }
 
       // Refresh pipeline from Airtable
-      const pipelineResponse = await fetch('/api/subscriptions-personal');
+      const pipelineResponse = await fetch("/api/subscriptions-personal");
       const pipelineData = await pipelineResponse.json();
 
       if (pipelineData.success) {
         const pipeline = pipelineData.data.map((record: any) => {
           // Full Name is a lookup field in Subscriptions Personal
-          const fullName = record.fields['Full Name'];
-          const fullNameStr = Array.isArray(fullName) ? fullName[0] : fullName || '';
+          const fullName = record.fields["Full Name"];
+          const fullNameStr = Array.isArray(fullName)
+            ? fullName[0]
+            : fullName || "";
 
           // Split Full Name into First Name and Last Name
-          const nameParts = fullNameStr.split(' ');
-          const firstName = nameParts[0] || '';
-          const lastName = nameParts.slice(1).join(' ') || '';
+          const nameParts = fullNameStr.split(" ");
+          const firstName = nameParts[0] || "";
+          const lastName = nameParts.slice(1).join(" ") || "";
 
-          const phone = record.fields['Phone'] || record.fields['📞Phone number'] || '';
+          const phone =
+            record.fields["Phone"] || record.fields["📞Phone number"] || "";
           const phoneStr = Array.isArray(phone) ? phone[0] : phone;
 
           return {
@@ -370,10 +420,14 @@ export default function ClientIntake() {
       }
 
       const fullName = `${firstName} ${lastName}`.trim();
-      setSuccessMessage(`✅ ${fullName} added to Tax Prep Pipeline in Airtable!`);
+      setSuccessMessage(
+        `✅ ${fullName} added to Tax Prep Pipeline in Airtable!`
+      );
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to add to pipeline');
+      setError(
+        err instanceof Error ? err.message : "Failed to add to pipeline"
+      );
       setTimeout(() => setError(null), 5000);
     } finally {
       setSaving(false);
@@ -393,13 +447,17 @@ export default function ClientIntake() {
               >
                 ← Back to Dashboard
               </a>
-              <h1 className="text-3xl font-bold text-base-content">Client Intake</h1>
+              <h1 className="text-3xl font-bold text-base-content">
+                Client Intake
+              </h1>
               <p className="text-base-content/70 mt-1">
                 {isNewClient
                   ? "Create new client record"
                   : `Editing: ${
                       formData["Full Name"] ||
-                      `${formData["First Name"] || ""} ${formData["Last Name"] || ""}`.trim()
+                      `${formData["First Name"] || ""} ${
+                        formData["Last Name"] || ""
+                      }`.trim()
                     }`}
               </p>
             </div>
@@ -447,7 +505,9 @@ export default function ClientIntake() {
         {/* Search Existing Clients */}
         <div className="card bg-base-100 shadow-xl mb-8">
           <div className="card-body">
-            <h2 className="card-title text-base-content">Search Existing Clients</h2>
+            <h2 className="card-title text-base-content">
+              Search Existing Clients
+            </h2>
             <p className="text-base-content/60 text-sm">
               Search by name, email, phone, or last 4 digits of SSN
             </p>
@@ -486,10 +546,13 @@ export default function ClientIntake() {
                       <div>
                         <p className="font-semibold text-base-content">
                           {client.fields["Full Name"] ||
-                            `${client.fields["First Name"] || ""} ${client.fields["Last Name"] || ""}`.trim()}
+                            `${client.fields["First Name"] || ""} ${
+                              client.fields["Last Name"] || ""
+                            }`.trim()}
                         </p>
                         <p className="text-sm text-base-content/60">
-                          {client.fields["Email"]} • {client.fields["📞Phone number"]}
+                          {client.fields["Email"]} •{" "}
+                          {client.fields["📞Phone number"]}
                         </p>
                       </div>
                       <div className="text-sm text-base-content/60">
@@ -506,504 +569,1003 @@ export default function ClientIntake() {
         {/* Client Intake Form */}
         <div className="card bg-base-100 shadow-xl mb-8">
           <div className="card-body">
-            <h2 className="card-title text-base-content">Personal Information</h2>
+            <h2 className="card-title text-base-content">
+              Personal Information
+            </h2>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
-              {/* Tax Information Section */}
-              <div id="tax-info" className="col-span-2 scroll-mt-24">
-                <div className="h-1"></div>
-              </div>
-
-              {/* Tax Year */}
-              <div className="form-control">
-                <label className="label">
-                  <span className="label-text text-base-content/70">Tax Year *</span>
-                </label>
-                <input
-                  type="text"
-                  className="input input-bordered"
-                  value={formData["Tax Year"] || ""}
-                  onChange={(e) =>
-                    handleInputChange("Tax Year", e.target.value)
-                  }
-                />
-              </div>
-
-              {/* Filing Status */}
-              <div className="form-control">
-                <label className="label">
-                  <span className="label-text text-base-content/70">
-                    Filing Status *
-                  </span>
-                </label>
-                <select
-                  className="select select-bordered"
-                  value={formData["Filing Status"] || ""}
-                  onChange={(e) =>
-                    handleInputChange("Filing Status", e.target.value)
-                  }
-                >
-                  <option value="Single">Single</option>
-                  <option value="Married Filing Jointly">
-                    Married Filing Jointly
-                  </option>
-                  <option value="Married Filing Separately">
-                    Married Filing Separately
-                  </option>
-                  <option value="Head of Household">Head of Household</option>
-                  <option value="Qualifying Widow(er)">
-                    Qualifying Widow(er)
-                  </option>
-                </select>
-              </div>
-
-              {/* Primary Taxpayer Information */}
-              <div id="primary-taxpayer" className="col-span-2 scroll-mt-24">
-                <h3 className="text-xl font-semibold text-base-content mb-4 border-b border-base-300 pb-2">
-                  Primary Taxpayer
+            {/* Tax Information Section */}
+            <section id="tax-info" className="scroll-mt-24">
+              <div className="sticky top-0 z-10 -mx-4 md:mx-0 bg-base-100/80 backdrop-blur supports-[backdrop-filter]:bg-base-100/60">
+                <h3 className="text-xl md:text-2xl font-semibold text-base-content px-4 md:px-0 pt-3 pb-2 border-b border-base-300">
+                  📋 Tax Information
                 </h3>
               </div>
 
-              <div className="form-control">
-                <label className="label">
-                  <span className="label-text text-base-content/70">
-                    First Name *
-                  </span>
-                </label>
-                <input
-                  type="text"
-                  className="input input-bordered"
-                  value={formData["First Name"] || ""}
-                  onChange={(e) =>
-                    handleInputChange("First Name", e.target.value)
-                  }
-                />
-              </div>
-
-              <div className="form-control">
-                <label className="label">
-                  <span className="label-text text-base-content/70">
-                    Last Name *
-                  </span>
-                </label>
-                <input
-                  type="text"
-                  className="input input-bordered"
-                  value={formData["Last Name"] || ""}
-                  onChange={(e) =>
-                    handleInputChange("Last Name", e.target.value)
-                  }
-                />
-              </div>
-
-              <div className="form-control">
-                <label className="label">
-                  <span className="label-text text-base-content/70">
-                    Social Security Number *
-                  </span>
-                </label>
-                <input
-                  type="text"
-                  className="input input-bordered"
-                  placeholder="XXX-XX-XXXX"
-                  value={formData["SSN"] || ""}
-                  onChange={(e) => handleInputChange("SSN", e.target.value)}
-                />
-              </div>
-
-              <div className="form-control">
-                <label className="label">
-                  <span className="label-text text-base-content/70">
-                    Date of Birth *
-                  </span>
-                </label>
-                <input
-                  type="date"
-                  className="input input-bordered"
-                  value={formData["Date of Birth"] || ""}
-                  onChange={(e) =>
-                    handleInputChange("Date of Birth", e.target.value)
-                  }
-                />
-              </div>
-
-              <div className="form-control">
-                <label className="label">
-                  <span className="label-text text-base-content/70">Occupation</span>
-                </label>
-                <input
-                  type="text"
-                  className="input input-bordered"
-                  value={formData["Occupation"] || ""}
-                  onChange={(e) =>
-                    handleInputChange("Occupation", e.target.value)
-                  }
-                />
-              </div>
-
-              <div className="form-control">
-                <label className="label">
-                  <span className="label-text text-base-content/70">
-                    Driver's License / State ID
-                  </span>
-                </label>
-                <input
-                  type="text"
-                  className="input input-bordered"
-                  value={formData["Driver License"] || ""}
-                  onChange={(e) =>
-                    handleInputChange("Driver License", e.target.value)
-                  }
-                />
-              </div>
-
-              {/* Spouse Information */}
-              {(formData["Filing Status"] === "Married Filing Jointly" ||
-                formData["Filing Status"] === "Married Filing Separately") && (
-                <>
-                  <div id="spouse-info" className="col-span-2 scroll-mt-24">
-                    <h3 className="text-xl font-semibold text-base-content mb-4 mt-6 border-b border-base-300 pb-2">
-                      Spouse Information
-                    </h3>
-                  </div>
-
-                  <div className="form-control">
-                    <label className="label">
-                      <span className="label-text text-base-content/70">
-                        Spouse Full Name
+              <div className="card mt-4 border border-base-300 bg-base-100 shadow-sm">
+                <div className="card-body p-4 md:p-6">
+                  <form className="grid grid-cols-12 gap-4 md:gap-6">
+                    <div className="form-control col-span-12 md:col-span-6">
+                      <label className="label" htmlFor="taxYear">
+                        <span className="label-text text-base-content/70">
+                          Tax Year <span className="text-error">*</span>
+                        </span>
+                        <span className="label-text-alt text-base-content/50">
+                          required
+                        </span>
+                      </label>
+                      <input
+                        id="taxYear"
+                        type="text"
+                        className="input input-bordered w-full"
+                        value={formData["Tax Year"] || ""}
+                        onChange={(e) =>
+                          handleInputChange("Tax Year", e.target.value)
+                        }
+                      />
+                      <span className="label-text-alt opacity-60 mt-1">
+                        Enter the tax year for this return
                       </span>
-                    </label>
-                    <input
-                      type="text"
-                      className="input input-bordered"
-                      value={formData["Spouse Name"] || ""}
-                      onChange={(e) =>
-                        handleInputChange("Spouse Name", e.target.value)
-                      }
-                    />
-                  </div>
+                    </div>
 
-                  <div className="form-control">
-                    <label className="label">
-                      <span className="label-text text-base-content/70">
-                        Spouse SSN
+                    <div className="form-control col-span-12 md:col-span-6">
+                      <label className="label" htmlFor="filingStatus">
+                        <span className="label-text text-base-content/70">
+                          Filing Status <span className="text-error">*</span>
+                        </span>
+                        <span className="label-text-alt text-base-content/50">
+                          required
+                        </span>
+                      </label>
+                      <select
+                        id="filingStatus"
+                        className="select select-bordered w-full"
+                        value={formData["Filing Status"] || ""}
+                        onChange={(e) =>
+                          handleInputChange("Filing Status", e.target.value)
+                        }
+                      >
+                        <option value="Single">Single</option>
+                        <option value="Married Filing Jointly">
+                          Married Filing Jointly
+                        </option>
+                        <option value="Married Filing Separately">
+                          Married Filing Separately
+                        </option>
+                        <option value="Head of Household">Head of Household</option>
+                        <option value="Qualifying Widow(er)">
+                          Qualifying Widow(er)
+                        </option>
+                      </select>
+                      <span className="label-text-alt opacity-60 mt-1">
+                        Select your filing status
                       </span>
-                    </label>
-                    <input
-                      type="text"
-                      className="input input-bordered"
-                      placeholder="XXX-XX-XXXX"
-                      value={formData["Spouse SSN"] || ""}
-                      onChange={(e) =>
-                        handleInputChange("Spouse SSN", e.target.value)
-                      }
-                    />
-                  </div>
+                    </div>
 
-                  <div className="form-control">
-                    <label className="label">
-                      <span className="label-text text-base-content/70">
-                        Spouse Date of Birth
-                      </span>
-                    </label>
-                    <input
-                      type="date"
-                      className="input input-bordered"
-                      value={formData["Spouse DOB"] || ""}
-                      onChange={(e) =>
-                        handleInputChange("Spouse DOB", e.target.value)
-                      }
-                    />
-                  </div>
+                    <div className="col-span-12 flex items-center justify-end gap-2 pt-2">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await handleSave();
+                          scrollToSection('primary-taxpayer');
+                        }}
+                        className="btn btn-primary"
+                        disabled={saving}
+                      >
+                        {saving ? 'Saving...' : 'Save & Continue'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            </section>
 
-                  <div className="form-control">
-                    <label className="label">
-                      <span className="label-text text-base-content/70">
-                        Spouse Occupation
-                      </span>
-                    </label>
-                    <input
-                      type="text"
-                      className="input input-bordered"
-                      value={formData["Spouse Occupation"] || ""}
-                      onChange={(e) =>
-                        handleInputChange("Spouse Occupation", e.target.value)
-                      }
-                    />
-                  </div>
+            {/* Primary Taxpayer Information */}
+              <section id="primary-taxpayer" className="scroll-mt-24">
+                <div className="sticky top-0 z-10 -mx-4 md:mx-0 bg-base-100/80 backdrop-blur supports-[backdrop-filter]:bg-base-100/60">
+                  <h3 className="text-xl md:text-2xl font-semibold text-base-content px-4 md:px-0 pt-3 pb-2 border-b border-base-300">
+                    Primary Taxpayer
+                  </h3>
+                </div>
 
-                  <div className="form-control">
-                    <label className="label">
-                      <span className="label-text text-base-content/70">
-                        Spouse Driver's License
-                      </span>
-                    </label>
-                    <input
-                      type="text"
-                      className="input input-bordered"
-                      value={formData["Spouse Driver License"] || ""}
-                      onChange={(e) =>
-                        handleInputChange(
-                          "Spouse Driver License",
-                          e.target.value
-                        )
-                      }
-                    />
-                  </div>
-                </>
-              )}
+                <div className="card mt-4 border border-base-300 bg-base-100 shadow-sm">
+                  <div className="card-body p-4 md:p-6">
+                    <form className="grid grid-cols-12 gap-4 md:gap-6">
+                      <div className="form-control col-span-12 md:col-span-6">
+                        <label className="label" htmlFor="firstName">
+                          <span className="label-text text-base-content/70">
+                            First Name <span className="text-error">*</span>
+                          </span>
+                          <span className="label-text-alt text-base-content/50">
+                            as on ID
+                          </span>
+                        </label>
+                        <input
+                          id="firstName"
+                          type="text"
+                          className="input input-bordered w-full"
+                          value={formData["First Name"] || ""}
+                          onChange={(e) =>
+                            handleInputChange("First Name", e.target.value)
+                          }
+                        />
+                        <span className="label-text-alt opacity-60 mt-1">
+                          Enter legal first name
+                        </span>
+                      </div>
 
-              {/* Contact Information */}
-              <div id="contact-info" className="col-span-2 scroll-mt-24">
-                <h3 className="text-xl font-semibold text-base-content mb-4 mt-6 border-b border-base-300 pb-2">
-                  Contact Information
+                      <div className="form-control col-span-12 md:col-span-6">
+                        <label className="label" htmlFor="lastName">
+                          <span className="label-text text-base-content/70">
+                            Last Name <span className="text-error">*</span>
+                          </span>
+                          <span className="label-text-alt text-base-content/50">
+                            required
+                          </span>
+                        </label>
+                        <input
+                          id="lastName"
+                          type="text"
+                          className="input input-bordered w-full"
+                          value={formData["Last Name"] || ""}
+                          onChange={(e) =>
+                            handleInputChange("Last Name", e.target.value)
+                          }
+                        />
+                        <span className="label-text-alt opacity-60 mt-1">
+                          Surname / family name
+                        </span>
+                      </div>
+
+                      <div className="divider col-span-12 my-1"></div>
+
+                      <div className="form-control col-span-12 md:col-span-6">
+                        <label className="label" htmlFor="ssn">
+                          <span className="label-text text-base-content/70">
+                            Social Security Number{" "}
+                            <span className="text-error">*</span>
+                          </span>
+                          <span className="label-text-alt text-base-content/50">
+                            Format: 123-45-6789
+                          </span>
+                        </label>
+                        <input
+                          id="ssn"
+                          type="text"
+                          className="input input-bordered w-full tracking-wider"
+                          placeholder="XXX-XX-XXXX"
+                          value={formData.SSN || ""}
+                          onChange={(e) =>
+                            handleInputChange("SSN", formatSSN(e.target.value))
+                          }
+                        />
+                        <span className="label-text-alt opacity-60 mt-1">
+                          We only use this for tax filing
+                        </span>
+                      </div>
+
+                      <div className="form-control col-span-12 md:col-span-6">
+                        <label className="label" htmlFor="dob">
+                          <span className="label-text text-base-content/70">
+                            Date of Birth <span className="text-error">*</span>
+                          </span>
+                          <span className="label-text-alt text-base-content/50">
+                            MM/DD/YYYY
+                          </span>
+                        </label>
+                        <input
+                          id="dob"
+                          type="date"
+                          className="input input-bordered w-full"
+                          value={formData["Date of Birth"] || ""}
+                          onChange={(e) =>
+                            handleInputChange("Date of Birth", e.target.value)
+                          }
+                        />
+                        <span className="label-text-alt opacity-60 mt-1">
+                          Required for eligibility checks
+                        </span>
+                      </div>
+
+                      <div className="divider col-span-12 my-1"></div>
+
+                      <div className="form-control col-span-12 md:col-span-6">
+                        <label className="label" htmlFor="occupation">
+                          <span className="label-text text-base-content/70">
+                            Occupation
+                          </span>
+                          <span className="label-text-alt text-base-content/50">
+                            optional
+                          </span>
+                        </label>
+                        <input
+                          id="occupation"
+                          type="text"
+                          className="input input-bordered w-full"
+                          value={formData.Occupation || ""}
+                          onChange={(e) =>
+                            handleInputChange("Occupation", e.target.value)
+                          }
+                        />
+                        <span className="label-text-alt opacity-60 mt-1">
+                          Used for certain credits/deductions
+                        </span>
+                      </div>
+
+                      <div className="form-control col-span-12 md:col-span-6">
+                        <label className="label" htmlFor="dl">
+                          <span className="label-text text-base-content/70">
+                            Driver's License / State ID
+                          </span>
+                          <span className="label-text-alt text-base-content/50">
+                            optional
+                          </span>
+                        </label>
+                        <div className="join w-full">
+                          <input
+                            id="dl"
+                            type="text"
+                            className="input input-bordered join-item w-full uppercase"
+                            value={formData["Driver License"] || ""}
+                            onChange={(e) =>
+                              handleInputChange(
+                                "Driver License",
+                                e.target.value.toUpperCase()
+                              )
+                            }
+                          />
+                          <button
+                            type="button"
+                            className="btn btn-ghost join-item tooltip"
+                            data-tip="Why we ask"
+                            onClick={() =>
+                              alert(
+                                "We use ID to e-file in some states and prevent identity theft."
+                              )
+                            }
+                          >
+                            ?
+                          </button>
+                        </div>
+                        <span className="label-text-alt opacity-60 mt-1">
+                          Uppercased automatically
+                        </span>
+                      </div>
+
+                      <div className="col-span-12">
+                        <div className="alert bg-base-200/60 border border-base-300">
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 24 24"
+                            fill="currentColor"
+                            className="w-5 h-5"
+                          >
+                            <path
+                              fillRule="evenodd"
+                              d="M11.484 2.394a.75.75 0 0 1 1.032 0l8.25 7.875a.75.75 0 1 1-1.032 1.088L12 3.987 4.266 11.357a.75.75 0 1 1-1.032-1.088l8.25-7.875Zm.516 5.106a.75.75 0 0 1 .75.75v7.5a.75.75 0 0 1-1.5 0v-7.5a.75.75 0 0 1 .75-.75ZM12 19.5a1.125 1.125 0 1 0 0 2.25 1.125 1.125 0 0 0 0-2.25Z"
+                              clipRule="evenodd"
+                            />
+                          </svg>
+                          <div>
+                            <h4 className="font-medium">
+                              Your information is encrypted.
+                            </h4>
+                            <p className="text-sm opacity-70">
+                              We follow industry standards and never share your
+                              SSN or ID outside your return.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="col-span-12 flex items-center justify-end gap-2 pt-2">
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            await handleSave();
+                            const nextSection = (formData["Filing Status"] === "Married Filing Jointly" ||
+                                               formData["Filing Status"] === "Married Filing Separately")
+                              ? 'spouse-info'
+                              : 'contact-info';
+                            scrollToSection(nextSection);
+                          }}
+                          className="btn btn-primary"
+                          disabled={saving}
+                        >
+                          {saving ? 'Saving...' : 'Save & Continue'}
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              </section>
+
+            {/* Spouse Information */}
+            {(formData["Filing Status"] === "Married Filing Jointly" ||
+              formData["Filing Status"] === "Married Filing Separately") && (
+              <section id="spouse-info" className="scroll-mt-24">
+                <div className="sticky top-0 z-10 -mx-4 md:mx-0 bg-base-100/80 backdrop-blur supports-[backdrop-filter]:bg-base-100/60">
+                  <h3 className="text-xl md:text-2xl font-semibold text-base-content px-4 md:px-0 pt-3 pb-2 border-b border-base-300">
+                    💑 Spouse Information
+                  </h3>
+                </div>
+
+                <div className="card mt-4 border border-base-300 bg-base-100 shadow-sm">
+                  <div className="card-body p-4 md:p-6">
+                    <form className="grid grid-cols-12 gap-4 md:gap-6">
+                      <div className="form-control col-span-12">
+                        <label className="label" htmlFor="spouseName">
+                          <span className="label-text text-base-content/70">
+                            Spouse Full Name
+                          </span>
+                          <span className="label-text-alt text-base-content/50">
+                            optional
+                          </span>
+                        </label>
+                        <input
+                          id="spouseName"
+                          type="text"
+                          className="input input-bordered w-full"
+                          value={formData["Spouse Name"] || ""}
+                          onChange={(e) =>
+                            handleInputChange("Spouse Name", e.target.value)
+                          }
+                        />
+                        <span className="label-text-alt opacity-60 mt-1">
+                          Full legal name of spouse
+                        </span>
+                      </div>
+
+                      <div className="divider col-span-12 my-1"></div>
+
+                      <div className="form-control col-span-12 md:col-span-6">
+                        <label className="label" htmlFor="spouseSSN">
+                          <span className="label-text text-base-content/70">
+                            Spouse Social Security Number
+                          </span>
+                          <span className="label-text-alt text-base-content/50">
+                            Format: 123-45-6789
+                          </span>
+                        </label>
+                        <input
+                          id="spouseSSN"
+                          type="text"
+                          className="input input-bordered w-full tracking-wider"
+                          placeholder="XXX-XX-XXXX"
+                          value={formData["Spouse SSN"] || ""}
+                          onChange={(e) =>
+                            handleInputChange("Spouse SSN", formatSSN(e.target.value))
+                          }
+                        />
+                        <span className="label-text-alt opacity-60 mt-1">
+                          Required for joint filing
+                        </span>
+                      </div>
+
+                      <div className="form-control col-span-12 md:col-span-6">
+                        <label className="label" htmlFor="spouseDOB">
+                          <span className="label-text text-base-content/70">
+                            Spouse Date of Birth
+                          </span>
+                          <span className="label-text-alt text-base-content/50">
+                            MM/DD/YYYY
+                          </span>
+                        </label>
+                        <input
+                          id="spouseDOB"
+                          type="date"
+                          className="input input-bordered w-full"
+                          value={formData["Spouse DOB"] || ""}
+                          onChange={(e) =>
+                            handleInputChange("Spouse DOB", e.target.value)
+                          }
+                        />
+                        <span className="label-text-alt opacity-60 mt-1">
+                          Required for eligibility checks
+                        </span>
+                      </div>
+
+                      <div className="divider col-span-12 my-1"></div>
+
+                      <div className="form-control col-span-12 md:col-span-6">
+                        <label className="label" htmlFor="spouseOccupation">
+                          <span className="label-text text-base-content/70">
+                            Spouse Occupation
+                          </span>
+                          <span className="label-text-alt text-base-content/50">
+                            optional
+                          </span>
+                        </label>
+                        <input
+                          id="spouseOccupation"
+                          type="text"
+                          className="input input-bordered w-full"
+                          value={formData["Spouse Occupation"] || ""}
+                          onChange={(e) =>
+                            handleInputChange("Spouse Occupation", e.target.value)
+                          }
+                        />
+                        <span className="label-text-alt opacity-60 mt-1">
+                          Used for certain credits/deductions
+                        </span>
+                      </div>
+
+                      <div className="form-control col-span-12 md:col-span-6">
+                        <label className="label" htmlFor="spouseDL">
+                          <span className="label-text text-base-content/70">
+                            Spouse Driver's License / State ID
+                          </span>
+                          <span className="label-text-alt text-base-content/50">
+                            optional
+                          </span>
+                        </label>
+                        <input
+                          id="spouseDL"
+                          type="text"
+                          className="input input-bordered w-full uppercase"
+                          value={formData["Spouse Driver License"] || ""}
+                          onChange={(e) =>
+                            handleInputChange(
+                              "Spouse Driver License",
+                              e.target.value.toUpperCase()
+                            )
+                          }
+                        />
+                        <span className="label-text-alt opacity-60 mt-1">
+                          Uppercased automatically
+                        </span>
+                      </div>
+
+                      <div className="col-span-12 flex items-center justify-end gap-2 pt-2">
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            await handleSave();
+                            scrollToSection('contact-info');
+                          }}
+                          className="btn btn-primary"
+                          disabled={saving}
+                        >
+                          {saving ? 'Saving...' : 'Save & Continue'}
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              </section>
+            )}
+
+            {/* Contact Information */}
+            <section id="contact-info" className="scroll-mt-24">
+              <div className="sticky top-0 z-10 -mx-4 md:mx-0 bg-base-100/80 backdrop-blur supports-[backdrop-filter]:bg-base-100/60">
+                <h3 className="text-xl md:text-2xl font-semibold text-base-content px-4 md:px-0 pt-3 pb-2 border-b border-base-300">
+                  📞 Contact Information
                 </h3>
               </div>
 
-              <div className="form-control col-span-2">
-                <label className="label">
-                  <span className="label-text text-base-content/70">
-                    Mailing Address *
-                  </span>
-                </label>
-                <input
-                  type="text"
-                  className="input input-bordered"
-                  value={formData["Mailing Address"] || ""}
-                  onChange={(e) =>
-                    handleInputChange("Mailing Address", e.target.value)
-                  }
-                />
-              </div>
+              <div className="card mt-4 border border-base-300 bg-base-100 shadow-sm">
+                <div className="card-body p-4 md:p-6">
+                  <form className="grid grid-cols-12 gap-4 md:gap-6">
+                    <div className="form-control col-span-12">
+                      <label className="label" htmlFor="mailingAddress">
+                        <span className="label-text text-base-content/70">
+                          Mailing Address <span className="text-error">*</span>
+                        </span>
+                        <span className="label-text-alt text-base-content/50">
+                          required
+                        </span>
+                      </label>
+                      <input
+                        id="mailingAddress"
+                        type="text"
+                        className="input input-bordered w-full"
+                        value={formData["Mailing Address"] || ""}
+                        onChange={(e) =>
+                          handleInputChange("Mailing Address", e.target.value)
+                        }
+                      />
+                      <span className="label-text-alt opacity-60 mt-1">
+                        Street address, apartment, suite, etc.
+                      </span>
+                    </div>
 
-              <div className="form-control">
-                <label className="label">
-                  <span className="label-text text-base-content/70">City *</span>
-                </label>
-                <input
-                  type="text"
-                  className="input input-bordered"
-                  value={formData["City"] || ""}
-                  onChange={(e) => handleInputChange("City", e.target.value)}
-                />
-              </div>
+                    <div className="form-control col-span-12 md:col-span-5">
+                      <label className="label" htmlFor="city">
+                        <span className="label-text text-base-content/70">
+                          City <span className="text-error">*</span>
+                        </span>
+                        <span className="label-text-alt text-base-content/50">
+                          required
+                        </span>
+                      </label>
+                      <input
+                        id="city"
+                        type="text"
+                        className="input input-bordered w-full"
+                        value={formData["City"] || ""}
+                        onChange={(e) => handleInputChange("City", e.target.value)}
+                      />
+                    </div>
 
-              <div className="form-control">
-                <label className="label">
-                  <span className="label-text text-base-content/70">State *</span>
-                </label>
-                <input
-                  type="text"
-                  className="input input-bordered"
-                  placeholder="e.g., CA"
-                  value={formData["State"] || ""}
-                  onChange={(e) => handleInputChange("State", e.target.value)}
-                />
-              </div>
+                    <div className="form-control col-span-12 md:col-span-3">
+                      <label className="label" htmlFor="state">
+                        <span className="label-text text-base-content/70">
+                          State <span className="text-error">*</span>
+                        </span>
+                        <span className="label-text-alt text-base-content/50">
+                          2-letter code
+                        </span>
+                      </label>
+                      <input
+                        id="state"
+                        type="text"
+                        className="input input-bordered w-full uppercase"
+                        placeholder="CA"
+                        maxLength={2}
+                        value={formData["State"] || ""}
+                        onChange={(e) => handleInputChange("State", e.target.value.toUpperCase())}
+                      />
+                    </div>
 
-              <div className="form-control">
-                <label className="label">
-                  <span className="label-text text-base-content/70">ZIP Code *</span>
-                </label>
-                <input
-                  type="text"
-                  className="input input-bordered"
-                  value={formData["ZIP"] || ""}
-                  onChange={(e) => handleInputChange("ZIP", e.target.value)}
-                />
-              </div>
+                    <div className="form-control col-span-12 md:col-span-4">
+                      <label className="label" htmlFor="zip">
+                        <span className="label-text text-base-content/70">
+                          ZIP Code <span className="text-error">*</span>
+                        </span>
+                        <span className="label-text-alt text-base-content/50">
+                          5-digit code
+                        </span>
+                      </label>
+                      <input
+                        id="zip"
+                        type="text"
+                        className="input input-bordered w-full"
+                        maxLength={5}
+                        value={formData["ZIP"] || ""}
+                        onChange={(e) => handleInputChange("ZIP", e.target.value)}
+                      />
+                    </div>
 
-              <div className="form-control">
-                <label className="label">
-                  <span className="label-text text-base-content/70">
-                    Primary Phone *
-                  </span>
-                </label>
-                <input
-                  type="tel"
-                  className="input input-bordered"
-                  value={formData["📞Phone number"] || ""}
-                  onChange={(e) => handleInputChange("📞Phone number", e.target.value)}
-                />
-              </div>
+                    <div className="divider col-span-12 my-1"></div>
 
-              <div className="form-control">
-                <label className="label">
-                  <span className="label-text text-base-content/70">
-                    Secondary Phone
-                  </span>
-                </label>
-                <input
-                  type="tel"
-                  className="input input-bordered"
-                  value={formData["Secondary Phone"] || ""}
-                  onChange={(e) =>
-                    handleInputChange("Secondary Phone", e.target.value)
-                  }
-                />
-              </div>
+                    <div className="form-control col-span-12 md:col-span-6">
+                      <label className="label" htmlFor="primaryPhone">
+                        <span className="label-text text-base-content/70">
+                          Primary Phone <span className="text-error">*</span>
+                        </span>
+                        <span className="label-text-alt text-base-content/50">
+                          required
+                        </span>
+                      </label>
+                      <input
+                        id="primaryPhone"
+                        type="tel"
+                        className="input input-bordered w-full"
+                        placeholder="(555) 123-4567"
+                        value={formData["📞Phone number"] || ""}
+                        onChange={(e) =>
+                          handleInputChange("📞Phone number", formatPhoneNumber(e.target.value))
+                        }
+                      />
+                      <span className="label-text-alt opacity-60 mt-1">
+                        Best number to reach you
+                      </span>
+                    </div>
 
-              <div className="form-control">
-                <label className="label">
-                  <span className="label-text text-base-content/70">
-                    Email Address *
-                  </span>
-                </label>
-                <input
-                  type="email"
-                  className="input input-bordered"
-                  value={formData["Email"] || ""}
-                  onChange={(e) => handleInputChange("Email", e.target.value)}
-                />
-              </div>
+                    <div className="form-control col-span-12 md:col-span-6">
+                      <label className="label" htmlFor="secondaryPhone">
+                        <span className="label-text text-base-content/70">
+                          Secondary Phone
+                        </span>
+                        <span className="label-text-alt text-base-content/50">
+                          optional
+                        </span>
+                      </label>
+                      <input
+                        id="secondaryPhone"
+                        type="tel"
+                        className="input input-bordered w-full"
+                        placeholder="(555) 123-4567"
+                        value={formData["Secondary Phone"] || ""}
+                        onChange={(e) =>
+                          handleInputChange("Secondary Phone", formatPhoneNumber(e.target.value))
+                        }
+                      />
+                      <span className="label-text-alt opacity-60 mt-1">
+                        Alternative contact number
+                      </span>
+                    </div>
 
-              <div className="form-control">
-                <label className="label">
-                  <span className="label-text text-base-content/70">
-                    Preferred Contact Method
-                  </span>
-                </label>
-                <select
-                  className="select select-bordered"
-                  value={formData["Preferred Contact"] || ""}
-                  onChange={(e) =>
-                    handleInputChange("Preferred Contact", e.target.value)
-                  }
-                >
-                  <option value="Phone">Phone</option>
-                  <option value="Email">Email</option>
-                  <option value="Text">Text</option>
-                </select>
-              </div>
+                    <div className="form-control col-span-12 md:col-span-6">
+                      <label className="label" htmlFor="email">
+                        <span className="label-text text-base-content/70">
+                          Email Address <span className="text-error">*</span>
+                        </span>
+                        <span className="label-text-alt text-base-content/50">
+                          required
+                        </span>
+                      </label>
+                      <input
+                        id="email"
+                        type="email"
+                        className="input input-bordered w-full"
+                        placeholder="your@email.com"
+                        value={formData["Email"] || ""}
+                        onChange={(e) => handleInputChange("Email", e.target.value)}
+                      />
+                      <span className="label-text-alt opacity-60 mt-1">
+                        For document delivery and updates
+                      </span>
+                    </div>
 
-              {/* Bank Information */}
-              <div id="bank-info" className="col-span-2 scroll-mt-24">
-                <h3 className="text-xl font-semibold text-base-content mb-4 mt-6 border-b border-base-300 pb-2">
-                  Bank Information (for Direct Deposit/Withdrawal)
+                    <div className="form-control col-span-12 md:col-span-6">
+                      <label className="label" htmlFor="preferredContact">
+                        <span className="label-text text-base-content/70">
+                          Preferred Contact Method
+                        </span>
+                        <span className="label-text-alt text-base-content/50">
+                          optional
+                        </span>
+                      </label>
+                      <select
+                        id="preferredContact"
+                        className="select select-bordered w-full"
+                        value={formData["Preferred Contact"] || ""}
+                        onChange={(e) =>
+                          handleInputChange("Preferred Contact", e.target.value)
+                        }
+                      >
+                        <option value="Phone">Phone</option>
+                        <option value="Email">Email</option>
+                        <option value="Text">Text</option>
+                      </select>
+                      <span className="label-text-alt opacity-60 mt-1">
+                        How would you like us to reach you?
+                      </span>
+                    </div>
+
+                    <div className="col-span-12 flex items-center justify-end gap-2 pt-2">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await handleSave();
+                          scrollToSection('bank-info');
+                        }}
+                        className="btn btn-primary"
+                        disabled={saving}
+                      >
+                        {saving ? 'Saving...' : 'Save & Continue'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            </section>
+
+            {/* Bank Information */}
+            <section id="bank-info" className="scroll-mt-24">
+              <div className="sticky top-0 z-10 -mx-4 md:mx-0 bg-base-100/80 backdrop-blur supports-[backdrop-filter]:bg-base-100/60">
+                <h3 className="text-xl md:text-2xl font-semibold text-base-content px-4 md:px-0 pt-3 pb-2 border-b border-base-300">
+                  🏦 Bank Information
                 </h3>
               </div>
 
-              <div className="form-control">
-                <label className="label">
-                  <span className="label-text text-base-content/70">Bank Name</span>
-                </label>
-                <input
-                  type="text"
-                  className="input input-bordered"
-                  value={formData["Bank Name"] || ""}
-                  onChange={(e) =>
-                    handleInputChange("Bank Name", e.target.value)
-                  }
-                />
-              </div>
+              <div className="card mt-4 border border-base-300 bg-base-100 shadow-sm">
+                <div className="card-body p-4 md:p-6">
+                  <div className="alert bg-info/10 border border-info/20 mb-4">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 24 24"
+                      fill="currentColor"
+                      className="w-5 h-5"
+                    >
+                      <path
+                        fillRule="evenodd"
+                        d="M11.484 2.394a.75.75 0 0 1 1.032 0l8.25 7.875a.75.75 0 1 1-1.032 1.088L12 3.987 4.266 11.357a.75.75 0 1 1-1.032-1.088l8.25-7.875Zm.516 5.106a.75.75 0 0 1 .75.75v7.5a.75.75 0 0 1-1.5 0v-7.5a.75.75 0 0 1 .75-.75ZM12 19.5a1.125 1.125 0 1 0 0 2.25 1.125 1.125 0 0 0 0-2.25Z"
+                        clipRule="evenodd"
+                      />
+                    </svg>
+                    <div>
+                      <h4 className="font-medium text-sm">For Direct Deposit/Withdrawal</h4>
+                      <p className="text-xs opacity-70">
+                        This information is used for refund direct deposit or tax payment withdrawal
+                      </p>
+                    </div>
+                  </div>
 
-              <div className="form-control">
-                <label className="label">
-                  <span className="label-text text-base-content/70">
-                    Routing Number
-                  </span>
-                </label>
-                <input
-                  type="text"
-                  className="input input-bordered"
-                  value={formData["Routing Number"] || ""}
-                  onChange={(e) =>
-                    handleInputChange("Routing Number", e.target.value)
-                  }
-                />
-              </div>
+                  <form className="grid grid-cols-12 gap-4 md:gap-6">
+                    <div className="form-control col-span-12 md:col-span-6">
+                      <label className="label" htmlFor="bankName">
+                        <span className="label-text text-base-content/70">
+                          Bank Name
+                        </span>
+                        <span className="label-text-alt text-base-content/50">
+                          optional
+                        </span>
+                      </label>
+                      <input
+                        id="bankName"
+                        type="text"
+                        className="input input-bordered w-full"
+                        placeholder="e.g., Chase, Bank of America"
+                        value={formData["Bank Name"] || ""}
+                        onChange={(e) =>
+                          handleInputChange("Bank Name", e.target.value)
+                        }
+                      />
+                      <span className="label-text-alt opacity-60 mt-1">
+                        Name of your bank
+                      </span>
+                    </div>
 
-              <div className="form-control">
-                <label className="label">
-                  <span className="label-text text-base-content/70">
-                    Account Number
-                  </span>
-                </label>
-                <input
-                  type="text"
-                  className="input input-bordered"
-                  value={formData["Account Number"] || ""}
-                  onChange={(e) =>
-                    handleInputChange("Account Number", e.target.value)
-                  }
-                />
-              </div>
+                    <div className="form-control col-span-12 md:col-span-6">
+                      <label className="label" htmlFor="accountType">
+                        <span className="label-text text-base-content/70">
+                          Account Type
+                        </span>
+                        <span className="label-text-alt text-base-content/50">
+                          optional
+                        </span>
+                      </label>
+                      <select
+                        id="accountType"
+                        className="select select-bordered w-full"
+                        value={formData["Account Type"] || ""}
+                        onChange={(e) =>
+                          handleInputChange("Account Type", e.target.value)
+                        }
+                      >
+                        <option value="Checking">Checking</option>
+                        <option value="Savings">Savings</option>
+                      </select>
+                      <span className="label-text-alt opacity-60 mt-1">
+                        Type of account
+                      </span>
+                    </div>
 
-              <div className="form-control">
-                <label className="label">
-                  <span className="label-text text-base-content/70">Account Type</span>
-                </label>
-                <select
-                  className="select select-bordered"
-                  value={formData["Account Type"] || ""}
-                  onChange={(e) =>
-                    handleInputChange("Account Type", e.target.value)
-                  }
-                >
-                  <option value="Checking">Checking</option>
-                  <option value="Savings">Savings</option>
-                </select>
-              </div>
+                    <div className="divider col-span-12 my-1"></div>
 
-              {/* Prior Year Information */}
-              <div id="prior-year" className="col-span-2 scroll-mt-24">
-                <h3 className="text-xl font-semibold text-base-content mb-4 mt-6 border-b border-base-300 pb-2">
-                  Prior Year Information
+                    <div className="form-control col-span-12 md:col-span-6">
+                      <label className="label" htmlFor="routingNumber">
+                        <span className="label-text text-base-content/70">
+                          Routing Number
+                        </span>
+                        <span className="label-text-alt text-base-content/50">
+                          9 digits
+                        </span>
+                      </label>
+                      <input
+                        id="routingNumber"
+                        type="text"
+                        className="input input-bordered w-full tracking-wider"
+                        placeholder="000000000"
+                        maxLength={9}
+                        value={formData["Routing Number"] || ""}
+                        onChange={(e) =>
+                          handleInputChange("Routing Number", e.target.value)
+                        }
+                      />
+                      <span className="label-text-alt opacity-60 mt-1">
+                        Found on bottom of check
+                      </span>
+                    </div>
+
+                    <div className="form-control col-span-12 md:col-span-6">
+                      <label className="label" htmlFor="accountNumber">
+                        <span className="label-text text-base-content/70">
+                          Account Number
+                        </span>
+                        <span className="label-text-alt text-base-content/50">
+                          optional
+                        </span>
+                      </label>
+                      <input
+                        id="accountNumber"
+                        type="text"
+                        className="input input-bordered w-full tracking-wider"
+                        placeholder="Enter account number"
+                        value={formData["Account Number"] || ""}
+                        onChange={(e) =>
+                          handleInputChange("Account Number", e.target.value)
+                        }
+                      />
+                      <span className="label-text-alt opacity-60 mt-1">
+                        Your bank account number
+                      </span>
+                    </div>
+
+                    <div className="col-span-12">
+                      <div className="alert bg-base-200/60 border border-base-300">
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          viewBox="0 0 24 24"
+                          fill="currentColor"
+                          className="w-5 h-5"
+                        >
+                          <path
+                            fillRule="evenodd"
+                            d="M12 1.5a5.25 5.25 0 0 0-5.25 5.25v3a3 3 0 0 0-3 3v6.75a3 3 0 0 0 3 3h10.5a3 3 0 0 0 3-3v-6.75a3 3 0 0 0-3-3v-3c0-2.9-2.35-5.25-5.25-5.25Zm3.75 8.25v-3a3.75 3.75 0 1 0-7.5 0v3h7.5Z"
+                            clipRule="evenodd"
+                          />
+                        </svg>
+                        <div>
+                          <h4 className="font-medium">Your banking details are secure.</h4>
+                          <p className="text-sm opacity-70">
+                            We use bank-level encryption and never share your account information.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="col-span-12 flex items-center justify-end gap-2 pt-2">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await handleSave();
+                          scrollToSection('prior-year');
+                        }}
+                        className="btn btn-primary"
+                        disabled={saving}
+                      >
+                        {saving ? 'Saving...' : 'Save & Continue'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            </section>
+
+            {/* Prior Year Information */}
+            <section id="prior-year" className="scroll-mt-24">
+              <div className="sticky top-0 z-10 -mx-4 md:mx-0 bg-base-100/80 backdrop-blur supports-[backdrop-filter]:bg-base-100/60">
+                <h3 className="text-xl md:text-2xl font-semibold text-base-content px-4 md:px-0 pt-3 pb-2 border-b border-base-300">
+                  📅 Prior Year Information
                 </h3>
               </div>
 
-              <div className="form-control">
-                <label className="label">
-                  <span className="label-text text-base-content/70">
-                    Prior Year AGI
-                  </span>
-                </label>
-                <input
-                  type="text"
-                  className="input input-bordered"
-                  placeholder="$"
-                  value={formData["Prior Year AGI"] || ""}
-                  onChange={(e) =>
-                    handleInputChange("Prior Year AGI", e.target.value)
-                  }
-                />
-              </div>
+              <div className="card mt-4 border border-base-300 bg-base-100 shadow-sm">
+                <div className="card-body p-4 md:p-6">
+                  <form className="grid grid-cols-12 gap-4 md:gap-6">
+                    <div className="form-control col-span-12 md:col-span-6">
+                      <label className="label" htmlFor="priorYearAGI">
+                        <span className="label-text text-base-content/70">
+                          Prior Year AGI
+                        </span>
+                        <span className="label-text-alt text-base-content/50">
+                          optional
+                        </span>
+                      </label>
+                      <input
+                        id="priorYearAGI"
+                        type="text"
+                        className="input input-bordered w-full"
+                        placeholder="$0"
+                        value={formData["Prior Year AGI"] || ""}
+                        onChange={(e) =>
+                          handleInputChange("Prior Year AGI", e.target.value)
+                        }
+                      />
+                      <span className="label-text-alt opacity-60 mt-1">
+                        Adjusted Gross Income from last year
+                      </span>
+                    </div>
 
-              <div className="form-control">
-                <label className="label">
-                  <span className="label-text text-base-content/70">
-                    Identity Protection PIN
-                  </span>
-                </label>
-                <input
-                  type="text"
-                  className="input input-bordered"
-                  value={formData["Identity Protection PIN"] || ""}
-                  onChange={(e) =>
-                    handleInputChange("Identity Protection PIN", e.target.value)
-                  }
-                />
-              </div>
+                    <div className="col-span-12 md:col-span-6">
+                      <div className="alert bg-info/10 border border-info/20 h-full flex items-center">
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          viewBox="0 0 24 24"
+                          fill="currentColor"
+                          className="w-5 h-5"
+                        >
+                          <path
+                            fillRule="evenodd"
+                            d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12Zm8.706-1.442c1.146-.573 2.437.463 2.126 1.706l-.709 2.836.042-.02a.75.75 0 0 1 .67 1.34l-.04.022c-1.147.573-2.438-.463-2.127-1.706l.71-2.836-.042.02a.75.75 0 1 1-.671-1.34l.041-.022ZM12 9a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Z"
+                            clipRule="evenodd"
+                          />
+                        </svg>
+                        <div>
+                          <p className="text-xs">
+                            Used to verify your identity with the IRS when e-filing
+                          </p>
+                        </div>
+                      </div>
+                    </div>
 
-              <div className="form-control">
-                <label className="label">
-                  <span className="label-text text-base-content/70">
-                    Spouse Identity Protection PIN
-                  </span>
-                </label>
-                <input
-                  type="text"
-                  className="input input-bordered"
-                  value={formData["Spouse Identity Protection PIN"] || ""}
-                  onChange={(e) =>
-                    handleInputChange(
-                      "Spouse Identity Protection PIN",
-                      e.target.value
-                    )
-                  }
-                />
+                    <div className="divider col-span-12 my-1"></div>
+
+                    <div className="form-control col-span-12 md:col-span-6">
+                      <label className="label" htmlFor="identityProtectionPIN">
+                        <span className="label-text text-base-content/70">
+                          Identity Protection PIN
+                        </span>
+                        <span className="label-text-alt text-base-content/50">
+                          optional
+                        </span>
+                      </label>
+                      <input
+                        id="identityProtectionPIN"
+                        type="text"
+                        className="input input-bordered w-full tracking-wider"
+                        placeholder="6-digit PIN"
+                        maxLength={6}
+                        value={formData["Identity Protection PIN"] || ""}
+                        onChange={(e) =>
+                          handleInputChange("Identity Protection PIN", e.target.value)
+                        }
+                      />
+                      <span className="label-text-alt opacity-60 mt-1">
+                        If issued by the IRS
+                      </span>
+                    </div>
+
+                    <div className="form-control col-span-12 md:col-span-6">
+                      <label className="label" htmlFor="spouseIdentityProtectionPIN">
+                        <span className="label-text text-base-content/70">
+                          Spouse Identity Protection PIN
+                        </span>
+                        <span className="label-text-alt text-base-content/50">
+                          optional
+                        </span>
+                      </label>
+                      <input
+                        id="spouseIdentityProtectionPIN"
+                        type="text"
+                        className="input input-bordered w-full tracking-wider"
+                        placeholder="6-digit PIN"
+                        maxLength={6}
+                        value={formData["Spouse Identity Protection PIN"] || ""}
+                        onChange={(e) =>
+                          handleInputChange(
+                            "Spouse Identity Protection PIN",
+                            e.target.value
+                          )
+                        }
+                      />
+                      <span className="label-text-alt opacity-60 mt-1">
+                        If issued by the IRS for spouse
+                      </span>
+                    </div>
+
+                    <div className="col-span-12">
+                      <div className="alert bg-warning/10 border border-warning/20">
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          viewBox="0 0 24 24"
+                          fill="currentColor"
+                          className="w-5 h-5"
+                        >
+                          <path
+                            fillRule="evenodd"
+                            d="M9.401 3.003c1.155-2 4.043-2 5.197 0l7.355 12.748c1.154 2-.29 4.5-2.599 4.5H4.645c-2.309 0-3.752-2.5-2.598-4.5L9.4 3.003ZM12 8.25a.75.75 0 0 1 .75.75v3.75a.75.75 0 0 1-1.5 0V9a.75.75 0 0 1 .75-.75Zm0 8.25a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Z"
+                            clipRule="evenodd"
+                          />
+                        </svg>
+                        <div>
+                          <h4 className="font-medium text-sm">About IP PINs</h4>
+                          <p className="text-xs opacity-70">
+                            The IRS issues Identity Protection PINs to victims of tax-related identity theft. If you have one, you must provide it to file electronically.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="col-span-12 flex items-center justify-end gap-2 pt-2">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await handleSave();
+                          scrollToSection('document-checklist');
+                        }}
+                        className="btn btn-primary"
+                        disabled={saving}
+                      >
+                        {saving ? 'Saving...' : 'Save & Continue'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
               </div>
-            </div>
+            </section>
 
             {/* Action Buttons */}
             <div className="card-actions justify-end mt-8 gap-4">
@@ -1039,9 +1601,14 @@ export default function ClientIntake() {
         {/* Document Checklist and Tax Prep Pipeline - Two Column Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
           {/* Document Checklist */}
-          <div id="document-checklist" className="card bg-base-100 shadow-xl scroll-mt-24">
+          <div
+            id="document-checklist"
+            className="card bg-base-100 shadow-xl scroll-mt-24"
+          >
             <div className="card-body">
-              <h2 className="card-title text-base-content mb-4">Document Checklist</h2>
+              <h2 className="card-title text-base-content mb-4">
+                Document Checklist
+              </h2>
               <p className="text-base-content/60 mb-6">
                 Track which documents have been received for this client's tax
                 return. In the future, this will link to the document management
@@ -1052,7 +1619,10 @@ export default function ClientIntake() {
           </div>
 
           {/* Tax Prep Pipeline */}
-          <div id="tax-prep-pipeline" className="card bg-base-100 shadow-xl scroll-mt-24">
+          <div
+            id="tax-prep-pipeline"
+            className="card bg-base-100 shadow-xl scroll-mt-24"
+          >
             <div className="card-body">
               <h2 className="card-title text-base-content mb-4">
                 📋 Tax Prep Pipeline ({pipelineClients.length} clients)
@@ -1072,7 +1642,8 @@ export default function ClientIntake() {
                   ></path>
                 </svg>
                 <span>
-                  Pipeline data is synced with Airtable Subscriptions Personal table.
+                  Pipeline data is synced with Airtable Subscriptions Personal
+                  table.
                 </span>
               </div>
               {pipelineClients.length > 0 ? (
@@ -1103,42 +1674,64 @@ export default function ClientIntake() {
                                 try {
                                   const response = await fetch(
                                     `/api/subscriptions-personal/${client.id}`,
-                                    { method: 'DELETE' }
+                                    { method: "DELETE" }
                                   );
 
                                   if (response.ok) {
                                     // Refresh pipeline from Airtable
-                                    const pipelineResponse = await fetch('/api/subscriptions-personal');
-                                    const pipelineData = await pipelineResponse.json();
+                                    const pipelineResponse = await fetch(
+                                      "/api/subscriptions-personal"
+                                    );
+                                    const pipelineData =
+                                      await pipelineResponse.json();
 
                                     if (pipelineData.success) {
-                                      const pipeline = pipelineData.data.map((record: any) => {
-                                        // Full Name is a lookup field in Subscriptions Personal
-                                        const fullName = record.fields['Full Name'];
-                                        const fullNameStr = Array.isArray(fullName) ? fullName[0] : fullName || '';
+                                      const pipeline = pipelineData.data.map(
+                                        (record: any) => {
+                                          // Full Name is a lookup field in Subscriptions Personal
+                                          const fullName =
+                                            record.fields["Full Name"];
+                                          const fullNameStr = Array.isArray(
+                                            fullName
+                                          )
+                                            ? fullName[0]
+                                            : fullName || "";
 
-                                        // Split Full Name into First Name and Last Name
-                                        const nameParts = fullNameStr.split(' ');
-                                        const firstName = nameParts[0] || '';
-                                        const lastName = nameParts.slice(1).join(' ') || '';
+                                          // Split Full Name into First Name and Last Name
+                                          const nameParts =
+                                            fullNameStr.split(" ");
+                                          const firstName = nameParts[0] || "";
+                                          const lastName =
+                                            nameParts.slice(1).join(" ") || "";
 
-                                        const phone = record.fields['Phone'] || record.fields['📞Phone number'] || '';
-                                        const phoneStr = Array.isArray(phone) ? phone[0] : phone;
+                                          const phone =
+                                            record.fields["Phone"] ||
+                                            record.fields["📞Phone number"] ||
+                                            "";
+                                          const phoneStr = Array.isArray(phone)
+                                            ? phone[0]
+                                            : phone;
 
-                                        return {
-                                          id: record.id,
-                                          firstName,
-                                          lastName,
-                                          phone: phoneStr,
-                                          addedAt: record.createdTime,
-                                        };
-                                      });
+                                          return {
+                                            id: record.id,
+                                            firstName,
+                                            lastName,
+                                            phone: phoneStr,
+                                            addedAt: record.createdTime,
+                                          };
+                                        }
+                                      );
                                       setPipelineClients(pipeline);
                                     }
                                   }
                                 } catch (error) {
-                                  console.error('Failed to remove from pipeline:', error);
-                                  setError('Failed to remove client from pipeline');
+                                  console.error(
+                                    "Failed to remove from pipeline:",
+                                    error
+                                  );
+                                  setError(
+                                    "Failed to remove client from pipeline"
+                                  );
                                   setTimeout(() => setError(null), 3000);
                                 }
                               }}
@@ -1153,7 +1746,8 @@ export default function ClientIntake() {
                 </div>
               ) : (
                 <div className="text-center text-base-content/60 py-8">
-                  No clients in pipeline yet. Add clients using the button above.
+                  No clients in pipeline yet. Add clients using the button
+                  above.
                 </div>
               )}
             </div>
