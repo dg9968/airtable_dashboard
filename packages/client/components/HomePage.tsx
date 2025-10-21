@@ -2,6 +2,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useSession } from 'next-auth/react';
 
 interface MenuItem {
   title: string;
@@ -9,44 +10,54 @@ interface MenuItem {
   href: string;
   icon: string;
   buttonClass: string;
+  requiresAuth?: boolean;
 }
 
 export default function HomePage() {
+  const { data: session } = useSession();
+  const userRole = (session?.user as any)?.role;
+  const isAuthorized = userRole === 'staff' || userRole === 'admin';
+
   const menuItems: MenuItem[] = [
     {
       title: "Airtable Dashboard",
       description: "Overview of all Airtable tables, records, and database statistics with detailed analytics",
       href: "/airtable-dashboard",
       icon: "📊",
-      buttonClass: "btn-primary"
+      buttonClass: "btn-primary",
+      requiresAuth: true
     },
     {
       title: "Client Intake",
       description: "Personal income tax client intake form with document checklist and client search functionality",
       href: "/client-intake",
       icon: "📋",
-      buttonClass: "btn-success"
+      buttonClass: "btn-success",
+      requiresAuth: true
     },
     {
       title: "Manage Contacts",
       description: "Link contacts to companies and manage work relationships with role, department, and contact information",
       href: "/manage-contacts",
       icon: "👥",
-      buttonClass: "btn-warning"
+      buttonClass: "btn-warning",
+      requiresAuth: true
     },
     {
       title: "View Display",
       description: "Display and configure any Airtable view with custom filters, sorting, and advanced options",
       href: "/view-display",
       icon: "👁️",
-      buttonClass: "btn-secondary"
+      buttonClass: "btn-secondary",
+      requiresAuth: true
     },
     {
       title: "Processor Billing",
       description: "View processor billing information, client distribution, and revenue analytics for bookkeeping services",
       href: "/processor-billing",
       icon: "💰",
-      buttonClass: "btn-accent"
+      buttonClass: "btn-accent",
+      requiresAuth: true
     },
     {
       title: "Training Videos",
@@ -56,6 +67,8 @@ export default function HomePage() {
       buttonClass: "btn-info"
     }
   ];
+
+  const visibleMenuItems = menuItems.filter(item => !item.requiresAuth || isAuthorized);
 
   return (
     <div className="min-h-screen">
@@ -83,18 +96,28 @@ export default function HomePage() {
             </p>
             
             <div className="flex flex-col sm:flex-row gap-4 justify-center mb-8">
-              <Link href="/airtable-dashboard" className="btn btn-accent btn-lg">
-                Get Started
-                <svg className="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                </svg>
-              </Link>
+              {isAuthorized && (
+                <Link href="/airtable-dashboard" className="btn btn-accent btn-lg">
+                  Get Started
+                  <svg className="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  </svg>
+                </Link>
+              )}
               <Link href="/training-videos" className="btn btn-outline btn-lg">
                 View Training
                 <svg className="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h8m2-10v.01M3 10v.01" />
                 </svg>
               </Link>
+              {!session && (
+                <Link href="/auth/signin" className="btn btn-accent btn-lg">
+                  Sign In
+                  <svg className="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+                  </svg>
+                </Link>
+              )}
             </div>
             
             <div className="alert bg-base-100/20 border-primary-content/30">
@@ -116,7 +139,7 @@ export default function HomePage() {
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            {menuItems.map((item, index) => (
+            {visibleMenuItems.map((item, index) => (
               <div key={index} className="card bg-base-100 shadow-xl hover:shadow-2xl transition-all duration-300 border border-base-300 hover:scale-105">
                 <div className="card-body text-center p-8">
                   <div className="text-6xl md:text-7xl mb-6 transform hover:scale-110 transition-transform duration-300">
@@ -241,12 +264,21 @@ export default function HomePage() {
           <p className="text-xl mb-8 opacity-90">
             Take control of your tax preparation business with our comprehensive management tools
           </p>
-          <Link href="/airtable-dashboard" className="btn btn-accent btn-lg">
-            Access Dashboard
-            <svg className="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-            </svg>
-          </Link>
+          {isAuthorized ? (
+            <Link href="/airtable-dashboard" className="btn btn-accent btn-lg">
+              Access Dashboard
+              <svg className="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+              </svg>
+            </Link>
+          ) : (
+            <Link href="/auth/signin" className="btn btn-accent btn-lg">
+              Sign In to Access
+              <svg className="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+              </svg>
+            </Link>
+          )}
         </div>
       </section>
     </div>
