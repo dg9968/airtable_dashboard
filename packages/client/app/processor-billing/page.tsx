@@ -2,11 +2,11 @@
 'use client';
 
 import { Suspense } from 'react';
-import { useRequireAuth } from '@/hooks/useAuth';
+import { useRequireRole } from '@/hooks/useAuth';
 import ProcessorBilling from '@/components/ProcessorBilling';
 
 export default function ProcessorBillingPage() {
-  const { session, status } = useRequireAuth();
+  const { session, status } = useRequireRole(['staff', 'admin']);
 
   if (status === 'loading') {
     return (
@@ -20,7 +20,13 @@ export default function ProcessorBillingPage() {
   }
 
   if (!session) {
-    return null; // Will redirect to signin
+    return null; // Will redirect
+  }
+
+  // Check authorization
+  const userRole = (session.user as any)?.role;
+  if (userRole !== 'staff' && userRole !== 'admin') {
+    return null;
   }
 
   return (

@@ -158,6 +158,9 @@ app.post("/", async (c) => {
       "last name first name",
     ];
 
+    // Fields that should be numbers in Airtable
+    const numericFields = ["Tax Year", "Prior Year AGI"];
+
     // Remove empty string values, undefined values, and computed fields
     // Airtable doesn't like empty strings for some field types
     const cleanedFields: Record<string, any> = {};
@@ -168,7 +171,15 @@ app.post("/", async (c) => {
       }
       // Skip empty values
       if (value !== "" && value !== undefined && value !== null) {
-        cleanedFields[key] = value;
+        // Convert numeric fields from string to number
+        if (numericFields.includes(key) && typeof value === "string") {
+          const numValue = parseFloat(value);
+          if (!isNaN(numValue)) {
+            cleanedFields[key] = numValue;
+          }
+        } else {
+          cleanedFields[key] = value;
+        }
       }
     }
 
@@ -228,6 +239,9 @@ app.patch("/:id", async (c) => {
       "last name first name",
     ];
 
+    // Fields that should be numbers in Airtable
+    const numericFields = ["Tax Year", "Prior Year AGI"];
+
     // Remove empty string values, undefined values, and computed fields
     // Airtable doesn't like empty strings for some field types
     const cleanedFields: Record<string, any> = {};
@@ -238,7 +252,15 @@ app.patch("/:id", async (c) => {
       }
       // Skip empty values
       if (value !== "" && value !== undefined && value !== null) {
-        cleanedFields[key] = value;
+        // Convert numeric fields from string to number
+        if (numericFields.includes(key) && typeof value === "string") {
+          const numValue = parseFloat(value);
+          if (!isNaN(numValue)) {
+            cleanedFields[key] = numValue;
+          }
+        } else {
+          cleanedFields[key] = value;
+        }
       }
     }
 

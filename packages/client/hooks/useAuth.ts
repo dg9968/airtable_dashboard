@@ -17,14 +17,22 @@ export function useRequireAuth(redirectUrl = '/auth/signin') {
   return { session, status }
 }
 
-export function useRequireRole(requiredRole: string, redirectUrl = '/') {
+export function useRequireRole(requiredRole: string | string[], redirectUrl = '/') {
   const { data: session, status } = useSession()
   const router = useRouter()
 
   useEffect(() => {
     if (status === 'loading') return
 
-    if (!session || (session.user as any)?.role !== requiredRole) {
+    if (!session) {
+      router.push('/auth/signin')
+      return
+    }
+
+    const userRole = (session.user as any)?.role
+    const allowedRoles = Array.isArray(requiredRole) ? requiredRole : [requiredRole]
+
+    if (!allowedRoles.includes(userRole)) {
       router.push(redirectUrl)
     }
   }, [session, status, router, requiredRole, redirectUrl])

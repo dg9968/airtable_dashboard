@@ -1,9 +1,9 @@
 'use client';
 
 import { useRequireRole } from '@/hooks/useAuth';
-import Dashboard from '@/components/Dashboard';
+import TaxPrepPipeline from '@/components/TaxPrepPipeline';
 
-export default function AirtableDashboardPage() {
+export default function TaxPrepPipelinePage() {
   const { session, status } = useRequireRole(['staff', 'admin']);
 
   if (status === 'loading') {
@@ -27,5 +27,5 @@ export default function AirtableDashboardPage() {
     return null;
   }
 
-  return <Dashboard />;
+  return <TaxPrepPipeline />;
 }

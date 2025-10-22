@@ -11,10 +11,20 @@ export default function ManageContactsPage() {
   const router = useRouter();
 
   useEffect(() => {
-    if (status === 'unauthenticated') {
+    if (status === 'loading') return;
+
+    if (!session) {
       router.push('/auth/signin');
+      return;
     }
-  }, [status, router]);
+
+    // Check if user has staff or admin role
+    const userRole = (session.user as any)?.role;
+    if (userRole !== 'staff' && userRole !== 'admin') {
+      router.push('/');
+      return;
+    }
+  }, [session, status, router]);
 
   if (status === 'loading') {
     return (
@@ -28,6 +38,12 @@ export default function ManageContactsPage() {
   }
 
   if (!session) {
+    return null;
+  }
+
+  // Check authorization
+  const userRole = (session.user as any)?.role;
+  if (userRole !== 'staff' && userRole !== 'admin') {
     return null;
   }
 

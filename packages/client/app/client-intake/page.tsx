@@ -1,9 +1,6 @@
-import ClientIntake from '@/components/ClientIntake';
+'use client';
 
-export const metadata = {
-  title: 'Client Intake | Tax Pro Operations',
-  description: 'Client intake and tax preparation checklist',
-};
+import ClientIntake from '@/components/ClientIntake';
 
 export default function ClientIntakePage() {
   return <ClientIntake />;
