@@ -381,6 +381,11 @@ export default function ClientIntake() {
       return;
     }
 
+    // TypeScript assertion - we've already checked these exist above
+    const validFirstName = firstName as string;
+    const validLastName = lastName || "";
+    const validPhone = phone as string;
+
     // If it's a new client, save it first
     if (isNewClient || !selectedClient?.id) {
       try {
@@ -425,7 +430,7 @@ export default function ClientIntake() {
         setTimeout(() => setSuccessMessage(null), 3000);
 
         // Continue with the pipeline addition using the new client ID
-        await addToPipelineWithId(newClient.id, firstName, lastName, phone);
+        await addToPipelineWithId(newClient.id, validFirstName, validLastName, validPhone);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to save client");
         setSaving(false);
@@ -434,7 +439,7 @@ export default function ClientIntake() {
     }
 
     // Client already exists, add to pipeline
-    await addToPipelineWithId(selectedClient.id, firstName, lastName, phone);
+    await addToPipelineWithId(selectedClient.id, validFirstName, validLastName, validPhone);
   };
 
   // Helper function to add client to pipeline with a given ID
