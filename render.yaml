@@ -24,3 +24,5 @@ services:
         sync: false  # Set this in Render dashboard
       - key: NEXTAUTH_URL
         value: https://airtable-dashboard.onrender.com
+      - key: NEXT_PUBLIC_API_URL
+        value: https://vault-api.onrender.com
