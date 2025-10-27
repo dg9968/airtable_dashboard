@@ -22,10 +22,7 @@ const auth = new GoogleAuth({
 const drive = google.drive({ version: 'v3', auth });
 
 // Initialize Airtable
-const airtable = new Airtable({
-  apiKey: process.env.AIRTABLE_PERSONAL_ACCESS_TOKEN,
-});
-const base = airtable.base(process.env.AIRTABLE_BASE_ID || '');
+import { getTable } from '../lib/airtable-service';
 const DOCUMENTS_TABLE = 'Documents';
 
 interface GoogleDriveFile {

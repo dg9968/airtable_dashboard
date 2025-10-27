@@ -5,15 +5,10 @@
 import { Hono } from 'hono';
 import { sign, verify } from 'hono/jwt';
 import { compare, hash } from 'bcryptjs';
-import Airtable from 'airtable';
+import { findRecordsByFilter, createRecords } from '../lib/airtable-service';
 
 const app = new Hono();
 
-const airtable = new Airtable({
-  apiKey: process.env.AIRTABLE_PERSONAL_ACCESS_TOKEN,
-});
-
-const base = airtable.base(process.env.AIRTABLE_BASE_ID || '');
 const USERS_TABLE = process.env.AIRTABLE_USERS_TABLE || 'Users';
 const JWT_SECRET = process.env.JWT_SECRET || process.env.NEXTAUTH_SECRET || 'default-secret-change-in-production';
 
@@ -28,11 +23,10 @@ interface User {
 
 async function getUserByEmail(email: string): Promise<User | null> {
   try {
-    const records = await base(USERS_TABLE)
-      .select({
-        filterByFormula: `LOWER({Email}) = LOWER('${email.replace(/'/g, "\\'")}')`
-      })
-      .firstPage();
+    const records = await findRecordsByFilter(
+      USERS_TABLE,
+      `LOWER({Email}) = LOWER('${email.replace(/'/g, "\\'")}')`
+    );
 
     if (records.length === 0) {
       return null;
@@ -191,7 +185,7 @@ app.post('/register', async (c) => {
 
     const passwordHash = await hash(password, 12);
 
-    const record = await base(USERS_TABLE).create([
+    const record = await createRecords(USERS_TABLE, [
       {
         fields: {
           Email: email,

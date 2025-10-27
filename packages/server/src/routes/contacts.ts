@@ -4,15 +4,10 @@
  */
 
 import { Hono } from 'hono';
-import Airtable from 'airtable';
+import { fetchRecords, findRecord } from '../lib/airtable-service';
 
 const app = new Hono();
 
-const airtable = new Airtable({
-  apiKey: process.env.AIRTABLE_PERSONAL_ACCESS_TOKEN,
-});
-
-const base = airtable.base(process.env.AIRTABLE_BASE_ID || '');
 const CONTACTS_TABLE = 'Personal'; // Using "Personal" table in Airtable
 
 /**
@@ -21,31 +16,23 @@ const CONTACTS_TABLE = 'Personal'; // Using "Personal" table in Airtable
  */
 app.get('/', async (c) => {
   try {
-    const contacts: any[] = [];
+    const records = await fetchRecords(CONTACTS_TABLE, { view: 'Grid view' });
 
-    await base(CONTACTS_TABLE)
-      .select({
-        view: 'Grid view' // Adjust based on your Airtable view
-        // Removed maxRecords to fetch all contacts
-      })
-      .eachPage((records, fetchNextPage) => {
-        records.forEach((record) => {
-          // Log first record to see actual field names
-          if (contacts.length === 0) {
-            console.log('Sample contact record fields:', Object.keys(record.fields));
-          }
+    const contacts = records.map((record, index) => {
+      // Log first record to see actual field names
+      if (index === 0) {
+        console.log('Sample contact record fields:', Object.keys(record.fields));
+      }
 
-          contacts.push({
-            id: record.id,
-            name: record.fields['Full Name'] || record.fields['Name'] || 'Unknown',
-            email: record.fields['Email'] || record.fields['Personal Email'],
-            phone: record.fields['📞Phone number'] || record.fields['Phone'] || record.fields['Personal Phone'],
-            type: record.fields['Type'] || record.fields['Contact Type'],
-            status: record.fields['Status'] || record.fields['❓Status'] || 'Active'
-          });
-        });
-        fetchNextPage();
-      });
+      return {
+        id: record.id,
+        name: record.fields['Full Name'] || record.fields['Name'] || 'Unknown',
+        email: record.fields['Email'] || record.fields['Personal Email'],
+        phone: record.fields['📞Phone number'] || record.fields['Phone'] || record.fields['Personal Phone'],
+        type: record.fields['Type'] || record.fields['Contact Type'],
+        status: record.fields['Status'] || record.fields['❓Status'] || 'Active'
+      };
+    });
 
     return c.json({
       success: true,
@@ -84,7 +71,7 @@ app.get('/', async (c) => {
 app.get('/:id', async (c) => {
   try {
     const id = c.req.param('id');
-    const record = await base(CONTACTS_TABLE).find(id);
+    const record = await findRecord(CONTACTS_TABLE, id);
 
     return c.json({
       success: true,

@@ -3,15 +3,9 @@
  */
 
 import { Hono } from 'hono';
-import Airtable from 'airtable';
+import { fetchRecords } from '../lib/airtable-service';
 
 const app = new Hono();
-
-const airtable = new Airtable({
-  apiKey: process.env.AIRTABLE_PERSONAL_ACCESS_TOKEN,
-});
-
-const base = airtable.base(process.env.AIRTABLE_BASE_ID || '');
 
 /**
  * GET /api/customer-subscriptions?customer=CustomerName
@@ -30,30 +24,25 @@ app.get('/', async (c) => {
 
     console.log(`Fetching subscriptions for customer: ${customerName}`);
 
-    const subscriptions: any[] = [];
+    const records = await fetchRecords('Subscriptions Corporate', {
+      view: 'Services by Client All',
+      filterByFormula: `SEARCH("${customerName} - ", {Name}) = 1`,
+      maxRecords: 100
+    });
 
-    await base('Subscriptions Corporate')
-      .select({
-        view: 'Services by Client All',
-        filterByFormula: `SEARCH("${customerName} - ", {Name}) = 1`,
-        maxRecords: 100
-      })
-      .eachPage((records, fetchNextPage) => {
-        records.forEach((record) => {
-          const subscriptionName = String(record.fields['Name'] || '');
-          const serviceName = subscriptionName.replace(customerName + ' - ', '');
+    const subscriptions = records.map((record) => {
+      const subscriptionName = String(record.fields['Name'] || '');
+      const serviceName = subscriptionName.replace(customerName + ' - ', '');
 
-          subscriptions.push({
-            id: record.id,
-            clientId: customerName,
-            serviceId: serviceName,
-            status: Array.isArray(record.fields['Status']) ? record.fields['Status'] : [],
-            price: Number(record.fields['Billing Amount']) || 0,
-            fields: record.fields
-          });
-        });
-        fetchNextPage();
-      });
+      return {
+        id: record.id,
+        clientId: customerName,
+        serviceId: serviceName,
+        status: Array.isArray(record.fields['Status']) ? record.fields['Status'] : [],
+        price: Number(record.fields['Billing Amount']) || 0,
+        fields: record.fields
+      };
+    });
 
     console.log(`Found ${subscriptions.length} subscriptions for ${customerName}`);
 

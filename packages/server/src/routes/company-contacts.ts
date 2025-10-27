@@ -4,15 +4,17 @@
  */
 
 import { Hono } from 'hono';
-import Airtable from 'airtable';
+import {
+  fetchRecords,
+  findRecord,
+  createRecords,
+  updateRecords,
+  deleteRecords,
+  getTable
+} from '../lib/airtable-service';
 
 const app = new Hono();
 
-const airtable = new Airtable({
-  apiKey: process.env.AIRTABLE_PERSONAL_ACCESS_TOKEN,
-});
-
-const base = airtable.base(process.env.AIRTABLE_BASE_ID || '');
 const COMPANY_CONTACTS_TABLE = 'Company_Contacts';
 const CONTACTS_TABLE = 'Personal';
 const COMPANIES_TABLE = 'Corporations';
@@ -41,51 +43,43 @@ app.get('/', async (c) => {
     const companyId = c.req.query('companyId');
     const status = c.req.query('status') || 'Active';
 
-    const relationships: any[] = [];
+    const records = await fetchRecords(COMPANY_CONTACTS_TABLE, { maxRecords: 100 });
 
-    // First, get all records to inspect field names
-    let sampleFieldsLogged = false;
-    await base(COMPANY_CONTACTS_TABLE)
-      .select({
-        maxRecords: 100
+    // Log first record to inspect field names
+    if (records.length > 0) {
+      console.log('Sample Company_Contacts record fields:', Object.keys(records[0].fields));
+      console.log('Total records found:', records.length);
+    }
+
+    const relationships = records
+      .map((record) => {
+        // Extract contact and company IDs from linked record fields
+        const recordContactId = Array.isArray(record.fields['Contact']) ? record.fields['Contact'][0] : record.fields['Contact'];
+        const recordCompanyId = Array.isArray(record.fields['Company']) ? record.fields['Company'][0] : record.fields['Company'];
+
+        return {
+          id: record.id,
+          contactId: recordContactId,
+          companyId: recordCompanyId,
+          contactName: record.fields['Contact Name (from Contact)'] || record.fields['Contact Name'],
+          companyName: record.fields['Company Name (from Company)'] || record.fields['Company Name'],
+          role: record.fields['Role'],
+          isPrimary: record.fields['Is Primary Contact'] || false,
+          workEmail: record.fields['Work Email'],
+          workPhone: record.fields['Work Phone'],
+          department: record.fields['Department'],
+          startDate: record.fields['Start Date'],
+          endDate: record.fields['End Date'],
+          status: record.fields['Status'] || 'Active',
+          createdTime: record.createdTime
+        };
       })
-      .eachPage((records, fetchNextPage) => {
-        if (records.length > 0 && !sampleFieldsLogged) {
-          console.log('Sample Company_Contacts record fields:', Object.keys(records[0].fields));
-          console.log('Total records found:', records.length);
-          sampleFieldsLogged = true;
-        }
-
-        records.forEach((record) => {
-          // Extract contact and company IDs from linked record fields
-          const recordContactId = Array.isArray(record.fields['Contact']) ? record.fields['Contact'][0] : record.fields['Contact'];
-          const recordCompanyId = Array.isArray(record.fields['Company']) ? record.fields['Company'][0] : record.fields['Company'];
-
-          // Apply filtering in code
-          const matchesContact = !contactId || String(recordContactId) === String(contactId);
-          const matchesCompany = !companyId || String(recordCompanyId) === String(companyId);
-          const matchesStatus = !status || String(record.fields['Status']) === String(status);
-
-          if (matchesContact && matchesCompany && matchesStatus) {
-            relationships.push({
-              id: record.id,
-              contactId: recordContactId,
-              companyId: recordCompanyId,
-              contactName: record.fields['Contact Name (from Contact)'] || record.fields['Contact Name'],
-              companyName: record.fields['Company Name (from Company)'] || record.fields['Company Name'],
-              role: record.fields['Role'],
-              isPrimary: record.fields['Is Primary Contact'] || false,
-              workEmail: record.fields['Work Email'],
-              workPhone: record.fields['Work Phone'],
-              department: record.fields['Department'],
-              startDate: record.fields['Start Date'],
-              endDate: record.fields['End Date'],
-              status: record.fields['Status'] || 'Active',
-              createdTime: record._rawJson.createdTime
-            });
-          }
-        });
-        fetchNextPage();
+      .filter((rel) => {
+        // Apply filtering in code
+        const matchesContact = !contactId || String(rel.contactId) === String(contactId);
+        const matchesCompany = !companyId || String(rel.companyId) === String(companyId);
+        const matchesStatus = !status || String(rel.status) === String(status);
+        return matchesContact && matchesCompany && matchesStatus;
       });
 
     return c.json({
@@ -114,7 +108,7 @@ app.get('/:id', async (c) => {
   try {
     const id = c.req.param('id');
 
-    const record = await base(COMPANY_CONTACTS_TABLE).find(id);
+    const record = await findRecord(COMPANY_CONTACTS_TABLE, id);
 
     return c.json({
       success: true,
@@ -132,7 +126,7 @@ app.get('/:id', async (c) => {
         startDate: record.fields['Start Date'],
         endDate: record.fields['End Date'],
         status: record.fields['Status'] || 'Active',
-        createdTime: record._rawJson.createdTime
+        createdTime: record.createdTime
       }
     });
 
@@ -164,11 +158,7 @@ app.post('/', async (c) => {
     }
 
     // Check if relationship already exists - fetch all and filter in code
-    const existing = await base(COMPANY_CONTACTS_TABLE)
-      .select({
-        maxRecords: 100
-      })
-      .firstPage();
+    const existing = await fetchRecords(COMPANY_CONTACTS_TABLE, { maxRecords: 100 });
 
     const duplicate = existing.find(record => {
       const contactMatch = Array.isArray(record.fields['Contact'])
@@ -204,7 +194,7 @@ app.post('/', async (c) => {
 
     console.log('Creating company-contact relationship:', recordData);
 
-    const record = await base(COMPANY_CONTACTS_TABLE).create([
+    const record = await createRecords(COMPANY_CONTACTS_TABLE, [
       { fields: recordData }
     ]);
 
@@ -251,13 +241,15 @@ app.patch('/:id', async (c) => {
 
     console.log('Updating relationship:', id, updateFields);
 
-    const record = await base(COMPANY_CONTACTS_TABLE).update(id, updateFields);
+    const records = await updateRecords(COMPANY_CONTACTS_TABLE, [
+      { id, fields: updateFields }
+    ]);
 
     return c.json({
       success: true,
       data: {
-        id: record.id,
-        fields: record.fields
+        id: records[0].id,
+        fields: records[0].fields
       }
     });
 
@@ -284,24 +276,29 @@ app.delete('/:id', async (c) => {
 
     if (hardDelete) {
       // Permanently delete the record
-      await base(COMPANY_CONTACTS_TABLE).destroy(id);
+      await deleteRecords(COMPANY_CONTACTS_TABLE, [id]);
       return c.json({
         success: true,
         message: 'Relationship permanently deleted'
       });
     } else {
       // Soft delete: set status to Inactive and add end date
-      const record = await base(COMPANY_CONTACTS_TABLE).update(id, {
-        'Status': 'Inactive',
-        'End Date': new Date().toISOString().split('T')[0]
-      });
+      const records = await updateRecords(COMPANY_CONTACTS_TABLE, [
+        {
+          id,
+          fields: {
+            'Status': 'Inactive',
+            'End Date': new Date().toISOString().split('T')[0]
+          }
+        }
+      ]);
 
       return c.json({
         success: true,
         message: 'Relationship deactivated',
         data: {
-          id: record.id,
-          fields: record.fields
+          id: records[0].id,
+          fields: records[0].fields
         }
       });
     }
@@ -327,35 +324,27 @@ app.get('/contact/:contactId/companies', async (c) => {
     const contactId = c.req.param('contactId');
     const status = c.req.query('status') || 'Active';
 
-    const relationships: any[] = [];
+    const records = await fetchRecords(COMPANY_CONTACTS_TABLE, { maxRecords: 100 });
 
-    await base(COMPANY_CONTACTS_TABLE)
-      .select({
-        maxRecords: 100
+    const relationships = records
+      .filter((record) => {
+        const recordContactId = Array.isArray(record.fields['Contact']) ? record.fields['Contact'][0] : record.fields['Contact'];
+        const matchesContact = String(recordContactId) === String(contactId);
+        const matchesStatus = String(record.fields['Status']) === String(status);
+        return matchesContact && matchesStatus;
       })
-      .eachPage((records, fetchNextPage) => {
-        records.forEach((record) => {
-          const recordContactId = Array.isArray(record.fields['Contact']) ? record.fields['Contact'][0] : record.fields['Contact'];
-          const matchesContact = String(recordContactId) === String(contactId);
-          const matchesStatus = String(record.fields['Status']) === String(status);
-
-          if (matchesContact && matchesStatus) {
-            relationships.push({
-              relationshipId: record.id,
-              companyId: Array.isArray(record.fields['Company']) ? record.fields['Company'][0] : record.fields['Company'],
-              companyName: record.fields['Company Name (from Company)'] || record.fields['Company Name'],
-              role: record.fields['Role'],
-              isPrimary: record.fields['Is Primary Contact'] || false,
-              workEmail: record.fields['Work Email'],
-              workPhone: record.fields['Work Phone'],
-              department: record.fields['Department'],
-              startDate: record.fields['Start Date'],
-              endDate: record.fields['End Date']
-            });
-          }
-        });
-        fetchNextPage();
-      });
+      .map((record) => ({
+        relationshipId: record.id,
+        companyId: Array.isArray(record.fields['Company']) ? record.fields['Company'][0] : record.fields['Company'],
+        companyName: record.fields['Company Name (from Company)'] || record.fields['Company Name'],
+        role: record.fields['Role'],
+        isPrimary: record.fields['Is Primary Contact'] || false,
+        workEmail: record.fields['Work Email'],
+        workPhone: record.fields['Work Phone'],
+        department: record.fields['Department'],
+        startDate: record.fields['Start Date'],
+        endDate: record.fields['End Date']
+      }));
 
     return c.json({
       success: true,
@@ -385,35 +374,27 @@ app.get('/company/:companyId/contacts', async (c) => {
     const companyId = c.req.param('companyId');
     const status = c.req.query('status') || 'Active';
 
-    const relationships: any[] = [];
+    const records = await fetchRecords(COMPANY_CONTACTS_TABLE, { maxRecords: 100 });
 
-    await base(COMPANY_CONTACTS_TABLE)
-      .select({
-        maxRecords: 100
+    const relationships = records
+      .filter((record) => {
+        const recordCompanyId = Array.isArray(record.fields['Company']) ? record.fields['Company'][0] : record.fields['Company'];
+        const matchesCompany = String(recordCompanyId) === String(companyId);
+        const matchesStatus = String(record.fields['Status']) === String(status);
+        return matchesCompany && matchesStatus;
       })
-      .eachPage((records, fetchNextPage) => {
-        records.forEach((record) => {
-          const recordCompanyId = Array.isArray(record.fields['Company']) ? record.fields['Company'][0] : record.fields['Company'];
-          const matchesCompany = String(recordCompanyId) === String(companyId);
-          const matchesStatus = String(record.fields['Status']) === String(status);
-
-          if (matchesCompany && matchesStatus) {
-            relationships.push({
-              relationshipId: record.id,
-              contactId: Array.isArray(record.fields['Contact']) ? record.fields['Contact'][0] : record.fields['Contact'],
-              contactName: record.fields['Contact Name (from Contact)'] || record.fields['Contact Name'],
-              role: record.fields['Role'],
-              isPrimary: record.fields['Is Primary Contact'] || false,
-              workEmail: record.fields['Work Email'],
-              workPhone: record.fields['Work Phone'],
-              department: record.fields['Department'],
-              startDate: record.fields['Start Date'],
-              endDate: record.fields['End Date']
-            });
-          }
-        });
-        fetchNextPage();
-      });
+      .map((record) => ({
+        relationshipId: record.id,
+        contactId: Array.isArray(record.fields['Contact']) ? record.fields['Contact'][0] : record.fields['Contact'],
+        contactName: record.fields['Contact Name (from Contact)'] || record.fields['Contact Name'],
+        role: record.fields['Role'],
+        isPrimary: record.fields['Is Primary Contact'] || false,
+        workEmail: record.fields['Work Email'],
+        workPhone: record.fields['Work Phone'],
+        department: record.fields['Department'],
+        startDate: record.fields['Start Date'],
+        endDate: record.fields['End Date']
+      }));
 
     return c.json({
       success: true,
@@ -451,11 +432,7 @@ app.post('/contact/:contactId/set-primary', async (c) => {
     }
 
     // First, fetch all relationships for this company
-    const allContacts = await base(COMPANY_CONTACTS_TABLE)
-      .select({
-        maxRecords: 100
-      })
-      .firstPage();
+    const allContacts = await fetchRecords(COMPANY_CONTACTS_TABLE, { maxRecords: 100 });
 
     // Filter for the specific company and active status
     const companyContacts = allContacts.filter(record => {
@@ -464,13 +441,15 @@ app.post('/contact/:contactId/set-primary', async (c) => {
     });
 
     // Set all contacts for this company to non-primary
-    const updatePromises = companyContacts.map(record =>
-      base(COMPANY_CONTACTS_TABLE).update(record.id, {
-        'Is Primary Contact': false
-      })
-    );
-
-    await Promise.all(updatePromises);
+    if (companyContacts.length > 0) {
+      await updateRecords(
+        COMPANY_CONTACTS_TABLE,
+        companyContacts.map(record => ({
+          id: record.id,
+          fields: { 'Is Primary Contact': false }
+        }))
+      );
+    }
 
     // Now find and set the specified contact as primary
     const targetRelationship = companyContacts.find(record => {
@@ -485,17 +464,19 @@ app.post('/contact/:contactId/set-primary', async (c) => {
       );
     }
 
-    const updatedRecord = await base(COMPANY_CONTACTS_TABLE).update(
-      targetRelationship.id,
-      { 'Is Primary Contact': true }
-    );
+    const updatedRecords = await updateRecords(COMPANY_CONTACTS_TABLE, [
+      {
+        id: targetRelationship.id,
+        fields: { 'Is Primary Contact': true }
+      }
+    ]);
 
     return c.json({
       success: true,
       message: 'Primary contact updated',
       data: {
-        id: updatedRecord.id,
-        fields: updatedRecord.fields
+        id: updatedRecords[0].id,
+        fields: updatedRecords[0].fields
       }
     });
 
@@ -525,33 +506,27 @@ app.get('/service/:serviceName/subscribers', async (c) => {
     // Step 1: Fetch all services and find matching service IDs
     const SERVICES_TABLE = 'Services Corporate';
     const matchingServiceIds: string[] = [];
-    let serviceCount = 0;
 
-    await base(SERVICES_TABLE)
-      .select({})
-      .eachPage((records, fetchNextPage) => {
-        records.forEach((record) => {
-          serviceCount++;
-          const serviceNameField = record.fields['Services']
-            || record.fields['Service']
-            || record.fields['Service Name']
-            || record.fields['Name'];
+    const servicesRecords = await fetchRecords(SERVICES_TABLE, {});
+    servicesRecords.forEach((record, index) => {
+      const serviceNameField = record.fields['Services']
+        || record.fields['Service']
+        || record.fields['Service Name']
+        || record.fields['Name'];
 
-          // Debug: Log first 3 services to see what we have
-          if (serviceCount <= 3) {
-            console.log(`Service #${serviceCount}: "${serviceNameField}" (${record.id})`, {
-              allFields: Object.keys(record.fields),
-              fields: record.fields
-            });
-          }
-
-          if (serviceNameField && String(serviceNameField).toLowerCase().includes(serviceName.toLowerCase())) {
-            matchingServiceIds.push(record.id);
-            console.log(`✓ Found matching service: "${serviceNameField}" (${record.id})`);
-          }
+      // Debug: Log first 3 services to see what we have
+      if (index < 3) {
+        console.log(`Service #${index + 1}: "${serviceNameField}" (${record.id})`, {
+          allFields: Object.keys(record.fields),
+          fields: record.fields
         });
-        fetchNextPage();
-      });
+      }
+
+      if (serviceNameField && String(serviceNameField).toLowerCase().includes(serviceName.toLowerCase())) {
+        matchingServiceIds.push(record.id);
+        console.log(`✓ Found matching service: "${serviceNameField}" (${record.id})`);
+      }
+    });
 
     console.log(`[Service Subscribers] Found ${matchingServiceIds.length} matching service IDs`);
 
@@ -569,13 +544,9 @@ app.get('/service/:serviceName/subscribers', async (c) => {
     // Step 2: Query Subscriptions Corporate junction table to find company IDs with this service
     const SUBSCRIPTIONS_TABLE = 'Subscriptions Corporate';
     const companyIdsWithService: Set<string> = new Set();
-    let subscriptionCount = 0;
 
-    await base(SUBSCRIPTIONS_TABLE)
-      .select({})
-      .eachPage((records, fetchNextPage) => {
-        records.forEach((record) => {
-          subscriptionCount++;
+    const subscriptionsRecords = await fetchRecords(SUBSCRIPTIONS_TABLE, {});
+    subscriptionsRecords.forEach((record, subscriptionCount) => {
 
           // Field is called "Services" (plural) and "Customer" (not Company)
           const serviceIds = record.fields['Services']; // This is an array of service IDs
@@ -595,13 +566,13 @@ app.get('/service/:serviceName/subscribers', async (c) => {
 
           // Debug: Log first 10 subscriptions to see all field data
           // Including both matching and non-matching to understand structure
-          if (subscriptionCount <= 10) {
+          if (subscriptionCount < 10) {
             const allFields = Object.keys(record.fields);
             const hasMatchingService = serviceIds && Array.isArray(serviceIds) && serviceIds.some(sid =>
               matchingServiceIds.includes(String(sid))
             );
 
-            console.log(`Subscription #${subscriptionCount}${hasMatchingService ? ' [MATCHES SERVICE]' : ''}:`, {
+            console.log(`Subscription #${subscriptionCount + 1}${hasMatchingService ? ' [MATCHES SERVICE]' : ''}:`, {
               name: record.fields['Name'],
               serviceIds,
               servicesCount: Array.isArray(serviceIds) ? serviceIds.length : 0,
@@ -634,14 +605,12 @@ app.get('/service/:serviceName/subscribers', async (c) => {
               console.log(`✓ Found ACTIVE subscription: Company ${companyId} -> Services ${serviceIds.join(', ')} | Status: ${JSON.stringify(status)}`);
             } else if (hasMatchingService && !isActive) {
               // Log filtered out subscriptions for debugging
-              if (subscriptionCount <= 20) {
+              if (subscriptionCount < 20) {
                 console.log(`  [Filtered] Company ${companyId} has service but Status is ${JSON.stringify(status)} (not Active)`);
               }
             }
           }
         });
-        fetchNextPage();
-      });
 
     console.log(`[Service Subscribers] Found ${companyIdsWithService.size} companies with service "${serviceName}"`);
 
@@ -657,70 +626,53 @@ app.get('/service/:serviceName/subscribers', async (c) => {
     }
 
     // Step 3: Fetch company details for the matching companies
-    const companiesWithService: any[] = [];
-
-    await base(COMPANIES_TABLE)
-      .select({})
-      .eachPage((records, fetchNextPage) => {
-        records.forEach((record) => {
-          if (companyIdsWithService.has(record.id)) {
-            companiesWithService.push({
-              id: record.id,
-              name: record.fields['Company'] || record.fields['Company Name'],
-              email: record.fields['🤷‍♂️Email'] || record.fields['Email'],
-              phone: record.fields['Phone'],
-              ein: record.fields['EIN'],
-              subscriptions: []
-            });
-          }
-        });
-        fetchNextPage();
-      });
+    const companiesRecords = await fetchRecords(COMPANIES_TABLE, {});
+    const companiesWithService = companiesRecords
+      .filter(record => companyIdsWithService.has(record.id))
+      .map(record => ({
+        id: record.id,
+        name: record.fields['Company'] || record.fields['Company Name'],
+        email: record.fields['🤷‍♂️Email'] || record.fields['Email'],
+        phone: record.fields['Phone'],
+        ein: record.fields['EIN'],
+        subscriptions: []
+      }));
 
     // Step 4: Fetch all Company_Contacts relationships
-    const allRelationships: any[] = [];
-    await base(COMPANY_CONTACTS_TABLE)
-      .select({})
-      .eachPage((records, fetchNextPage) => {
-        records.forEach((record) => {
-          const status = record.fields['Status'];
-          if (includeInactive || status === 'Active') {
-            allRelationships.push({
-              id: record.id,
-              contactId: Array.isArray(record.fields['Contact'])
-                ? record.fields['Contact'][0]
-                : record.fields['Contact'],
-              companyId: Array.isArray(record.fields['Company'])
-                ? record.fields['Company'][0]
-                : record.fields['Company'],
-              role: record.fields['Role'],
-              isPrimary: record.fields['Is Primary Contact'] || false,
-              workEmail: record.fields['Work Email'],
-              workPhone: record.fields['Work Phone'],
-              department: record.fields['Department'],
-              status: status
-            });
-          }
-        });
-        fetchNextPage();
-      });
+    const relationshipsRecords = await fetchRecords(COMPANY_CONTACTS_TABLE, {});
+    const allRelationships = relationshipsRecords
+      .filter(record => {
+        const status = record.fields['Status'];
+        return includeInactive || status === 'Active';
+      })
+      .map(record => ({
+        id: record.id,
+        contactId: Array.isArray(record.fields['Contact'])
+          ? record.fields['Contact'][0]
+          : record.fields['Contact'],
+        companyId: Array.isArray(record.fields['Company'])
+          ? record.fields['Company'][0]
+          : record.fields['Company'],
+        role: record.fields['Role'],
+        isPrimary: record.fields['Is Primary Contact'] || false,
+        workEmail: record.fields['Work Email'],
+        workPhone: record.fields['Work Phone'],
+        department: record.fields['Department'],
+        status: record.fields['Status']
+      }));
 
     // Step 5: Fetch all contacts to enrich the data
+    const contactsRecords = await fetchRecords(CONTACTS_TABLE, {});
     const allContacts: Map<string, any> = new Map();
-    await base(CONTACTS_TABLE)
-      .select({})
-      .eachPage((records, fetchNextPage) => {
-        records.forEach((record) => {
-          allContacts.set(record.id, {
-            id: record.id,
-            name: record.fields['Full Name'] || record.fields['Name'],
-            email: record.fields['Email'],
-            phone: record.fields['📞Phone number'] || record.fields['Phone'],
-            status: record.fields['Status'] || record.fields['❓Status']
-          });
-        });
-        fetchNextPage();
+    contactsRecords.forEach(record => {
+      allContacts.set(record.id, {
+        id: record.id,
+        name: record.fields['Full Name'] || record.fields['Name'],
+        email: record.fields['Email'],
+        phone: record.fields['📞Phone number'] || record.fields['Phone'],
+        status: record.fields['Status'] || record.fields['❓Status']
       });
+    });
 
     // Step 6: Build the enriched response
     const subscribers = companiesWithService.map(company => {

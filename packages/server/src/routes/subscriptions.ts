@@ -3,15 +3,9 @@
  */
 
 import { Hono } from 'hono';
-import Airtable from 'airtable';
+import { getTable } from '../lib/airtable-service';
 
 const app = new Hono();
-
-const airtable = new Airtable({
-  apiKey: process.env.AIRTABLE_PERSONAL_ACCESS_TOKEN,
-});
-
-const base = airtable.base(process.env.AIRTABLE_BASE_ID || '');
 
 /**
  * POST /api/subscriptions
@@ -44,7 +38,8 @@ app.post('/', async (c) => {
 
     console.log('Creating record with data:', recordData);
 
-    const record = await base('Subscriptions Corporate').create(recordData);
+    const table = getTable('Subscriptions Corporate');
+    const record = await table.create(recordData);
 
     return c.json({
       success: true,

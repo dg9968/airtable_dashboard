@@ -5,17 +5,9 @@
  */
 
 import { Hono } from 'hono';
-import { testConnection } from '../airtable';
-import Airtable from 'airtable';
+import { testConnection, fetchRecords } from '../lib/airtable-service';
 
 const app = new Hono();
-
-// Initialize Airtable
-const airtable = new Airtable({
-  apiKey: process.env.AIRTABLE_PERSONAL_ACCESS_TOKEN,
-});
-
-const base = airtable.base(process.env.AIRTABLE_BASE_ID || '');
 
 /**
  * GET /api/view
@@ -47,8 +39,6 @@ app.get('/', async (c) => {
 
     console.log(`Fetching view "${viewName}" from table "${tableName}"`);
 
-    const records: any[] = [];
-
     // Build select options
     const selectOptions: any = {
       view: viewName,
@@ -72,23 +62,7 @@ app.get('/', async (c) => {
     }
 
     // Fetch records from the specified view
-    await base(tableName)
-      .select(selectOptions)
-      .eachPage((pageRecords, fetchNextPage) => {
-        pageRecords.forEach((record) => {
-          records.push({
-            id: record.id,
-            fields: record.fields,
-            createdTime: record._rawJson.createdTime,
-          });
-        });
-
-        if (records.length % 100 === 0) {
-          console.log(`Fetched ${records.length} records so far...`);
-        }
-
-        fetchNextPage();
-      });
+    const records = await fetchRecords(tableName, selectOptions);
 
     console.log(`Total records fetched: ${records.length}`);
 
