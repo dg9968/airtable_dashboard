@@ -3,15 +3,19 @@
  * Centralized service for all Airtable operations
  */
 
-import Airtable from 'airtable';
+import Airtable from "airtable";
 
 // Validate environment variables
 function validateEnvironment() {
   if (!process.env.AIRTABLE_PERSONAL_ACCESS_TOKEN) {
-    throw new Error('AIRTABLE_PERSONAL_ACCESS_TOKEN is required. Please set it in your .env file.');
+    throw new Error(
+      "AIRTABLE_PERSONAL_ACCESS_TOKEN is required. Please set it in your .env file."
+    );
   }
   if (!process.env.AIRTABLE_BASE_ID) {
-    throw new Error('AIRTABLE_BASE_ID is required. Please set it in your .env file.');
+    throw new Error(
+      "AIRTABLE_BASE_ID is required. Please set it in your .env file."
+    );
   }
 }
 
@@ -30,7 +34,7 @@ export function getAirtable() {
  */
 export function getBase() {
   const airtable = getAirtable();
-  return airtable.base(process.env.AIRTABLE_BASE_ID || '');
+  return airtable.base(process.env.AIRTABLE_BASE_ID || "");
 }
 
 /**
@@ -51,7 +55,7 @@ export interface AirtableRecord {
 export interface SelectOptions {
   view?: string;
   maxRecords?: number;
-  sort?: Array<{ field: string; direction?: 'asc' | 'desc' }>;
+  sort?: Array<{ field: string; direction?: "asc" | "desc" }>;
   filterByFormula?: string;
 }
 
@@ -70,7 +74,7 @@ export async function fetchRecords(
 
     // Build select options
     const selectOptions: any = {
-      view: options.view || 'Grid view'
+      view: options.view || "Grid view",
     };
 
     if (options.maxRecords && options.maxRecords > 0) {
@@ -85,30 +89,32 @@ export async function fetchRecords(
       selectOptions.filterByFormula = options.filterByFormula;
     }
 
-    await table
-      .select(selectOptions)
-      .eachPage((pageRecords, fetchNextPage) => {
-        pageRecords.forEach((record) => {
-          records.push({
-            id: record.id,
-            fields: record.fields,
-            createdTime: record._rawJson.createdTime
-          });
+    await table.select(selectOptions).eachPage((pageRecords, fetchNextPage) => {
+      pageRecords.forEach((record) => {
+        records.push({
+          id: record.id,
+          fields: record.fields,
+          createdTime: record._rawJson.createdTime,
         });
-
-        if (records.length % 100 === 0) {
-          console.log(`Fetched ${records.length} records so far from ${tableName}...`);
-        }
-
-        fetchNextPage();
       });
+
+      if (records.length % 100 === 0) {
+        console.log(
+          `Fetched ${records.length} records so far from ${tableName}...`
+        );
+      }
+
+      fetchNextPage();
+    });
 
     console.log(`Total records fetched from ${tableName}: ${records.length}`);
     return records;
   } catch (error) {
     console.error(`Error fetching records from table ${tableName}:`, error);
-    if (error instanceof Error && error.message.includes('NOT_FOUND')) {
-      throw new Error(`Table "${tableName}" not found. Please check the table name.`);
+    if (error instanceof Error && error.message.includes("NOT_FOUND")) {
+      throw new Error(
+        `Table "${tableName}" not found. Please check the table name.`
+      );
     }
     throw error;
   }
@@ -130,10 +136,13 @@ export async function findRecord(
     return {
       id: record.id,
       fields: record.fields,
-      createdTime: record._rawJson.createdTime
+      createdTime: record._rawJson.createdTime,
     };
   } catch (error) {
-    console.error(`Error finding record ${recordId} in table ${tableName}:`, error);
+    console.error(
+      `Error finding record ${recordId} in table ${tableName}:`,
+      error
+    );
     throw error;
   }
 }
@@ -151,10 +160,10 @@ export async function createRecords(
     const table = getTable(tableName);
     const createdRecords = await table.create(records);
 
-    return createdRecords.map(record => ({
+    return createdRecords.map((record) => ({
       id: record.id,
       fields: record.fields,
-      createdTime: record._rawJson.createdTime
+      createdTime: record._rawJson.createdTime,
     }));
   } catch (error) {
     console.error(`Error creating records in table ${tableName}:`, error);
@@ -175,10 +184,10 @@ export async function updateRecords(
     const table = getTable(tableName);
     const updatedRecords = await table.update(records);
 
-    return updatedRecords.map(record => ({
+    return updatedRecords.map((record) => ({
       id: record.id,
       fields: record.fields,
-      createdTime: record._rawJson.createdTime
+      createdTime: record._rawJson.createdTime,
     }));
   } catch (error) {
     console.error(`Error updating records in table ${tableName}:`, error);
@@ -199,9 +208,9 @@ export async function deleteRecords(
     const table = getTable(tableName);
     const deletedRecords = await table.destroy(recordIds);
 
-    return deletedRecords.map(record => ({
+    return deletedRecords.map((record) => ({
       id: record.id,
-      deleted: true
+      deleted: true,
     }));
   } catch (error) {
     console.error(`Error deleting records from table ${tableName}:`, error);
@@ -220,17 +229,18 @@ export async function findRecordsByFilter(
     validateEnvironment();
 
     const table = getTable(tableName);
-    const records = await table
-      .select({ filterByFormula })
-      .firstPage();
+    const records = await table.select({ filterByFormula }).firstPage();
 
-    return records.map(record => ({
+    return records.map((record) => ({
       id: record.id,
       fields: record.fields,
-      createdTime: record._rawJson.createdTime
+      createdTime: record._rawJson.createdTime,
     }));
   } catch (error) {
-    console.error(`Error finding records in table ${tableName} with filter:`, error);
+    console.error(
+      `Error finding records in table ${tableName} with filter:`,
+      error
+    );
     throw error;
   }
 }
@@ -246,35 +256,49 @@ export async function testConnection() {
       `https://api.airtable.com/v0/meta/bases/${process.env.AIRTABLE_BASE_ID}/tables`,
       {
         headers: {
-          'Authorization': `Bearer ${process.env.AIRTABLE_PERSONAL_ACCESS_TOKEN}`,
-          'Content-Type': 'application/json'
-        }
+          Authorization: `Bearer ${process.env.AIRTABLE_PERSONAL_ACCESS_TOKEN}`,
+          "Content-Type": "application/json",
+        },
       }
     );
 
     if (!response.ok) {
       if (response.status === 401) {
-        throw new Error('Invalid Personal Access Token. Please check your AIRTABLE_PERSONAL_ACCESS_TOKEN.');
+        throw new Error(
+          "Invalid Personal Access Token. Please check your AIRTABLE_PERSONAL_ACCESS_TOKEN."
+        );
       }
       if (response.status === 404) {
-        throw new Error('Base not found. Please check your AIRTABLE_BASE_ID.');
+        throw new Error("Base not found. Please check your AIRTABLE_BASE_ID.");
       }
       throw new Error(`Connection failed: ${response.statusText}`);
     }
 
-    return { success: true, message: 'Connection successful' };
+    return { success: true, message: "Connection successful" };
   } catch (error) {
     return {
       success: false,
-      message: error instanceof Error ? error.message : 'Unknown connection error'
+      message:
+        error instanceof Error ? error.message : "Unknown connection error",
     };
   }
+}
+
+// Type definitions for base schema
+export interface Table {
+  id: string;
+  name: string;
+  fields?: any[];
+}
+
+interface BaseSchemaResponse {
+  tables: Table[];
 }
 
 /**
  * Get base schema using Airtable Web API
  */
-export async function getBaseSchema() {
+export async function getBaseSchema(): Promise<Table[]> {
   try {
     validateEnvironment();
 
@@ -282,9 +306,9 @@ export async function getBaseSchema() {
       `https://api.airtable.com/v0/meta/bases/${process.env.AIRTABLE_BASE_ID}/tables`,
       {
         headers: {
-          'Authorization': `Bearer ${process.env.AIRTABLE_PERSONAL_ACCESS_TOKEN}`,
-          'Content-Type': 'application/json'
-        }
+          Authorization: `Bearer ${process.env.AIRTABLE_PERSONAL_ACCESS_TOKEN}`,
+          "Content-Type": "application/json",
+        },
       }
     );
 
@@ -292,10 +316,21 @@ export async function getBaseSchema() {
       throw new Error(`Failed to fetch base schema: ${response.statusText}`);
     }
 
-    const data = await response.json();
-    return data.tables || [];
+    const data = (await response.json()) as unknown;
+
+    // runtime guard to ensure shape matches expectations
+    if (
+      !data ||
+      typeof data !== "object" ||
+      !("tables" in data) ||
+      !Array.isArray((data as any).tables)
+    ) {
+      throw new Error("Invalid response format for base schema");
+    }
+
+    return (data as BaseSchemaResponse).tables;
   } catch (error) {
-    console.error('Error fetching base schema:', error);
+    console.error("Error fetching base schema:", error);
     throw error;
   }
 }
@@ -309,10 +344,10 @@ export async function getTablesMetadata() {
     return tables.map((table: any) => ({
       id: table.id,
       name: table.name,
-      fields: table.fields || []
+      fields: table.fields || [],
     }));
   } catch (error) {
-    console.error('Error getting tables metadata:', error);
+    console.error("Error getting tables metadata:", error);
     throw error;
   }
 }
@@ -330,27 +365,30 @@ export function analyzeTableData(records: AirtableRecord[]) {
     fields,
     fieldCount: fields.length,
     recentRecords: records
-      .sort((a, b) => new Date(b.createdTime).getTime() - new Date(a.createdTime).getTime())
-      .slice(0, 5)
+      .sort(
+        (a, b) =>
+          new Date(b.createdTime).getTime() - new Date(a.createdTime).getTime()
+      )
+      .slice(0, 5),
   };
 
   // Field type analysis
   const fieldTypes: Record<string, string> = {};
   if (records.length > 0) {
-    fields.forEach(field => {
+    fields.forEach((field) => {
       const sampleValue = records[0].fields[field];
       if (Array.isArray(sampleValue)) {
-        fieldTypes[field] = 'array';
+        fieldTypes[field] = "array";
       } else if (sampleValue instanceof Date) {
-        fieldTypes[field] = 'date';
-      } else if (typeof sampleValue === 'number') {
-        fieldTypes[field] = 'number';
-      } else if (typeof sampleValue === 'boolean') {
-        fieldTypes[field] = 'boolean';
-      } else if (sampleValue && typeof sampleValue === 'object') {
-        fieldTypes[field] = 'object';
+        fieldTypes[field] = "date";
+      } else if (typeof sampleValue === "number") {
+        fieldTypes[field] = "number";
+      } else if (typeof sampleValue === "boolean") {
+        fieldTypes[field] = "boolean";
+      } else if (sampleValue && typeof sampleValue === "object") {
+        fieldTypes[field] = "object";
       } else {
-        fieldTypes[field] = 'text';
+        fieldTypes[field] = "text";
       }
     });
   }

@@ -84,10 +84,13 @@ export default function CsvUpload() {
       <div className="card-body">
         <h2 className="card-title">Upload CSV File</h2>
         <p className="text-sm opacity-70 mb-4">
-          Upload a CSV file to process Airtable database maintenance operations
+          Upload a <strong>Return Detailed Report</strong> CSV file from MyTaxPrepOffice. This will be sent to n8n automation for processing.
         </p>
 
         <div className="form-control w-full">
+          <label className="label">
+            <span className="label-text">Select Return Detailed Report CSV</span>
+          </label>
           <input
             id="csv-file-input"
             type="file"
