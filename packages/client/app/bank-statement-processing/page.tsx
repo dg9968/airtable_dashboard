@@ -190,7 +190,16 @@ export default function BankStatementProcessing() {
     if (!qboDownloadUrl) return
 
     try {
-      const response = await fetch(qboDownloadUrl)
+      const token = await getAuthToken()
+      if (!token) {
+        throw new Error('Authentication required. Please sign in again.')
+      }
+
+      const response = await fetch(qboDownloadUrl, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      })
       if (!response.ok) {
         throw new Error('Download failed')
       }
@@ -205,7 +214,7 @@ export default function BankStatementProcessing() {
       window.URL.revokeObjectURL(url)
       document.body.removeChild(a)
     } catch (err) {
-      setError('Failed to download QBO file')
+      setError(err instanceof Error ? err.message : 'Failed to download QBO file')
     }
   }
 
