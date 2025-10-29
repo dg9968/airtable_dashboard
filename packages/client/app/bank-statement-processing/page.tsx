@@ -70,7 +70,8 @@ export default function BankStatementProcessing() {
       const result = await response.json()
 
       if (!response.ok) {
-        throw new Error(result.error || 'Upload failed')
+        console.error('Upload failed:', response.status, result)
+        throw new Error(result.error || `Upload failed: ${response.status} ${response.statusText}`)
       }
 
       setUploadResult(result)
@@ -98,8 +99,13 @@ export default function BankStatementProcessing() {
     try {
       // Get JWT token from NextAuth session via API endpoint
       const response = await fetch('/api/auth/token')
-      if (!response.ok) return null
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        console.error('Token endpoint error:', response.status, errorData)
+        return null
+      }
       const data = await response.json()
+      console.log('Token retrieved successfully')
       return data.token
     } catch (error) {
       console.error('Error getting auth token:', error)
