@@ -199,24 +199,44 @@ function buildQbo(transactions: Array<{date: Date, desc: string, amount: number}
  */
 app.post('/', async (c) => {
   try {
+    console.log('CSV to QBO conversion started');
+
     const formData = await c.req.formData();
+    console.log('FormData received');
+
     const csvFiles = formData.getAll('csvFiles') as File[];
+    console.log(`Number of files: ${csvFiles ? csvFiles.length : 0}`);
 
     if (!csvFiles || csvFiles.length === 0) {
+      console.error('No CSV files in request');
       return c.json({ error: 'No CSV files provided' }, 400);
     }
 
     const allTransactions: Array<{date: Date, desc: string, amount: number}> = [];
 
     // Process each CSV file
-    for (const file of csvFiles) {
+    for (let i = 0; i < csvFiles.length; i++) {
+      const file = csvFiles[i];
+      console.log(`Processing file ${i + 1}/${csvFiles.length}: size=${file.size} bytes`);
+
       const text = await file.text();
+      console.log(`File text length: ${text.length} characters`);
 
       // Parse CSV
-      const records = parse(text, {
-        skip_empty_lines: true,
-        relax_column_count: true,
-      }) as string[][];
+      let records: string[][];
+      try {
+        records = parse(text, {
+          skip_empty_lines: true,
+          relax_column_count: true,
+        }) as string[][];
+        console.log(`Parsed ${records.length} rows from CSV`);
+      } catch (parseError) {
+        console.error('CSV parse error:', parseError);
+        return c.json({
+          error: 'Failed to parse CSV file',
+          details: parseError instanceof Error ? parseError.message : 'Unknown parse error'
+        }, 400);
+      }
 
       for (const row of records) {
         if (row.length < 6) continue;
@@ -264,18 +284,25 @@ app.post('/', async (c) => {
       }
     }
 
+    console.log(`Total transactions parsed: ${allTransactions.length}`);
+
     if (allTransactions.length === 0) {
+      console.error('No valid transactions found');
       return c.json({ error: 'No valid transactions found in CSV files' }, 400);
     }
 
     // Sort by date
     allTransactions.sort((a, b) => a.date.getTime() - b.date.getTime());
+    console.log('Transactions sorted by date');
 
     // Build QBO
+    console.log('Building QBO file...');
     const qboContent = buildQbo(allTransactions);
+    console.log(`QBO file built: ${qboContent.length} bytes`);
 
     // Return QBO file
     const filename = `combined_${Date.now()}.qbo`;
+    console.log(`Returning QBO file: ${filename}`);
 
     return c.body(qboContent, 200, {
       'Content-Type': 'application/vnd.intu.qbo',
@@ -285,9 +312,11 @@ app.post('/', async (c) => {
 
   } catch (error) {
     console.error('Error converting CSV to QBO:', error);
+    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
     return c.json({
       error: 'Failed to convert CSV to QBO',
-      details: error instanceof Error ? error.message : 'Unknown error'
+      details: error instanceof Error ? error.message : 'Unknown error',
+      stack: process.env.NODE_ENV === 'development' ? (error instanceof Error ? error.stack : undefined) : undefined
     }, 500);
   }
 });
