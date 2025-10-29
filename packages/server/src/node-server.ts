@@ -51,6 +51,14 @@ app.use('*', cors({
 
 // API Key Authentication Middleware
 app.use('/api/*', async (c, next) => {
+  // Skip API key check for JWT-authenticated routes
+  const path = c.req.path;
+  const jwtAuthRoutes = ['/api/bank-statement-processing'];
+
+  if (jwtAuthRoutes.some(route => path.startsWith(route))) {
+    return next();
+  }
+
   const apiKey = c.req.header('X-API-Key');
   const expectedApiKey = process.env.API_SECRET_KEY;
 
