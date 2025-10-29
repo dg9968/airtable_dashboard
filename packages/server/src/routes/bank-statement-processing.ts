@@ -4,8 +4,13 @@
 
 import { Hono } from 'hono';
 import { S3Client, PutObjectCommand, HeadObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { authMiddleware, requireStaff } from '../middleware/auth';
 
 const app = new Hono();
+
+// Apply authentication middleware to all routes
+app.use('*', authMiddleware);
+app.use('*', requireStaff);
 
 const s3Client = new S3Client({
   region: process.env.AWS_REGION,

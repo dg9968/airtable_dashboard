@@ -48,6 +48,12 @@ export default function BankStatementProcessing() {
     setEstimatedTimeRemaining(0)
 
     try {
+      // Get auth token from NextAuth session
+      const token = await getAuthToken()
+      if (!token) {
+        throw new Error('Authentication required. Please sign in again.')
+      }
+
       const formData = new FormData()
       formData.append('file', file)
       formData.append('processingType', 'bank-statement')
@@ -55,6 +61,9 @@ export default function BankStatementProcessing() {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
       const response = await fetch(`${apiUrl}/api/bank-statement-processing`, {
         method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
         body: formData,
       })
 
@@ -85,14 +94,37 @@ export default function BankStatementProcessing() {
     }
   }
 
+  const getAuthToken = async () => {
+    try {
+      // Get JWT token from NextAuth session via API endpoint
+      const response = await fetch('/api/auth/token')
+      if (!response.ok) return null
+      const data = await response.json()
+      return data.token
+    } catch (error) {
+      console.error('Error getting auth token:', error)
+      return null
+    }
+  }
+
   const pollProcessingStatus = async (fileKey: string) => {
     const maxPolls = 60 // Poll for up to 5 minutes
     let pollCount = 0
 
     const poll = async () => {
       try {
+        const token = await getAuthToken()
+        if (!token) {
+          setError('Authentication expired. Please refresh the page.')
+          return
+        }
+
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-        const response = await fetch(`${apiUrl}/api/bank-statement-processing/status?fileKey=${encodeURIComponent(fileKey)}`)
+        const response = await fetch(`${apiUrl}/api/bank-statement-processing/status?fileKey=${encodeURIComponent(fileKey)}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        })
         const statusResult = await response.json()
 
         if (response.ok) {
