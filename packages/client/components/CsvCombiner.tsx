@@ -67,6 +67,18 @@ export default function CsvCombiner() {
     setProcessingStatus('')
   }
 
+  const getAuthToken = async () => {
+    try {
+      const response = await fetch('/api/auth/token')
+      if (!response.ok) return null
+      const data = await response.json()
+      return data.token
+    } catch (error) {
+      console.error('Error getting auth token:', error)
+      return null
+    }
+  }
+
   const processFiles = async () => {
     if (csvFiles.length === 0) {
       setError('Please select at least one CSV file')
@@ -79,6 +91,12 @@ export default function CsvCombiner() {
     setProcessingStatus('Uploading CSV files...')
 
     try {
+      // Get auth token
+      const token = await getAuthToken()
+      if (!token) {
+        throw new Error('Authentication required. Please sign in again.')
+      }
+
       const formData = new FormData()
 
       // Append all CSV files
@@ -88,16 +106,40 @@ export default function CsvCombiner() {
 
       setProcessingStatus('Combining CSV files and converting to QBO...')
 
-      const response = await fetch('/api/csv-to-qbo', {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const response = await fetch(`${apiUrl}/api/csv-to-qbo`, {
         method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
         body: formData,
       })
 
-      const result = await response.json()
-
       if (!response.ok) {
+        const result = await response.json()
         throw new Error(result.error || 'Processing failed')
       }
+
+      // Check if response is a file download
+      const contentType = response.headers.get('Content-Type')
+      if (contentType?.includes('application/vnd.intu.qbo')) {
+        // Download the file directly
+        const blob = await response.blob()
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `combined_${Date.now()}.qbo`
+        document.body.appendChild(a)
+        a.click()
+        window.URL.revokeObjectURL(url)
+        document.body.removeChild(a)
+
+        setProcessingStatus('QBO file downloaded successfully!')
+        return
+      }
+
+      // Otherwise parse JSON response
+      const result = await response.json()
 
       setProcessingStatus('Processing complete!')
       setQboDownloadUrl(result.qboUrl)

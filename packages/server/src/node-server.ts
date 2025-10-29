@@ -9,6 +9,7 @@ import authRoutes from './routes/auth';
 import airtableRoutes from './routes/airtable';
 import documentsRoutes from './routes/documents';
 import bankStatementRoutes from './routes/bank-statement-processing';
+import csvToQboRoutes from './routes/csv-to-qbo';
 import customerSubscriptionsRoutes from './routes/customer-subscriptions';
 import processorBillingRoutes from './routes/processor-billing';
 import servicesRoutes from './routes/services';
@@ -53,7 +54,7 @@ app.use('*', cors({
 app.use('/api/*', async (c, next) => {
   // Skip API key check for JWT-authenticated routes
   const path = c.req.path;
-  const jwtAuthRoutes = ['/api/bank-statement-processing'];
+  const jwtAuthRoutes = ['/api/bank-statement-processing', '/api/csv-to-qbo'];
 
   if (jwtAuthRoutes.some(route => path.startsWith(route))) {
     return next();
@@ -86,6 +87,7 @@ app.route('/api/auth', authRoutes);
 app.route('/api/airtable', airtableRoutes);
 app.route('/api/documents', documentsRoutes);
 app.route('/api/bank-statement-processing', bankStatementRoutes);
+app.route('/api/csv-to-qbo', csvToQboRoutes);
 app.route('/api/customer-subscriptions', customerSubscriptionsRoutes);
 app.route('/api/processor-billing', processorBillingRoutes);
 app.route('/api/services', servicesRoutes);
