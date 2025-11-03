@@ -1,4 +1,7 @@
 // Node.js server entry point
+// Polyfill AbortController for Node.js compatibility with Airtable SDK
+import 'abort-controller/polyfill';
+
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';

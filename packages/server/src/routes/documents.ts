@@ -284,4 +284,43 @@ app.get('/schema', async (c) => {
   }
 });
 
+/**
+ * GET /api/documents/debug-all
+ * Debug endpoint to list all documents in Airtable (production debugging)
+ */
+app.get('/debug-all', async (c) => {
+  try {
+    const Airtable = require('airtable');
+    const airtable = new Airtable({
+      apiKey: process.env.AIRTABLE_PERSONAL_ACCESS_TOKEN,
+    });
+    const base = airtable.base(process.env.AIRTABLE_BASE_ID || '');
+
+    const clientCodeFilter = c.req.query('clientCode');
+    const maxRecords = parseInt(c.req.query('maxRecords') || '50');
+
+    let selectOptions: any = { maxRecords };
+    if (clientCodeFilter) {
+      selectOptions.filterByFormula = `{Client Code} = '${clientCodeFilter}'`;
+    }
+
+    const records = await base('Documents').select(selectOptions).firstPage();
+
+    return c.json({
+      success: true,
+      count: records.length,
+      records: records.map(r => ({
+        id: r.id,
+        clientCode: r.fields['Client Code'],
+        taxYear: r.fields['Tax Year'],
+        fileName: r.fields['Original Name'],
+        uploadDate: r.fields['Upload Date'],
+      })),
+    });
+  } catch (error) {
+    console.error('Error fetching all documents:', error);
+    return c.json({ error: 'Failed to fetch documents', details: error instanceof Error ? error.message : 'Unknown error' }, 500);
+  }
+});
+
 export default app;

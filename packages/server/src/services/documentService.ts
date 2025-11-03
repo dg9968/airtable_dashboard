@@ -128,12 +128,23 @@ export async function getDocuments(
   taxYear: string
 ): Promise<DocumentMetadata[]> {
   try {
+    console.log(`[documentService] getDocuments called with clientCode: "${clientCode}", taxYear: "${taxYear}"`);
+    console.log(`[documentService] Using Airtable base: ${process.env.AIRTABLE_BASE_ID?.substring(0, 8)}...`);
+    console.log(`[documentService] Filter formula: AND({Client Code} = '${clientCode}', {Tax Year} = '${taxYear}')`);
+
     // Try Airtable first
     const records = await base(DOCUMENTS_TABLE)
       .select({
         filterByFormula: `AND({Client Code} = '${clientCode}', {Tax Year} = '${taxYear}')`,
       })
       .firstPage();
+
+    console.log(`[documentService] Found ${records.length} records from Airtable`);
+
+    if (records.length > 0) {
+      console.log(`[documentService] Sample record fields:`, Object.keys(records[0].fields));
+      console.log(`[documentService] First record Client Code: "${records[0].fields['Client Code']}", Tax Year: "${records[0].fields['Tax Year']}"`);
+    }
 
     return records.map(record => ({
       id: record.id,
@@ -150,7 +161,8 @@ export async function getDocuments(
       webContentLink: record.fields['Web Content Link'] as string,
     }));
   } catch (error) {
-    console.error('Airtable fetch failed, using local metadata:', error);
+    console.error('[documentService] Airtable fetch failed, using local metadata:', error);
+    console.error('[documentService] Error details:', error instanceof Error ? error.message : String(error));
     return await getLocalMetadata(clientCode, taxYear);
   }
 }
