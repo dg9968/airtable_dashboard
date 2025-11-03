@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "bun run --hot src/index.ts",
-    "build": "bun build src/node-server.ts --outdir=dist --target=node",
+    "build": "bun build src/node-server.ts --outdir=dist --target=node --external=airtable --external=googleapis --external=google-auth-library",
     "start": "node dist/node-server.js",
     "lint": "eslint . --ext .ts"
   },
