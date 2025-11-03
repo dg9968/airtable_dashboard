@@ -33,6 +33,8 @@ app.get('/', async (c) => {
     const clientCode = c.req.query('clientCode');
     const taxYear = c.req.query('taxYear');
 
+    console.log(`Fetching documents for clientCode: ${clientCode}, taxYear: ${taxYear}`);
+
     if (!clientCode) {
       return c.json({ error: 'Client code is required' }, 400);
     }
@@ -43,9 +45,12 @@ app.get('/', async (c) => {
 
     const documents = await getDocuments(clientCode, taxYear);
 
+    console.log(`Found ${documents.length} documents for clientCode: ${clientCode}, taxYear: ${taxYear}`);
+
     return c.json({ documents });
   } catch (error) {
     console.error('Error fetching documents:', error);
+    console.error('Error details:', error instanceof Error ? error.message : String(error));
     return c.json({ error: 'Internal server error' }, 500);
   }
 });
