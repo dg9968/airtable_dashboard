@@ -172,7 +172,9 @@ export default function ClientIntake() {
             setTimeout(() => setError(null), 3000);
           }
         } catch (err) {
-          setError(err instanceof Error ? err.message : "Failed to load client");
+          setError(
+            err instanceof Error ? err.message : "Failed to load client"
+          );
           setTimeout(() => setError(null), 3000);
         } finally {
           setLoading(false);
@@ -473,7 +475,12 @@ export default function ClientIntake() {
         setTimeout(() => setSuccessMessage(null), 3000);
 
         // Continue with the pipeline addition using the new client ID
-        await addToPipelineWithId(newClient.id, validFirstName, validLastName, validPhone);
+        await addToPipelineWithId(
+          newClient.id,
+          validFirstName,
+          validLastName,
+          validPhone
+        );
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to save client");
         setSaving(false);
@@ -482,7 +489,12 @@ export default function ClientIntake() {
     }
 
     // Client already exists, add to pipeline
-    await addToPipelineWithId(selectedClient.id, validFirstName, validLastName, validPhone);
+    await addToPipelineWithId(
+      selectedClient.id,
+      validFirstName,
+      validLastName,
+      validPhone
+    );
   };
 
   // Helper function to add client to pipeline with a given ID
@@ -1892,7 +1904,10 @@ export default function ClientIntake() {
                 <h2 className="card-title text-base-content">
                   📋 Tax Prep Pipeline ({pipelineClients.length} clients)
                 </h2>
-                <Link href="/tax-prep-pipeline" className="btn btn-primary btn-sm">
+                <Link
+                  href="/tax-prep-pipeline"
+                  className="btn btn-primary btn-sm"
+                >
                   View Full Pipeline →
                 </Link>
               </div>
