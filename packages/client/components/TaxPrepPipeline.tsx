@@ -22,6 +22,7 @@ export default function TaxPrepPipeline() {
   const [sortBy, setSortBy] = useState<"name" | "date">("date");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [updating, setUpdating] = useState<string | null>(null);
+  const [taxPreparerFilter, setTaxPreparerFilter] = useState<string>("");
 
   // Available tax preparers (you can make this dynamic by fetching from Airtable if needed)
   const taxPreparers = [
@@ -102,15 +103,23 @@ export default function TaxPrepPipeline() {
     fetchPipeline();
   }, []);
 
-  // Filter clients by search term
+  // Filter clients by search term and tax preparer
   const filteredClients = pipelineClients.filter((client) => {
     const searchLower = searchTerm.toLowerCase();
-    return (
+    const matchesSearch =
       client.firstName.toLowerCase().includes(searchLower) ||
       client.lastName.toLowerCase().includes(searchLower) ||
       client.phone.includes(searchTerm) ||
-      (client.email && client.email.toLowerCase().includes(searchLower))
-    );
+      (client.email && client.email.toLowerCase().includes(searchLower));
+
+    let matchesTaxPreparer = true;
+    if (taxPreparerFilter === "unassigned") {
+      matchesTaxPreparer = !client.taxPreparer || client.taxPreparer.length === 0;
+    } else if (taxPreparerFilter) {
+      matchesTaxPreparer = client.taxPreparer && client.taxPreparer.includes(taxPreparerFilter);
+    }
+
+    return matchesSearch && matchesTaxPreparer;
   });
 
   // Sort clients
@@ -243,6 +252,23 @@ export default function TaxPrepPipeline() {
                     </svg>
                   </button>
                 </div>
+              </div>
+
+              {/* Tax Preparer Filter */}
+              <div className="form-control w-full md:w-64">
+                <select
+                  className="select select-bordered w-full"
+                  value={taxPreparerFilter}
+                  onChange={(e) => setTaxPreparerFilter(e.target.value)}
+                >
+                  <option value="">All Tax Preparers</option>
+                  <option value="unassigned">Unassigned</option>
+                  {taxPreparers.map((preparer) => (
+                    <option key={preparer} value={preparer}>
+                      {preparer}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               {/* Sort Options */}
