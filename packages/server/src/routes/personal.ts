@@ -156,6 +156,8 @@ app.post("/", async (c) => {
       "Last Modified By",
       "Created By",
       "last name first name",
+      "Record ID",
+      "Client Code",
     ];
 
     // Fields that should be numbers in Airtable
@@ -237,6 +239,8 @@ app.patch("/:id", async (c) => {
       "Last Modified By",
       "Created By",
       "last name first name",
+      "Record ID",
+      "Client Code",
     ];
 
     // Fields that should be numbers in Airtable

@@ -1,7 +1,7 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import Link from 'next/link';
+import { useState, useEffect } from "react";
+import Link from "next/link";
 
 interface PipelineClient {
   id: string;
@@ -10,46 +10,71 @@ interface PipelineClient {
   lastName: string;
   phone: string;
   email?: string;
+  clientCode?: string;
+  taxPreparer?: string[];
   addedAt: string;
 }
 
 export default function TaxPrepPipeline() {
   const [pipelineClients, setPipelineClients] = useState<PipelineClient[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [sortBy, setSortBy] = useState<'name' | 'date'>('date');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [searchTerm, setSearchTerm] = useState("");
+  const [sortBy, setSortBy] = useState<"name" | "date">("date");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const [updating, setUpdating] = useState<string | null>(null);
+
+  // Available tax preparers (you can make this dynamic by fetching from Airtable if needed)
+  const taxPreparers = [
+    "Daniel Galindo",
+    "Genesis Hernandez",
+    "Evelina Galindo",
+    "Javier Lopez",
+    "Scarlett Torres",
+  ];
 
   // Fetch pipeline from Airtable
   useEffect(() => {
     const fetchPipeline = async () => {
       try {
         setLoading(true);
-        const response = await fetch('/api/subscriptions-personal');
+        const response = await fetch("/api/subscriptions-personal");
         const data = await response.json();
 
         if (data.success) {
           const pipeline = data.data.map((record: any) => {
             // Full Name is a lookup field
-            const fullName = record.fields['Full Name'];
-            const fullNameStr = Array.isArray(fullName) ? fullName[0] : fullName || '';
+            const fullName = record.fields["Full Name"];
+            const fullNameStr = Array.isArray(fullName)
+              ? fullName[0]
+              : fullName || "";
 
             // Split Full Name into First Name and Last Name
-            const nameParts = fullNameStr.split(' ');
-            const firstName = nameParts[0] || '';
-            const lastName = nameParts.slice(1).join(' ') || '';
+            const nameParts = fullNameStr.split(" ");
+            const firstName = nameParts[0] || "";
+            const lastName = nameParts.slice(1).join(" ") || "";
 
             // Get phone - it's a lookup field with emoji
-            const phone = record.fields['📞Phone number'] || '';
+            const phone = record.fields["📞Phone number"] || "";
             const phoneStr = Array.isArray(phone) ? phone[0] : phone;
 
             // Get email
-            const email = record.fields['📧 Email'] || '';
+            const email = record.fields["📧 Email"] || "";
             const emailStr = Array.isArray(email) ? email[0] : email;
 
             // Get the Personal ID from the "Last Name" link field
-            const personalId = record.fields['Last Name'];
-            const personalIdStr = Array.isArray(personalId) ? personalId[0] : personalId;
+            const personalId = record.fields["Last Name"];
+            const personalIdStr = Array.isArray(personalId)
+              ? personalId[0]
+              : personalId;
+
+            // Get Client Code (lookup field from Personal table)
+            const clientCode = record.fields["Client Code"];
+            const clientCodeStr = Array.isArray(clientCode)
+              ? clientCode[0]
+              : clientCode;
+
+            // Get Tax Preparer (multiple select field)
+            const taxPreparer = record.fields["Tax Preparer"] || [];
 
             return {
               id: record.id,
@@ -58,13 +83,17 @@ export default function TaxPrepPipeline() {
               lastName,
               phone: phoneStr,
               email: emailStr,
+              clientCode: clientCodeStr,
+              taxPreparer: Array.isArray(taxPreparer)
+                ? taxPreparer
+                : [taxPreparer],
               addedAt: record.createdTime,
             };
           });
           setPipelineClients(pipeline);
         }
       } catch (error) {
-        console.error('Failed to fetch pipeline data:', error);
+        console.error("Failed to fetch pipeline data:", error);
       } finally {
         setLoading(false);
       }
@@ -86,33 +115,72 @@ export default function TaxPrepPipeline() {
 
   // Sort clients
   const sortedClients = [...filteredClients].sort((a, b) => {
-    if (sortBy === 'name') {
+    if (sortBy === "name") {
       const nameA = `${a.firstName} ${a.lastName}`.toLowerCase();
       const nameB = `${b.firstName} ${b.lastName}`.toLowerCase();
-      return sortOrder === 'asc' ? nameA.localeCompare(nameB) : nameB.localeCompare(nameA);
+      return sortOrder === "asc"
+        ? nameA.localeCompare(nameB)
+        : nameB.localeCompare(nameA);
     } else {
       const dateA = new Date(a.addedAt).getTime();
       const dateB = new Date(b.addedAt).getTime();
-      return sortOrder === 'asc' ? dateA - dateB : dateB - dateA;
+      return sortOrder === "asc" ? dateA - dateB : dateB - dateA;
     }
   });
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
+    return new Date(dateString).toLocaleString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
     });
   };
 
-  const toggleSort = (field: 'name' | 'date') => {
+  const toggleSort = (field: "name" | "date") => {
     if (sortBy === field) {
-      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+      setSortOrder(sortOrder === "asc" ? "desc" : "asc");
     } else {
       setSortBy(field);
-      setSortOrder('asc');
+      setSortOrder("asc");
+    }
+  };
+
+  const updateTaxPreparer = async (clientId: string, newPreparer: string) => {
+    try {
+      setUpdating(clientId);
+
+      // Update via API
+      const response = await fetch(`/api/subscriptions-personal/${clientId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          fields: {
+            "Tax Preparer": newPreparer ? [newPreparer] : [],
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to update tax preparer");
+      }
+
+      // Update local state
+      setPipelineClients((prevClients) =>
+        prevClients.map((client) =>
+          client.id === clientId
+            ? { ...client, taxPreparer: newPreparer ? [newPreparer] : [] }
+            : client
+        )
+      );
+    } catch (error) {
+      console.error("Error updating tax preparer:", error);
+      alert("Failed to update tax preparer. Please try again.");
+    } finally {
+      setUpdating(null);
     }
   };
 
@@ -180,16 +248,20 @@ export default function TaxPrepPipeline() {
               {/* Sort Options */}
               <div className="flex gap-2">
                 <button
-                  onClick={() => toggleSort('name')}
-                  className={`btn ${sortBy === 'name' ? 'btn-primary' : 'btn-outline'}`}
+                  onClick={() => toggleSort("name")}
+                  className={`btn ${
+                    sortBy === "name" ? "btn-primary" : "btn-outline"
+                  }`}
                 >
-                  Name {sortBy === 'name' && (sortOrder === 'asc' ? '↑' : '↓')}
+                  Name {sortBy === "name" && (sortOrder === "asc" ? "↑" : "↓")}
                 </button>
                 <button
-                  onClick={() => toggleSort('date')}
-                  className={`btn ${sortBy === 'date' ? 'btn-primary' : 'btn-outline'}`}
+                  onClick={() => toggleSort("date")}
+                  className={`btn ${
+                    sortBy === "date" ? "btn-primary" : "btn-outline"
+                  }`}
                 >
-                  Date {sortBy === 'date' && (sortOrder === 'asc' ? '↑' : '↓')}
+                  Date {sortBy === "date" && (sortOrder === "asc" ? "↑" : "↓")}
                 </button>
               </div>
             </div>
@@ -216,6 +288,7 @@ export default function TaxPrepPipeline() {
                       <th>Name</th>
                       <th>Phone</th>
                       <th>Email</th>
+                      <th>Tax Preparer</th>
                       <th>Added to Pipeline</th>
                       <th>Actions</th>
                     </tr>
@@ -229,8 +302,25 @@ export default function TaxPrepPipeline() {
                             {client.firstName} {client.lastName}
                           </div>
                         </td>
-                        <td>{client.phone || 'N/A'}</td>
-                        <td>{client.email || 'N/A'}</td>
+                        <td>{client.phone || "N/A"}</td>
+                        <td>{client.email || "N/A"}</td>
+                        <td>
+                          <select
+                            className="select select-bordered select-sm w-full max-w-xs"
+                            value={client.taxPreparer?.[0] || ""}
+                            onChange={(e) =>
+                              updateTaxPreparer(client.id, e.target.value)
+                            }
+                            disabled={updating === client.id}
+                          >
+                            <option value="">Unassigned</option>
+                            {taxPreparers.map((preparer) => (
+                              <option key={preparer} value={preparer}>
+                                {preparer}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
                         <td>
                           <div className="text-sm">
                             {formatDate(client.addedAt)}
@@ -242,8 +332,18 @@ export default function TaxPrepPipeline() {
                               <Link
                                 href={`/client-intake?id=${client.personalId}`}
                                 className="btn btn-sm btn-ghost"
+                                title="View client details"
                               >
-                                View
+                                👤 View
+                              </Link>
+                            )}
+                            {client.clientCode && (
+                              <Link
+                                href={`/document-management?clientCode=${client.clientCode}&personalId=${client.personalId}`}
+                                className="btn btn-sm btn-primary"
+                                title="View client documents"
+                              >
+                                📄 Documents
                               </Link>
                             )}
                           </div>
@@ -259,8 +359,8 @@ export default function TaxPrepPipeline() {
                 <h3 className="text-xl font-semibold mb-2">No Clients Found</h3>
                 <p className="text-base-content/70">
                   {searchTerm
-                    ? 'Try adjusting your search criteria'
-                    : 'Add clients to the pipeline from the Client Intake page'}
+                    ? "Try adjusting your search criteria"
+                    : "Add clients to the pipeline from the Client Intake page"}
                 </p>
               </div>
             )}
@@ -286,7 +386,9 @@ export default function TaxPrepPipeline() {
               </svg>
             </div>
             <div className="stat-title">Total Clients</div>
-            <div className="stat-value text-primary">{pipelineClients.length}</div>
+            <div className="stat-value text-primary">
+              {pipelineClients.length}
+            </div>
             <div className="stat-desc">In tax prep pipeline</div>
           </div>
 
@@ -307,7 +409,9 @@ export default function TaxPrepPipeline() {
               </svg>
             </div>
             <div className="stat-title">Filtered</div>
-            <div className="stat-value text-secondary">{sortedClients.length}</div>
+            <div className="stat-value text-secondary">
+              {sortedClients.length}
+            </div>
             <div className="stat-desc">Matching search criteria</div>
           </div>
 

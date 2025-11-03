@@ -1,15 +1,19 @@
 // app/document-management/page.tsx
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useRequireRole } from '@/hooks/useAuth';
 import DocumentUpload from '../../components/DocumentUpload';
 import DocumentBrowser from '../../components/DocumentBrowser';
 
-export default function DocumentManagementPage() {
+function DocumentManagementContent() {
   const { session, status } = useRequireRole(['staff', 'admin']);
+  const searchParams = useSearchParams();
   const [refreshKey, setRefreshKey] = useState(0);
   const [useGoogleDrive, setUseGoogleDrive] = useState(true); // Default to Google Drive
+  const initialClientCode = searchParams.get('clientCode') || undefined;
+  const personalId = searchParams.get('personalId') || undefined;
 
   if (status === 'loading') {
     return (
@@ -90,8 +94,10 @@ export default function DocumentManagementPage() {
         {/* Browser Section */}
         <div>
           <DocumentBrowser
-            key={`${refreshKey}-${useGoogleDrive ? 'gdrive' : 'local'}`}
+            key={`${refreshKey}-${useGoogleDrive ? 'gdrive' : 'local'}-${initialClientCode || ''}`}
             useGoogleDrive={useGoogleDrive}
+            initialClientCode={initialClientCode}
+            personalId={personalId}
           />
         </div>
       </div>
@@ -157,5 +163,20 @@ export default function DocumentManagementPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function DocumentManagementPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-base-200 flex items-center justify-center">
+        <div className="text-center">
+          <span className="loading loading-spinner loading-lg"></span>
+          <p className="mt-4 text-base-content/70">Loading...</p>
+        </div>
+      </div>
+    }>
+      <DocumentManagementContent />
+    </Suspense>
   );
 }

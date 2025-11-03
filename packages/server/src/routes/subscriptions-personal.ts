@@ -6,7 +6,7 @@
 
 import { Hono } from 'hono';
 import { testConnection } from '../airtable';
-import { fetchAllRecords, createRecords, deleteRecords } from '../lib/airtable-helpers';
+import { fetchAllRecords, createRecords, updateRecords, deleteRecords } from '../lib/airtable-helpers';
 
 const app = new Hono();
 
@@ -130,6 +130,55 @@ app.get('/personal/:personalId', async (c) => {
       {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to fetch subscriptions',
+      },
+      500
+    );
+  }
+});
+
+/**
+ * PATCH /api/subscriptions-personal/:id
+ * Update a subscription record (e.g., assign tax preparer)
+ */
+app.patch('/:id', async (c) => {
+  try {
+    const id = c.req.param('id');
+    const { fields } = await c.req.json();
+    const baseId = process.env.AIRTABLE_BASE_ID || '';
+
+    if (!fields) {
+      return c.json(
+        {
+          success: false,
+          error: 'Missing fields to update',
+        },
+        400
+      );
+    }
+
+    console.log('Updating Subscriptions Personal record:', id);
+    console.log('Fields to update:', fields);
+
+    const records = await updateRecords(baseId, 'Subscriptions Personal', [
+      {
+        id,
+        fields,
+      },
+    ]);
+
+    return c.json({
+      success: true,
+      data: {
+        id: records[0].id,
+        fields: records[0].fields,
+      },
+    });
+  } catch (error) {
+    console.error('Error updating subscription:', error);
+    return c.json(
+      {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to update subscription',
       },
       500
     );

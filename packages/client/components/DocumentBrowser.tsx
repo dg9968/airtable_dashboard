@@ -2,6 +2,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 
 interface Document {
   id: string;
@@ -17,10 +18,12 @@ interface DocumentBrowserProps {
   useGoogleDrive?: boolean;
   documentCategory?: string;
   isCorporate?: boolean;
+  initialClientCode?: string;
+  personalId?: string;
 }
 
-export default function DocumentBrowser({ useGoogleDrive = false, documentCategory, isCorporate = false }: DocumentBrowserProps) {
-  const [clientCode, setClientCode] = useState('');
+export default function DocumentBrowser({ useGoogleDrive = false, documentCategory, isCorporate = false, initialClientCode, personalId }: DocumentBrowserProps) {
+  const [clientCode, setClientCode] = useState(initialClientCode || '');
   const [taxYear, setTaxYear] = useState('');
   const [documents, setDocuments] = useState<Document[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -188,13 +191,29 @@ export default function DocumentBrowser({ useGoogleDrive = false, documentCatego
   return (
     <div className="card bg-base-100 shadow-xl">
       <div className="card-body">
-        <h2 className="card-title">
-          {isCorporate ? 'Corporate Document Browser' : 'Document Browser'}
-          {isCorporate && documentCategory && (
-            <div className="badge badge-primary text-xs ml-2">{documentCategory}</div>
+        <div className="flex justify-between items-center mb-2">
+          <h2 className="card-title">
+            {isCorporate ? 'Corporate Document Browser' : 'Document Browser'}
+            {isCorporate && documentCategory && (
+              <div className="badge badge-primary text-xs ml-2">{documentCategory}</div>
+            )}
+          </h2>
+
+          {/* Navigation Links */}
+          {!isCorporate && (
+            <div className="flex gap-2">
+              <Link href="/tax-prep-pipeline" className="btn btn-sm btn-ghost">
+                📋 Tax Prep Pipeline
+              </Link>
+              {personalId && (
+                <Link href={`/client-intake?id=${personalId}`} className="btn btn-sm btn-primary">
+                  👤 Client Intake
+                </Link>
+              )}
+            </div>
           )}
-        </h2>
-        
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-4">
           <div className="form-control">
             <input
