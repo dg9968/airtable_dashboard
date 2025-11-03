@@ -116,7 +116,7 @@ export default function TaxPrepPipeline() {
     if (taxPreparerFilter === "unassigned") {
       matchesTaxPreparer = !client.taxPreparer || client.taxPreparer.length === 0;
     } else if (taxPreparerFilter) {
-      matchesTaxPreparer = client.taxPreparer && client.taxPreparer.includes(taxPreparerFilter);
+      matchesTaxPreparer = Boolean(client.taxPreparer && client.taxPreparer.includes(taxPreparerFilter));
     }
 
     return matchesSearch && matchesTaxPreparer;
