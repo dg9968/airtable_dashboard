@@ -50,32 +50,8 @@ app.use('*', cors({
   credentials: true,
 }));
 
-// API Key Authentication Middleware
-app.use('/api/*', async (c, next) => {
-  // Skip API key check for JWT-authenticated routes
-  const path = c.req.path;
-  const jwtAuthRoutes = ['/api/bank-statement-processing', '/api/csv-to-qbo'];
-
-  if (jwtAuthRoutes.some(route => path.startsWith(route))) {
-    return next();
-  }
-
-  const apiKey = c.req.header('X-API-Key');
-  const expectedApiKey = process.env.API_SECRET_KEY;
-
-  // Skip auth check if no API key is configured (development)
-  if (!expectedApiKey) {
-    console.warn('⚠️ API_SECRET_KEY not set - API is unprotected!');
-    return next();
-  }
-
-  // Verify API key
-  if (!apiKey || apiKey !== expectedApiKey) {
-    return c.json({ error: 'Unauthorized - Invalid or missing API key' }, 401);
-  }
-
-  return next();
-});
+// Note: API authentication is handled by individual routes using JWT/session
+// No global API key middleware needed since we're using NextAuth on the client
 
 // Health check (no auth required)
 app.get('/health', (c) => {
