@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import DocumentChecklist from "./DocumentChecklist";
 
@@ -57,6 +57,7 @@ interface DocumentChecklistItem {
 export default function ClientIntake() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [searchTerm, setSearchTerm] = useState("");
   const [searchResults, setSearchResults] = useState<PersonalRecord[]>([]);
   const [selectedClient, setSelectedClient] = useState<PersonalRecord | null>(
@@ -139,6 +140,48 @@ export default function ClientIntake() {
       addedAt: string;
     }>
   >([]);
+
+  // Load client data if 'id' query parameter is present
+  useEffect(() => {
+    const clientId = searchParams.get("id");
+    if (clientId && status === "authenticated") {
+      const loadClient = async () => {
+        try {
+          setLoading(true);
+          const response = await fetch(`/api/personal/${clientId}`);
+          const data = await response.json();
+
+          if (data.success) {
+            const client: PersonalRecord = {
+              id: data.data.id,
+              fields: data.data.fields,
+              createdTime: data.data.createdTime,
+            };
+            setSelectedClient(client);
+            setFormData(client.fields);
+            setIsNewClient(false);
+            const fullName =
+              client.fields["Full Name"] ||
+              `${client.fields["First Name"] || ""} ${
+                client.fields["Last Name"] || ""
+              }`.trim();
+            setSuccessMessage(`Loaded client: ${fullName}`);
+            setTimeout(() => setSuccessMessage(null), 3000);
+          } else {
+            setError(data.error || "Failed to load client");
+            setTimeout(() => setError(null), 3000);
+          }
+        } catch (err) {
+          setError(err instanceof Error ? err.message : "Failed to load client");
+          setTimeout(() => setError(null), 3000);
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      loadClient();
+    }
+  }, [searchParams, status]);
 
   // Fetch pipeline from Airtable on mount
   useEffect(() => {

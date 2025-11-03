@@ -219,8 +219,12 @@ app.post('/', async (c) => {
       const file = csvFiles[i];
       console.log(`Processing file ${i + 1}/${csvFiles.length}: size=${file.size} bytes`);
 
-      const text = await file.text();
+      let text = await file.text();
       console.log(`File text length: ${text.length} characters`);
+
+      // Clean up the CSV text - remove leading single quotes that are inside quoted fields
+      // Convert "'value" to "value" within quotes
+      text = text.replace(/"'([^"]*)"/g, '"$1"');
 
       // Parse CSV
       let records: string[][];
@@ -228,21 +232,40 @@ app.post('/', async (c) => {
         records = parse(text, {
           skip_empty_lines: true,
           relax_column_count: true,
+          bom: true, // Handle UTF-8 BOM
+          trim: true, // Trim whitespace
+          relax_quotes: true, // Be more flexible with quotes
+          skip_records_with_error: true, // Skip problematic rows
+          quote: '"',
+          escape: '"',
         }) as string[][];
         console.log(`Parsed ${records.length} rows from CSV`);
       } catch (parseError) {
         console.error('CSV parse error:', parseError);
+        console.error('CSV content preview (first 500 chars):', text.substring(0, 500));
         return c.json({
           error: 'Failed to parse CSV file',
-          details: parseError instanceof Error ? parseError.message : 'Unknown parse error'
+          details: parseError instanceof Error ? parseError.message : 'Unknown parse error',
+          preview: text.substring(0, 200)
         }, 400);
       }
 
+      let rowCount = 0;
+      let skippedCount = 0;
       for (const row of records) {
-        if (row.length < 6) continue;
+        rowCount++;
+
+        // Need at least 5 columns: Date, Check#, Desc, Credit, Debit (Balance is optional)
+        if (row.length < 5) {
+          console.log(`Row ${rowCount}: Skipped - less than 5 columns (has ${row.length})`);
+          skippedCount++;
+          continue;
+        }
 
         // Skip header and empty rows
         if (!row[0] || row[0].includes("Fecha") || row[0].includes("Confidence")) {
+          console.log(`Row ${rowCount}: Skipped - header or empty (${row[0]})`);
+          skippedCount++;
           continue;
         }
 
@@ -251,9 +274,15 @@ app.post('/', async (c) => {
         const credit = row[3];  // Depósitos/Créditos
         const debit = row[4];   // Retiros/Débitos
 
+        console.log(`Row ${rowCount}: Date="${dateStr}", Desc="${desc?.substring(0, 30)}...", Credit="${credit}", Debit="${debit}"`);
+
         // Parse date
         const dateVal = parseDate(dateStr);
-        if (!dateVal) continue;
+        if (!dateVal) {
+          console.log(`Row ${rowCount}: Skipped - invalid date`);
+          skippedCount++;
+          continue;
+        }
 
         // Parse amount (credit is positive, debit is negative)
         let amount: number | null = null;
@@ -270,18 +299,28 @@ app.post('/', async (c) => {
           }
         }
 
-        if (amount === null) continue;
+        if (amount === null) {
+          console.log(`Row ${rowCount}: Skipped - no amount`);
+          skippedCount++;
+          continue;
+        }
 
         // Clean description
         const descClean = (desc || "").trim().replace(/^'/, '').replace(/'$/, '');
-        if (!descClean) continue;
+        if (!descClean) {
+          console.log(`Row ${rowCount}: Skipped - no description`);
+          skippedCount++;
+          continue;
+        }
 
+        console.log(`Row ${rowCount}: ✓ Added transaction: ${descClean.substring(0, 30)}... $${amount}`);
         allTransactions.push({
           date: dateVal,
           desc: descClean,
           amount: amount
         });
       }
+      console.log(`File ${i + 1} summary: ${allTransactions.length} transactions added, ${skippedCount} rows skipped`);
     }
 
     console.log(`Total transactions parsed: ${allTransactions.length}`);
