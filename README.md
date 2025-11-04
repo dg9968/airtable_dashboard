@@ -122,6 +122,30 @@ bun run start
 - **Billing Management**: Processor billing and client management
 - **Training Resources**: YouTube video integration
 - **Filing Deadlines**: Tax deadline tracking
+- **Cloud Backup**: OneDrive to Google Drive automated backup script
+
+## 🔄 Backup Scripts
+
+The server includes a backup script to automatically sync files from OneDrive to Google Drive:
+
+```bash
+# From packages/server directory
+
+# Test what would be backed up (dry run)
+npm run backup:onedrive:dry-run
+
+# Run the backup
+npm run backup:onedrive
+```
+
+**Features:**
+- Preserves folder structure
+- Incremental backups (updates existing files)
+- Supports file exclusion patterns
+- Works with personal and organizational OneDrive accounts
+- Can be scheduled for automated backups
+
+📖 **[Full Setup Guide](./docs/ONEDRIVE_BACKUP_SETUP.md)** - Complete instructions for Azure AD and Google Cloud setup
 
 ## 📝 Available Scripts
 
@@ -159,6 +183,10 @@ This application is configured for deployment on [Render.com](https://render.com
 - `AWS_S3_BUCKET`
 - `GOOGLE_DRIVE_CREDENTIALS_JSON`
 - `GOOGLE_DRIVE_FOLDER_ID`
+- `GOOGLE_DRIVE_BACKUP_FOLDER_ID` (for OneDrive backups)
+- `ONEDRIVE_CLIENT_ID` (optional, for backup script)
+- `ONEDRIVE_CLIENT_SECRET` (optional, for backup script)
+- `ONEDRIVE_TENANT_ID` (optional, for backup script)
 
 ## 📚 Tech Stack
 

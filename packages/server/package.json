@@ -7,24 +7,29 @@
     "dev": "bun run --hot src/index.ts",
     "build": "bun build src/node-server.ts --outdir=dist --target=node --external=airtable --external=googleapis --external=google-auth-library",
     "start": "node dist/node-server.js",
-    "lint": "eslint . --ext .ts"
+    "lint": "eslint . --ext .ts",
+    "backup:onedrive": "bun run src/scripts/onedrive-to-gdrive-backup.ts",
+    "backup:onedrive:dry-run": "bun run src/scripts/onedrive-to-gdrive-backup.ts --dry-run"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.908.0",
     "@aws-sdk/s3-request-presigner": "^3.908.0",
+    "@azure/identity": "^4.13.0",
     "@hono/node-server": "^1.12.0",
+    "@microsoft/microsoft-graph-client": "^3.0.7",
     "airtable": "^0.12.2",
     "bcryptjs": "^3.0.2",
     "csv-parse": "^6.1.0",
     "google-auth-library": "^10.3.0",
     "googleapis": "^155.0.1",
-    "hono": "^4.0.0"
+    "hono": "^4.0.0",
+    "isomorphic-fetch": "^3.0.0"
   },
   "devDependencies": {
-    "@types/bcryptjs": "^2.4.6",
-    "@types/node": "^20",
-    "@types/bun": "latest",
     "@eslint/eslintrc": "^3.3.1",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/bun": "latest",
+    "@types/node": "^20",
     "dotenv": "^17.2.1",
     "eslint": "^9.33.0",
     "typescript": "^5"
