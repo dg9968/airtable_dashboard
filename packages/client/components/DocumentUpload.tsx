@@ -26,8 +26,8 @@ export default function DocumentUpload({ onUploadComplete, useGoogleDrive = fals
   ];
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
 
     // Validate client code is provided and is 4 digits
     if (!clientCode.trim()) {
@@ -69,38 +69,69 @@ export default function DocumentUpload({ onUploadComplete, useGoogleDrive = fals
     setUploadResult(null);
 
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('clientCode', clientCode.trim());
-      
-      // For business credentials, use 'N/A' as tax year
-      if (isCorporate && documentCategory === 'business-credentials') {
-        formData.append('taxYear', 'N/A');
-      } else {
-        formData.append('taxYear', taxYear);
-      }
-      
-      if (isCorporate && documentCategory) {
-        formData.append('documentCategory', documentCategory);
-        formData.append('isCorporate', 'true');
-      }
-
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-      // TODO: Implement separate Google Drive upload endpoint when needed
-      const response = await fetch(`${apiUrl}/api/documents`, {
-        method: 'POST',
-        body: formData,
-      });
+      const uploadedFiles: any[] = [];
+      const failedFiles: string[] = [];
 
-      const result = await response.json();
+      // Upload each file sequentially
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
 
-      if (!response.ok) {
-        throw new Error(result.error || 'Upload failed');
+        try {
+          const formData = new FormData();
+          formData.append('file', file);
+          formData.append('clientCode', clientCode.trim());
+
+          // For business credentials, use 'N/A' as tax year
+          if (isCorporate && documentCategory === 'business-credentials') {
+            formData.append('taxYear', 'N/A');
+          } else {
+            formData.append('taxYear', taxYear);
+          }
+
+          if (isCorporate && documentCategory) {
+            formData.append('documentCategory', documentCategory);
+            formData.append('isCorporate', 'true');
+          }
+
+          const response = await fetch(`${apiUrl}/api/documents`, {
+            method: 'POST',
+            body: formData,
+          });
+
+          const result = await response.json();
+
+          if (!response.ok) {
+            throw new Error(result.error || 'Upload failed');
+          }
+
+          uploadedFiles.push({ ...result, fileName: file.name });
+        } catch (err) {
+          const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+          failedFiles.push(`${file.name} (${errorMessage})`);
+          console.error(`Failed to upload ${file.name}:`, err);
+        }
       }
 
-      setUploadResult(result);
-      if (onUploadComplete) {
-        onUploadComplete(result);
+      // Set result based on upload outcome
+      if (uploadedFiles.length > 0) {
+        const result = {
+          success: true,
+          clientCode: clientCode.trim(),
+          uploadedCount: uploadedFiles.length,
+          totalCount: files.length,
+          files: uploadedFiles,
+          failedFiles,
+        };
+
+        setUploadResult(result);
+        if (onUploadComplete) {
+          onUploadComplete(result);
+        }
+      }
+
+      if (failedFiles.length > 0) {
+        setError(`Failed to upload ${failedFiles.length} file(s): ${failedFiles.join(', ')}`);
       }
 
       // Reset file input
@@ -178,11 +209,12 @@ export default function DocumentUpload({ onUploadComplete, useGoogleDrive = fals
 
         <div className="form-control w-full">
           <label className="label">
-            <span className="label-text">Select file to upload</span>
+            <span className="label-text">Select file(s) to upload</span>
           </label>
           <input
             ref={fileInputRef}
             type="file"
+            multiple
             className="file-input file-input-bordered w-full"
             accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png,.gif"
             onChange={handleFileUpload}
@@ -190,7 +222,7 @@ export default function DocumentUpload({ onUploadComplete, useGoogleDrive = fals
           />
           <label className="label">
             <span className="label-text-alt">
-              Allowed: PDF, Word, Text, Images (max 10MB)
+              Allowed: PDF, Word, Text, Images (max 10MB each). You can select multiple files.
             </span>
           </label>
         </div>
@@ -219,7 +251,7 @@ export default function DocumentUpload({ onUploadComplete, useGoogleDrive = fals
         {isUploading && (
           <div className="alert alert-warning">
             <span className="loading loading-spinner loading-sm"></span>
-            <span>Uploading file...</span>
+            <span>Uploading file(s)...</span>
           </div>
         )}
 
@@ -237,16 +269,31 @@ export default function DocumentUpload({ onUploadComplete, useGoogleDrive = fals
             <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <div>
+            <div className="flex-1">
               <div className="font-bold">Upload successful!</div>
               <div className="text-sm">
                 Client Code: <strong>{uploadResult.clientCode}</strong>
-                {uploadResult.source === 'google-drive' && (
-                  <div className="text-xs mt-1 opacity-75">
-                    Stored in Google Drive
-                  </div>
-                )}
               </div>
+              {uploadResult.uploadedCount !== undefined && (
+                <div className="text-sm mt-1">
+                  Successfully uploaded <strong>{uploadResult.uploadedCount}</strong> of <strong>{uploadResult.totalCount}</strong> file(s)
+                </div>
+              )}
+              {uploadResult.files && uploadResult.files.length > 0 && (
+                <div className="text-xs mt-2 opacity-75">
+                  <div className="font-semibold mb-1">Uploaded files:</div>
+                  <ul className="list-disc list-inside">
+                    {uploadResult.files.map((file: any, index: number) => (
+                      <li key={index}>{file.fileName}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {uploadResult.source === 'google-drive' && (
+                <div className="text-xs mt-1 opacity-75">
+                  Stored in Google Drive
+                </div>
+              )}
             </div>
           </div>
         )}

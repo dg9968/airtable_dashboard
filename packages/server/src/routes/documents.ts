@@ -16,6 +16,7 @@ import {
   isValidClientCode,
   isValidTaxYear,
   isAllowedFileType,
+  isAllowedFileExtension,
   isValidFileSize,
 } from '../utils/helpers';
 
@@ -95,8 +96,12 @@ app.post('/', async (c) => {
       return c.json({ error: 'Business credentials should use N/A as tax year' }, 400);
     }
 
-    if (!isAllowedFileType(file.type)) {
-      return c.json({ error: 'File type not allowed' }, 400);
+    // Validate by MIME type or file extension (fallback for when MIME type is incorrect)
+    if (!isAllowedFileType(file.type) && !isAllowedFileExtension(file.name)) {
+      return c.json({
+        error: 'File type not allowed',
+        details: `File type "${file.type}" or extension not supported. Allowed: PDF, DOC, DOCX, TXT, JPG, PNG, GIF`
+      }, 400);
     }
 
     if (!isValidFileSize(file.size)) {

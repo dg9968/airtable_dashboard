@@ -25,19 +25,38 @@ export function isValidTaxYear(year: string): boolean {
 }
 
 /**
- * Validate file type
+ * Validate file type by MIME type
  */
 export function isAllowedFileType(mimeType: string): boolean {
   const allowedTypes = [
     'application/pdf',
+    'application/x-pdf',
+    'application/acrobat',
+    'applications/vnd.pdf',
+    'text/pdf',
+    'text/x-pdf',
     'image/jpeg',
+    'image/jpg',
     'image/png',
     'image/gif',
     'text/plain',
     'application/msword',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-word',
+    'application/doc',
+    'application/docx'
   ];
+
   return allowedTypes.includes(mimeType);
+}
+
+/**
+ * Validate file extension
+ */
+export function isAllowedFileExtension(filename: string): boolean {
+  const allowedExtensions = ['.pdf', '.doc', '.docx', '.txt', '.jpg', '.jpeg', '.png', '.gif'];
+  const ext = filename.toLowerCase().substring(filename.lastIndexOf('.'));
+  return allowedExtensions.includes(ext);
 }
 
 /**
