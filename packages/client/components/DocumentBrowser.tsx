@@ -159,7 +159,12 @@ export default function DocumentBrowser({ useGoogleDrive = false, documentCatego
         throw new Error(result.error || 'Failed to fetch documents');
       }
 
-      setDocuments(result.documents || []);
+      const docs = result.documents || [];
+      // Sort documents alphabetically by original name
+      docs.sort((a: Document, b: Document) =>
+        a.originalName.localeCompare(b.originalName, undefined, { sensitivity: 'base' })
+      );
+      setDocuments(docs);
 
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch documents');
