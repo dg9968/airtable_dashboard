@@ -54,6 +54,7 @@ export default function DocumentBrowser({ useGoogleDrive = false, documentCatego
   const [searchResults, setSearchResults] = useState<Client[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [showSearchResults, setShowSearchResults] = useState(false);
+  const [includeSpouse, setIncludeSpouse] = useState(true);
   const searchRef = useRef<HTMLDivElement>(null);
 
   // Close search results when clicking outside
@@ -147,11 +148,16 @@ export default function DocumentBrowser({ useGoogleDrive = false, documentCatego
       // For business credentials, use 'N/A' as tax year
       const effectiveTaxYear = (isCorporate && documentCategory === 'business-credentials') ? 'N/A' : taxYear;
       let queryParams = `clientCode=${clientCode.trim()}&taxYear=${effectiveTaxYear}`;
-      
+
       if (isCorporate && documentCategory) {
         queryParams += `&documentCategory=${documentCategory}&isCorporate=true`;
       }
-      
+
+      // Add includeSpouse parameter for personal documents
+      if (!isCorporate && includeSpouse) {
+        queryParams += `&includeSpouse=true`;
+      }
+
       const response = await fetch(`${apiEndpoint}?${queryParams}`);
       const result = await response.json();
 
@@ -444,6 +450,26 @@ export default function DocumentBrowser({ useGoogleDrive = false, documentCatego
           </button>
         </div>
 
+        {/* Include Spouse Documents Checkbox - Only for Personal Documents */}
+        {!isCorporate && (
+          <div className="form-control mb-4">
+            <label className="label cursor-pointer justify-start gap-3">
+              <input
+                type="checkbox"
+                className="checkbox checkbox-primary"
+                checked={includeSpouse}
+                onChange={(e) => setIncludeSpouse(e.target.checked)}
+              />
+              <span className="label-text">
+                Include spouse documents (if married)
+              </span>
+            </label>
+            <p className="text-xs text-gray-500 ml-8">
+              When enabled, this will also show documents from the linked spouse's client code
+            </p>
+          </div>
+        )}
+
         {error && (
           <div className="alert alert-error mb-4">
             <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
@@ -484,6 +510,12 @@ export default function DocumentBrowser({ useGoogleDrive = false, documentCatego
                           <div className="text-xs opacity-60 hidden sm:block md:hidden truncate">
                             {formatDate(doc.uploadDate)}
                           </div>
+                          {/* Show client code badge if it's different from the searched code and spouse is included */}
+                          {includeSpouse && !isCorporate && doc.clientCode !== clientCode && (
+                            <div className="badge badge-sm badge-ghost mt-1">
+                              Spouse: {doc.clientCode}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </td>

@@ -26,6 +26,7 @@ const app = new Hono();
 /**
  * GET /api/documents
  * Retrieve documents by client code and tax year
+ * Optional: includeSpouse=true to include spouse's documents
  */
 app.get('/', async (c) => {
   try {
@@ -34,8 +35,9 @@ app.get('/', async (c) => {
 
     const clientCode = c.req.query('clientCode');
     const taxYear = c.req.query('taxYear');
+    const includeSpouse = c.req.query('includeSpouse') === 'true';
 
-    console.log(`Fetching documents for clientCode: ${clientCode}, taxYear: ${taxYear}`);
+    console.log(`Fetching documents for clientCode: ${clientCode}, taxYear: ${taxYear}, includeSpouse: ${includeSpouse}`);
 
     if (!clientCode) {
       return c.json({ error: 'Client code is required' }, 400);
@@ -45,7 +47,7 @@ app.get('/', async (c) => {
       return c.json({ error: 'Tax year is required' }, 400);
     }
 
-    const documents = await getDocuments(clientCode, taxYear);
+    const documents = await getDocuments(clientCode, taxYear, includeSpouse);
 
     console.log(`Found ${documents.length} documents for clientCode: ${clientCode}, taxYear: ${taxYear}`);
 

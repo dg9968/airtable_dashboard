@@ -122,21 +122,67 @@ export async function generateUniqueClientCode(): Promise<string> {
 }
 
 /**
+ * Get spouse client code from Personal table
+ */
+export async function getSpouseClientCode(clientCode: string): Promise<string | null> {
+  try {
+    const PERSONAL_TABLE = 'Personal';
+
+    // Find the person with this client code
+    const records = await base(PERSONAL_TABLE)
+      .select({
+        filterByFormula: `{Client Code} = '${clientCode}'`,
+        maxRecords: 1
+      })
+      .firstPage();
+
+    if (records.length === 0) {
+      return null;
+    }
+
+    const person = records[0];
+    const spouseClientCode = person.fields['Spouse Client Code'] as string;
+
+    if (!spouseClientCode) {
+      return null;
+    }
+
+    return spouseClientCode;
+  } catch (error) {
+    console.error('[documentService] Error finding spouse:', error);
+    return null;
+  }
+}
+
+/**
  * Get documents by client code and tax year
  */
 export async function getDocuments(
   clientCode: string,
-  taxYear: string
+  taxYear: string,
+  includeSpouse: boolean = false
 ): Promise<DocumentMetadata[]> {
+  let filterFormula = `AND({Client Code} = '${clientCode}', {Tax Year} = '${taxYear}')`;
+
   try {
-    console.log(`[documentService] getDocuments called with clientCode: "${clientCode}", taxYear: "${taxYear}"`);
+    console.log(`[documentService] getDocuments called with clientCode: "${clientCode}", taxYear: "${taxYear}", includeSpouse: ${includeSpouse}`);
     console.log(`[documentService] Using Airtable base: ${process.env.AIRTABLE_BASE_ID?.substring(0, 8)}...`);
-    console.log(`[documentService] Filter formula: AND({Client Code} = '${clientCode}', {Tax Year} = '${taxYear}')`);
+
+    // If includeSpouse, get spouse's client code and include their documents
+    if (includeSpouse) {
+      const spouseClientCode = await getSpouseClientCode(clientCode);
+      if (spouseClientCode) {
+        console.log(`[documentService] Found spouse client code: ${spouseClientCode}`);
+        filterFormula = `AND(OR({Client Code} = '${clientCode}', {Client Code} = '${spouseClientCode}'), {Tax Year} = '${taxYear}')`;
+      }
+    }
+
+    console.log(`[documentService] Filter formula: ${filterFormula}`);
 
     // Try Airtable first
     const records = await base(DOCUMENTS_TABLE)
       .select({
-        filterByFormula: `AND({Client Code} = '${clientCode}', {Tax Year} = '${taxYear}')`,
+        filterByFormula: filterFormula,
       })
       .firstPage();
 
@@ -164,6 +210,7 @@ export async function getDocuments(
   } catch (error) {
     console.error('[documentService] Airtable fetch failed, using local metadata:', error);
     console.error('[documentService] Error details:', error instanceof Error ? error.message : String(error));
+    console.error('[documentService] Filter formula was:', filterFormula);
     return await getLocalMetadata(clientCode, taxYear);
   }
 }
