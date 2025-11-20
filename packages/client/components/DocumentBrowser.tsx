@@ -1,7 +1,7 @@
 // components/DocumentBrowser.tsx
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 
 interface Document {
@@ -12,6 +12,17 @@ interface Document {
   fileSize: number;
   fileType: string;
   clientCode: string;
+}
+
+interface Client {
+  id: string;
+  fields: {
+    'Full Name'?: string;
+    'Client Code'?: string;
+    'Email'?: string;
+    '📞Phone number'?: string;
+    'SSN'?: string;
+  };
 }
 
 interface DocumentBrowserProps {
@@ -39,6 +50,25 @@ export default function DocumentBrowser({ useGoogleDrive = false, documentCatego
   });
   const [newFileName, setNewFileName] = useState('');
   const [isRenaming, setIsRenaming] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [searchResults, setSearchResults] = useState<Client[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [showSearchResults, setShowSearchResults] = useState(false);
+  const searchRef = useRef<HTMLDivElement>(null);
+
+  // Close search results when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
+        setShowSearchResults(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   const taxYearOptions = [
     { value: '2022', label: 'Tax Filing Year 2022' },
@@ -46,6 +76,48 @@ export default function DocumentBrowser({ useGoogleDrive = false, documentCatego
     { value: '2024', label: 'Tax Filing Year 2024' },
     { value: '2025', label: 'Tax Filing Year 2025' },
   ];
+
+  const searchClients = async (query: string) => {
+    if (query.length < 2) {
+      setSearchResults([]);
+      setShowSearchResults(false);
+      return;
+    }
+
+    setIsSearching(true);
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+      const response = await fetch(`${apiUrl}/api/personal/search?q=${encodeURIComponent(query)}`);
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Search failed');
+      }
+
+      setSearchResults(result.data || []);
+      setShowSearchResults(true);
+    } catch (err) {
+      console.error('Search error:', err);
+      setSearchResults([]);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const handleSearchChange = (value: string) => {
+    setSearchTerm(value);
+    searchClients(value);
+  };
+
+  const selectClient = (client: Client) => {
+    const code = client.fields['Client Code'];
+    if (code) {
+      setClientCode(code);
+      setSearchTerm('');
+      setShowSearchResults(false);
+      setSearchResults([]);
+    }
+  };
 
   const fetchDocuments = async () => {
     if (!clientCode.trim()) {
@@ -274,6 +346,62 @@ export default function DocumentBrowser({ useGoogleDrive = false, documentCatego
             </div>
           )}
         </div>
+
+        {/* Client Search Section */}
+        <div className="mb-6">
+          <div className="divider">Search Existing Clients</div>
+          <p className="text-sm text-gray-500 mb-3">Search by name, email, phone, or last 4 digits of SSN</p>
+          <div className="form-control relative" ref={searchRef}>
+            <input
+              type="text"
+              placeholder="Start typing to search..."
+              className="input input-bordered w-full"
+              value={searchTerm}
+              onChange={(e) => handleSearchChange(e.target.value)}
+            />
+            {isSearching && (
+              <span className="loading loading-spinner loading-sm absolute right-3 top-3"></span>
+            )}
+
+            {/* Search Results Dropdown */}
+            {showSearchResults && searchResults.length > 0 && (
+              <div className="absolute z-10 w-full mt-1 bg-base-100 border border-base-300 rounded-lg shadow-lg max-h-80 overflow-y-auto top-full">
+                {searchResults.map((client) => (
+                  <button
+                    key={client.id}
+                    className="w-full text-left px-4 py-3 hover:bg-base-200 border-b border-base-300 last:border-b-0 transition-colors"
+                    onClick={() => selectClient(client)}
+                  >
+                    <div className="font-semibold text-sm">{client.fields['Full Name'] || 'No Name'}</div>
+                    <div className="text-xs text-gray-500 mt-1 space-y-0.5">
+                      {client.fields['Client Code'] && (
+                        <div>Client Code: <span className="font-mono">{client.fields['Client Code']}</span></div>
+                      )}
+                      {client.fields['Email'] && (
+                        <div>Email: {client.fields['Email']}</div>
+                      )}
+                      {client.fields['📞Phone number'] && (
+                        <div>Phone: {client.fields['📞Phone number']}</div>
+                      )}
+                      {client.fields['SSN'] && (
+                        <div>SSN: ***-**-{client.fields['SSN'].slice(-4)}</div>
+                      )}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* No Results Message */}
+            {showSearchResults && searchResults.length === 0 && !isSearching && searchTerm.length >= 2 && (
+              <div className="absolute z-10 w-full mt-1 bg-base-100 border border-base-300 rounded-lg shadow-lg p-4 top-full">
+                <p className="text-sm text-gray-500 text-center">No clients found matching "{searchTerm}"</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="divider">Or Enter Client Code Manually</div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-4">
           <div className="form-control">
