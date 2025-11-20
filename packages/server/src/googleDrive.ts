@@ -220,25 +220,41 @@ export async function listClientFiles(clientCode: string, taxYear: string) {
   }
 }
 
+// Rename file in Google Drive
+export async function renameFileInGoogleDrive(fileId: string, newFileName: string): Promise<void> {
+  try {
+    await drive.files.update({
+      fileId: fileId,
+      requestBody: {
+        name: newFileName,
+      },
+      supportsAllDrives: true,
+    });
+  } catch (error) {
+    console.error('Error renaming file in Google Drive:', error);
+    throw error;
+  }
+}
+
 // Test Google Drive connection
 export async function testGoogleDriveConnection() {
   try {
     validateGoogleDriveEnvironment();
-    
+
     const response = await drive.about.get({
       fields: 'user, storageQuota',
     });
 
-    return { 
-      success: true, 
+    return {
+      success: true,
       message: 'Google Drive connection successful',
       user: response.data.user,
-      storageQuota: response.data.storageQuota 
+      storageQuota: response.data.storageQuota
     };
   } catch (error) {
-    return { 
-      success: false, 
-      message: error instanceof Error ? error.message : 'Unknown connection error' 
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : 'Unknown connection error'
     };
   }
 }

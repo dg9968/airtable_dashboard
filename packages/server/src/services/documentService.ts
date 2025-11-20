@@ -13,6 +13,7 @@ import {
   uploadFileToGoogleDrive,
   deleteFileFromGoogleDrive,
   getFileMetadata,
+  renameFileInGoogleDrive,
 } from '../googleDrive';
 
 const airtable = new Airtable({
@@ -281,6 +282,51 @@ export async function getDocumentById(recordId: string): Promise<DocumentMetadat
   } catch (error) {
     console.error('Error fetching document:', error);
     return null;
+  }
+}
+
+/**
+ * Rename document
+ */
+export async function renameDocument(recordId: string, newFileName: string): Promise<DocumentMetadata> {
+  try {
+    // Get document metadata first
+    const record = await base(DOCUMENTS_TABLE).find(recordId);
+    const googleDriveFileId = record.fields['Google Drive File ID'] as string;
+
+    // Rename in Google Drive if file ID exists
+    if (googleDriveFileId) {
+      try {
+        await renameFileInGoogleDrive(googleDriveFileId, newFileName);
+        console.log('Successfully renamed in Google Drive:', googleDriveFileId);
+      } catch (error) {
+        console.error('Google Drive rename failed:', error);
+        throw new Error('Failed to rename file in Google Drive');
+      }
+    }
+
+    // Update in Airtable
+    const updatedRecord = await base(DOCUMENTS_TABLE).update(recordId, {
+      'Original Name': newFileName,
+    });
+
+    return {
+      id: updatedRecord.id,
+      fileName: updatedRecord.fields['File Name'] as string,
+      originalName: updatedRecord.fields['Original Name'] as string,
+      uploadDate: updatedRecord.fields['Upload Date'] as string,
+      fileSize: updatedRecord.fields['File Size'] as number,
+      fileType: updatedRecord.fields['File Type'] as string,
+      clientCode: updatedRecord.fields['Client Code'] as string,
+      taxYear: updatedRecord.fields['Tax Year'] as string,
+      uploadedBy: updatedRecord.fields['Uploaded By'] as string,
+      googleDriveFileId: updatedRecord.fields['Google Drive File ID'] as string,
+      webViewLink: updatedRecord.fields['Web View Link'] as string,
+      webContentLink: updatedRecord.fields['Web Content Link'] as string,
+    };
+  } catch (error) {
+    console.error('Error renaming document:', error);
+    throw new Error(error instanceof Error ? error.message : 'Document not found');
   }
 }
 

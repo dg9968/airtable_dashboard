@@ -9,6 +9,7 @@ import {
   getDocuments,
   saveDocument,
   deleteDocument,
+  renameDocument,
   generateUniqueClientCode,
   getDocumentById,
 } from '../services/documentService';
@@ -125,6 +126,45 @@ app.post('/', async (c) => {
   } catch (error) {
     console.error('Error uploading document:', error);
     return c.json({ error: 'Internal server error' }, 500);
+  }
+});
+
+/**
+ * PATCH /api/documents/rename
+ * Rename a document by record ID
+ */
+app.patch('/rename', async (c) => {
+  try {
+    // TODO: Add session/auth check
+
+    const body = await c.req.json();
+    const { recordId, newFileName } = body;
+
+    if (!recordId) {
+      return c.json({ error: 'Record ID is required' }, 400);
+    }
+
+    if (!newFileName || !newFileName.trim()) {
+      return c.json({ error: 'New file name is required' }, 400);
+    }
+
+    const updatedDocument = await renameDocument(recordId, newFileName.trim());
+
+    return c.json({
+      success: true,
+      message: 'Document renamed successfully',
+      document: updatedDocument,
+    });
+  } catch (error) {
+    console.error('Error renaming document:', error);
+
+    if (error instanceof Error && error.message.includes('not found')) {
+      return c.json({ error: 'Document not found' }, 404);
+    }
+
+    return c.json({
+      error: error instanceof Error ? error.message : 'Internal server error'
+    }, 500);
   }
 });
 

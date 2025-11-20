@@ -33,6 +33,12 @@ export default function DocumentBrowser({ useGoogleDrive = false, documentCatego
     document: null
   });
   const [isDeleting, setIsDeleting] = useState(false);
+  const [renameDialog, setRenameDialog] = useState<{ show: boolean; document: Document | null }>({
+    show: false,
+    document: null
+  });
+  const [newFileName, setNewFileName] = useState('');
+  const [isRenaming, setIsRenaming] = useState(false);
 
   const taxYearOptions = [
     { value: '2022', label: 'Tax Filing Year 2022' },
@@ -168,6 +174,61 @@ export default function DocumentBrowser({ useGoogleDrive = false, documentCatego
 
   const handleDeleteCancel = () => {
     setDeleteConfirm({ show: false, document: null });
+  };
+
+  const handleRenameClick = (document: Document) => {
+    setRenameDialog({ show: true, document });
+    setNewFileName(document.originalName);
+  };
+
+  const handleRenameConfirm = async () => {
+    if (!renameDialog.document || !newFileName.trim()) return;
+
+    setIsRenaming(true);
+    setError('');
+
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+      const response = await fetch(`${apiUrl}/api/documents/rename`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          recordId: renameDialog.document.id,
+          newFileName: newFileName.trim(),
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Rename failed');
+      }
+
+      // Update document in local state
+      setDocuments(docs =>
+        docs.map(doc =>
+          doc.id === renameDialog.document!.id
+            ? { ...doc, originalName: newFileName.trim() }
+            : doc
+        )
+      );
+
+      // Close rename dialog
+      setRenameDialog({ show: false, document: null });
+      setNewFileName('');
+
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Rename failed');
+    } finally {
+      setIsRenaming(false);
+    }
+  };
+
+  const handleRenameCancel = () => {
+    setRenameDialog({ show: false, document: null });
+    setNewFileName('');
   };
 
   const formatFileSize = (bytes: number) => {
@@ -318,6 +379,16 @@ export default function DocumentBrowser({ useGoogleDrive = false, documentCatego
                             </svg>
                           </button>
                         </div>
+                        <div className="tooltip" data-tip="Rename">
+                          <button
+                            className="btn btn-ghost btn-xs text-warning hover:bg-warning hover:text-warning-content"
+                            onClick={() => handleRenameClick(doc)}
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+                            </svg>
+                          </button>
+                        </div>
                         <div className="tooltip" data-tip="Delete">
                           <button
                             className="btn btn-ghost btn-xs text-error hover:bg-error hover:text-error-content"
@@ -346,6 +417,57 @@ export default function DocumentBrowser({ useGoogleDrive = false, documentCatego
         ) : null}
       </div>
 
+      {/* Rename Dialog */}
+      {renameDialog.show && (
+        <div className="modal modal-open">
+          <div className="modal-box">
+            <h3 className="font-bold text-lg text-warning">Rename Document</h3>
+            <p className="py-2 text-sm text-gray-500">
+              Current name: <strong>{renameDialog.document?.originalName}</strong>
+            </p>
+            <div className="form-control w-full">
+              <label className="label">
+                <span className="label-text">New file name</span>
+              </label>
+              <input
+                type="text"
+                placeholder="Enter new file name"
+                className="input input-bordered w-full"
+                value={newFileName}
+                onChange={(e) => setNewFileName(e.target.value)}
+                disabled={isRenaming}
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && newFileName.trim()) {
+                    handleRenameConfirm();
+                  }
+                }}
+              />
+              <label className="label">
+                <span className="label-text-alt">Include file extension (e.g., document.pdf)</span>
+              </label>
+            </div>
+            <div className="modal-action">
+              <button
+                className="btn btn-ghost"
+                onClick={handleRenameCancel}
+                disabled={isRenaming}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn btn-warning"
+                onClick={handleRenameConfirm}
+                disabled={isRenaming || !newFileName.trim()}
+              >
+                {isRenaming && <span className="loading loading-spinner loading-sm"></span>}
+                Rename
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Delete Confirmation Dialog */}
       {deleteConfirm.show && (
         <div className="modal modal-open">
@@ -358,15 +480,15 @@ export default function DocumentBrowser({ useGoogleDrive = false, documentCatego
               This action cannot be undone. The document will be permanently removed from the system.
             </p>
             <div className="modal-action">
-              <button 
-                className="btn btn-ghost" 
+              <button
+                className="btn btn-ghost"
                 onClick={handleDeleteCancel}
                 disabled={isDeleting}
               >
                 Cancel
               </button>
-              <button 
-                className="btn btn-error" 
+              <button
+                className="btn btn-error"
                 onClick={handleDeleteConfirm}
                 disabled={isDeleting}
               >
