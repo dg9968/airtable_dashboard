@@ -108,7 +108,7 @@ app.post('/', async (c) => {
     }
 
     if (!isValidFileSize(file.size)) {
-      return c.json({ error: 'File too large (max 10MB)' }, 400);
+      return c.json({ error: 'File too large (max 20MB)' }, 400);
     }
 
     // Save document

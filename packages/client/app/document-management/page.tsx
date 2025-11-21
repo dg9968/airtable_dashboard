@@ -4,6 +4,7 @@
 import { Suspense, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useRequireRole } from '@/hooks/useAuth';
+import ClientSearch from '../../components/ClientSearch';
 import DocumentUpload from '../../components/DocumentUpload';
 import DocumentBrowser from '../../components/DocumentBrowser';
 
@@ -12,8 +13,8 @@ function DocumentManagementContent() {
   const searchParams = useSearchParams();
   const [refreshKey, setRefreshKey] = useState(0);
   const [useGoogleDrive, setUseGoogleDrive] = useState(true); // Default to Google Drive
-  const initialClientCode = searchParams.get('clientCode') || undefined;
-  const personalId = searchParams.get('personalId') || undefined;
+  const [selectedClientCode, setSelectedClientCode] = useState(searchParams.get('clientCode') || '');
+  const [selectedPersonalId, setSelectedPersonalId] = useState(searchParams.get('personalId') || '');
 
   if (status === 'loading') {
     return (
@@ -36,6 +37,11 @@ function DocumentManagementContent() {
     return null;
   }
 
+  const handleClientSelect = (clientCode: string, personalId: string) => {
+    setSelectedClientCode(clientCode);
+    setSelectedPersonalId(personalId);
+  };
+
   const handleUploadComplete = (result: any) => {
     if (result.clientCode) {
       // Force refresh of document browser
@@ -53,22 +59,22 @@ function DocumentManagementContent() {
               Upload, manage, and retrieve client documents using 4-digit codes
             </p>
           </div>
-          
+
           <div className="form-control">
             <label className="label cursor-pointer">
               <span className="label-text mr-3">
                 {useGoogleDrive ? 'Google Drive' : 'Local Storage'}
               </span>
-              <input 
-                type="checkbox" 
-                className="toggle toggle-primary" 
+              <input
+                type="checkbox"
+                className="toggle toggle-primary"
                 checked={useGoogleDrive}
                 onChange={(e) => setUseGoogleDrive(e.target.checked)}
               />
             </label>
           </div>
         </div>
-        
+
         {useGoogleDrive && (
           <div className="alert alert-info mb-4">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" className="stroke-current shrink-0 w-6 h-6">
@@ -82,22 +88,31 @@ function DocumentManagementContent() {
         )}
       </div>
 
+      {/* Client Search Section - Full Width */}
+      <div className="mb-8">
+        <ClientSearch
+          onClientSelect={handleClientSelect}
+          initialClientCode={selectedClientCode}
+        />
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Upload Section */}
         <div>
           <DocumentUpload
             onUploadComplete={handleUploadComplete}
             useGoogleDrive={useGoogleDrive}
+            clientCode={selectedClientCode}
           />
         </div>
 
         {/* Browser Section */}
         <div>
           <DocumentBrowser
-            key={`${refreshKey}-${useGoogleDrive ? 'gdrive' : 'local'}-${initialClientCode || ''}`}
+            key={`${refreshKey}-${useGoogleDrive ? 'gdrive' : 'local'}-${selectedClientCode}`}
             useGoogleDrive={useGoogleDrive}
-            initialClientCode={initialClientCode}
-            personalId={personalId}
+            clientCode={selectedClientCode}
+            personalId={selectedPersonalId}
           />
         </div>
       </div>
@@ -107,7 +122,7 @@ function DocumentManagementContent() {
         <div className="card bg-base-100 shadow-xl">
           <div className="card-body">
             <h2 className="card-title">Quick Actions</h2>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="stat">
                 <div className="stat-figure text-primary">
@@ -142,7 +157,7 @@ function DocumentManagementContent() {
             </div>
 
             <div className="divider">Instructions</div>
-            
+
             <div className="alert alert-info">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" className="stroke-current shrink-0 w-6 h-6">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
@@ -150,12 +165,12 @@ function DocumentManagementContent() {
               <div>
                 <h3 className="font-bold">How to use:</h3>
                 <ul className="mt-2 space-y-1 text-sm">
-                  <li>• <strong>Step 1:</strong> Enter a 4-digit client code (e.g., 1234)</li>
-                  <li>• <strong>Step 2:</strong> Select the relevant tax filing year (2022-2025)</li>
-                  <li>• <strong>Step 3:</strong> Select and upload the document file</li>
-                  <li>• <strong>Step 4:</strong> Search documents by client code and tax year</li>
+                  <li>• <strong>Step 1:</strong> Search for a client by name, email, phone, or last 4 of SSN</li>
+                  <li>• <strong>Step 2:</strong> Select the client from search results</li>
+                  <li>• <strong>Step 3:</strong> Select the relevant tax filing year (2022-2025)</li>
+                  <li>• <strong>Step 4:</strong> Upload documents or search existing documents</li>
                   <li>• <strong>Step 5:</strong> View documents in browser or download them</li>
-                  <li>• Supported file types: PDF, Word docs, images, text files (max 10MB)</li>
+                  <li>• Supported file types: PDF, Word docs, images, text files (max 20MB)</li>
                 </ul>
               </div>
             </div>

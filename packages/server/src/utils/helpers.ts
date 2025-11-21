@@ -60,9 +60,9 @@ export function isAllowedFileExtension(filename: string): boolean {
 }
 
 /**
- * Validate file size (max 10MB)
+ * Validate file size (max 20MB)
  */
-export function isValidFileSize(size: number, maxSizeMB: number = 10): boolean {
+export function isValidFileSize(size: number, maxSizeMB: number = 20): boolean {
   return size <= maxSizeMB * 1024 * 1024;
 }
 

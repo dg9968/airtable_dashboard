@@ -8,10 +8,10 @@ interface DocumentUploadProps {
   useGoogleDrive?: boolean;
   documentCategory?: string;
   isCorporate?: boolean;
+  clientCode?: string;
 }
 
-export default function DocumentUpload({ onUploadComplete, useGoogleDrive = false, documentCategory, isCorporate = false }: DocumentUploadProps) {
-  const [clientCode, setClientCode] = useState('');
+export default function DocumentUpload({ onUploadComplete, useGoogleDrive = false, documentCategory, isCorporate = false, clientCode = '' }: DocumentUploadProps) {
   const [taxYear, setTaxYear] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState<any>(null);
@@ -31,7 +31,7 @@ export default function DocumentUpload({ onUploadComplete, useGoogleDrive = fals
 
     // Validate client code is provided and is 4 digits
     if (!clientCode.trim()) {
-      setError('Please enter a 4-digit client code');
+      setError('Please select a client first');
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
@@ -152,59 +152,46 @@ export default function DocumentUpload({ onUploadComplete, useGoogleDrive = fals
         <h2 className="card-title">
           {isCorporate ? 'Upload Corporate Document' : 'Upload Document'}
         </h2>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-          <div className="form-control w-full">
-            <label className="label">
-              <span className="label-text">Enter 4-digit client code</span>
-              <span className="label-text-alt text-error">*Required</span>
-            </label>
-            <input
-              type="text"
-              placeholder="Enter 4-digit code (e.g., 1234)"
-              className="input input-bordered w-full"
-              value={clientCode}
-              onChange={(e) => setClientCode(e.target.value)}
-              maxLength={4}
-              pattern="\d{4}"
-              disabled={isUploading}
-            />
-            <label className="label">
-              <span className="label-text-alt">
-                Must be exactly 4 digits
-              </span>
-            </label>
-          </div>
 
-          <div className="form-control w-full">
-            <label className="label">
-              <span className="label-text">Select tax filing year</span>
-              <span className="label-text-alt text-error">
-                {isCorporate && documentCategory === 'business-credentials' ? 'Not required for Business Credentials' : '*Required'}
-              </span>
-            </label>
-            <select
-              className="select select-bordered w-full"
-              value={taxYear}
-              onChange={(e) => setTaxYear(e.target.value)}
-              disabled={isUploading || (isCorporate && documentCategory === 'business-credentials')}
-            >
-              <option value="">Choose tax filing year</option>
-              {taxYearOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            <label className="label">
-              <span className="label-text-alt">
-                {isCorporate && documentCategory === 'business-credentials' ? 
-                  'Business credentials are year-independent' : 
-                  'Select relevant tax year'
-                }
-              </span>
-            </label>
+        {/* Client Code Display */}
+        {clientCode ? (
+          <div className="alert alert-info mb-4">
+            <span>Uploading for Client Code: <strong className="font-mono">{clientCode}</strong></span>
           </div>
+        ) : (
+          <div className="alert alert-warning mb-4">
+            <span>Please select a client using the search above</span>
+          </div>
+        )}
+
+        <div className="form-control w-full mb-4">
+          <label className="label">
+            <span className="label-text">Select tax filing year</span>
+            <span className="label-text-alt text-error">
+              {isCorporate && documentCategory === 'business-credentials' ? 'Not required for Business Credentials' : '*Required'}
+            </span>
+          </label>
+          <select
+            className="select select-bordered w-full"
+            value={taxYear}
+            onChange={(e) => setTaxYear(e.target.value)}
+            disabled={isUploading || (isCorporate && documentCategory === 'business-credentials') || !clientCode}
+          >
+            <option value="">Choose tax filing year</option>
+            {taxYearOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <label className="label">
+            <span className="label-text-alt">
+              {isCorporate && documentCategory === 'business-credentials' ?
+                'Business credentials are year-independent' :
+                'Select relevant tax year'
+              }
+            </span>
+          </label>
         </div>
 
         <div className="form-control w-full">
@@ -222,7 +209,7 @@ export default function DocumentUpload({ onUploadComplete, useGoogleDrive = fals
           />
           <label className="label">
             <span className="label-text-alt">
-              Allowed: PDF, Word, Text, Images (max 10MB each). You can select multiple files.
+              Allowed: PDF, Word, Text, Images (max 20MB each). You can select multiple files.
             </span>
           </label>
         </div>

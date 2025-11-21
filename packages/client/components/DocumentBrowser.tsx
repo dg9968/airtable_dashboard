@@ -1,7 +1,7 @@
 // components/DocumentBrowser.tsx
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 
 interface Document {
@@ -14,27 +14,15 @@ interface Document {
   clientCode: string;
 }
 
-interface Client {
-  id: string;
-  fields: {
-    'Full Name'?: string;
-    'Client Code'?: string;
-    'Email'?: string;
-    '📞Phone number'?: string;
-    'SSN'?: string;
-  };
-}
-
 interface DocumentBrowserProps {
   useGoogleDrive?: boolean;
   documentCategory?: string;
   isCorporate?: boolean;
-  initialClientCode?: string;
+  clientCode?: string;
   personalId?: string;
 }
 
-export default function DocumentBrowser({ useGoogleDrive = false, documentCategory, isCorporate = false, initialClientCode, personalId }: DocumentBrowserProps) {
-  const [clientCode, setClientCode] = useState(initialClientCode || '');
+export default function DocumentBrowser({ useGoogleDrive = false, documentCategory, isCorporate = false, clientCode = '', personalId }: DocumentBrowserProps) {
   const [taxYear, setTaxYear] = useState('');
   const [documents, setDocuments] = useState<Document[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -50,26 +38,9 @@ export default function DocumentBrowser({ useGoogleDrive = false, documentCatego
   });
   const [newFileName, setNewFileName] = useState('');
   const [isRenaming, setIsRenaming] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [searchResults, setSearchResults] = useState<Client[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
-  const [showSearchResults, setShowSearchResults] = useState(false);
   const [includeSpouse, setIncludeSpouse] = useState(true);
-  const searchRef = useRef<HTMLDivElement>(null);
-
-  // Close search results when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
-        setShowSearchResults(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, []);
+  const [sortColumn, setSortColumn] = useState<'name' | 'size' | 'date'>('name');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
   const taxYearOptions = [
     { value: '2022', label: 'Tax Filing Year 2022' },
@@ -78,51 +49,15 @@ export default function DocumentBrowser({ useGoogleDrive = false, documentCatego
     { value: '2025', label: 'Tax Filing Year 2025' },
   ];
 
-  const searchClients = async (query: string) => {
-    if (query.length < 2) {
-      setSearchResults([]);
-      setShowSearchResults(false);
-      return;
-    }
-
-    setIsSearching(true);
-    try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-      const response = await fetch(`${apiUrl}/api/personal/search?q=${encodeURIComponent(query)}`);
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Search failed');
-      }
-
-      setSearchResults(result.data || []);
-      setShowSearchResults(true);
-    } catch (err) {
-      console.error('Search error:', err);
-      setSearchResults([]);
-    } finally {
-      setIsSearching(false);
-    }
-  };
-
-  const handleSearchChange = (value: string) => {
-    setSearchTerm(value);
-    searchClients(value);
-  };
-
-  const selectClient = (client: Client) => {
-    const code = client.fields['Client Code'];
-    if (code) {
-      setClientCode(code);
-      setSearchTerm('');
-      setShowSearchResults(false);
-      setSearchResults([]);
-    }
-  };
+  // Clear documents when client code changes
+  useEffect(() => {
+    setDocuments([]);
+    setError('');
+  }, [clientCode]);
 
   const fetchDocuments = async () => {
     if (!clientCode.trim()) {
-      setError('Please enter a 4-digit client code');
+      setError('Please select a client first');
       return;
     }
 
@@ -141,8 +76,6 @@ export default function DocumentBrowser({ useGoogleDrive = false, documentCatego
 
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-      // TODO: Implement separate Google Drive endpoint when needed
-      // For now, both use the same documents API
       const apiEndpoint = `${apiUrl}/api/documents`;
 
       // For business credentials, use 'N/A' as tax year
@@ -166,10 +99,6 @@ export default function DocumentBrowser({ useGoogleDrive = false, documentCatego
       }
 
       const docs = result.documents || [];
-      // Sort documents alphabetically by original name
-      docs.sort((a: Document, b: Document) =>
-        a.originalName.localeCompare(b.originalName, undefined, { sensitivity: 'base' })
-      );
       setDocuments(docs);
 
     } catch (err) {
@@ -183,9 +112,8 @@ export default function DocumentBrowser({ useGoogleDrive = false, documentCatego
   const downloadDocument = async (document: Document) => {
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-      // TODO: Implement separate Google Drive download endpoint when needed
       const response = await fetch(`${apiUrl}/api/documents/download?recordId=${document.id}`);
-      
+
       if (!response.ok) {
         const result = await response.json();
         throw new Error(result.error || 'Download failed');
@@ -209,9 +137,7 @@ export default function DocumentBrowser({ useGoogleDrive = false, documentCatego
 
   const viewDocument = (document: Document) => {
     try {
-      // Open document in new tab for viewing
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-      // TODO: Implement separate Google Drive view endpoint when needed
       const viewUrl = `${apiUrl}/api/documents/view?recordId=${document.id}`;
       window.open(viewUrl, '_blank');
     } catch (err) {
@@ -231,7 +157,6 @@ export default function DocumentBrowser({ useGoogleDrive = false, documentCatego
 
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-      // TODO: Implement separate Google Drive delete endpoint when needed
       const response = await fetch(`${apiUrl}/api/documents?recordId=${deleteConfirm.document.id}`, {
         method: 'DELETE'
       });
@@ -244,7 +169,7 @@ export default function DocumentBrowser({ useGoogleDrive = false, documentCatego
 
       // Remove document from local state
       setDocuments(docs => docs.filter(doc => doc.id !== deleteConfirm.document!.id));
-      
+
       // Close confirmation dialog
       setDeleteConfirm({ show: false, document: null });
 
@@ -332,6 +257,52 @@ export default function DocumentBrowser({ useGoogleDrive = false, documentCatego
     });
   };
 
+  const handleSort = (column: 'name' | 'size' | 'date') => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortColumn(column);
+      setSortDirection('asc');
+    }
+  };
+
+  const sortedDocuments = [...documents].sort((a, b) => {
+    let comparison = 0;
+
+    switch (sortColumn) {
+      case 'name':
+        comparison = a.originalName.localeCompare(b.originalName, undefined, { sensitivity: 'base' });
+        break;
+      case 'size':
+        comparison = a.fileSize - b.fileSize;
+        break;
+      case 'date':
+        comparison = new Date(a.uploadDate).getTime() - new Date(b.uploadDate).getTime();
+        break;
+    }
+
+    return sortDirection === 'asc' ? comparison : -comparison;
+  });
+
+  const SortIcon = ({ column }: { column: 'name' | 'size' | 'date' }) => {
+    if (sortColumn !== column) {
+      return (
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 opacity-30">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 15L12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9" />
+        </svg>
+      );
+    }
+    return sortDirection === 'asc' ? (
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" />
+      </svg>
+    ) : (
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+      </svg>
+    );
+  };
+
   return (
     <div className="card bg-base-100 shadow-xl">
       <div className="card-body">
@@ -347,90 +318,35 @@ export default function DocumentBrowser({ useGoogleDrive = false, documentCatego
           {!isCorporate && (
             <div className="flex gap-2">
               <Link href="/tax-prep-pipeline" className="btn btn-sm btn-ghost">
-                📋 Tax Prep Pipeline
+                Tax Prep Pipeline
               </Link>
               {personalId && (
                 <Link href={`/client-intake?id=${personalId}`} className="btn btn-sm btn-primary">
-                  👤 Client Intake
+                  Client Intake
                 </Link>
               )}
             </div>
           )}
         </div>
 
-        {/* Client Search Section */}
-        <div className="mb-6">
-          <div className="divider">Search Existing Clients</div>
-          <p className="text-sm text-gray-500 mb-3">Search by name, email, phone, or last 4 digits of SSN</p>
-          <div className="form-control relative" ref={searchRef}>
-            <input
-              type="text"
-              placeholder="Start typing to search..."
-              className="input input-bordered w-full"
-              value={searchTerm}
-              onChange={(e) => handleSearchChange(e.target.value)}
-            />
-            {isSearching && (
-              <span className="loading loading-spinner loading-sm absolute right-3 top-3"></span>
-            )}
-
-            {/* Search Results Dropdown */}
-            {showSearchResults && searchResults.length > 0 && (
-              <div className="absolute z-10 w-full mt-1 bg-base-100 border border-base-300 rounded-lg shadow-lg max-h-80 overflow-y-auto top-full">
-                {searchResults.map((client) => (
-                  <button
-                    key={client.id}
-                    className="w-full text-left px-4 py-3 hover:bg-base-200 border-b border-base-300 last:border-b-0 transition-colors"
-                    onClick={() => selectClient(client)}
-                  >
-                    <div className="font-semibold text-sm">{client.fields['Full Name'] || 'No Name'}</div>
-                    <div className="text-xs text-gray-500 mt-1 space-y-0.5">
-                      {client.fields['Client Code'] && (
-                        <div>Client Code: <span className="font-mono">{client.fields['Client Code']}</span></div>
-                      )}
-                      {client.fields['Email'] && (
-                        <div>Email: {client.fields['Email']}</div>
-                      )}
-                      {client.fields['📞Phone number'] && (
-                        <div>Phone: {client.fields['📞Phone number']}</div>
-                      )}
-                      {client.fields['SSN'] && (
-                        <div>SSN: ***-**-{client.fields['SSN'].slice(-4)}</div>
-                      )}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {/* No Results Message */}
-            {showSearchResults && searchResults.length === 0 && !isSearching && searchTerm.length >= 2 && (
-              <div className="absolute z-10 w-full mt-1 bg-base-100 border border-base-300 rounded-lg shadow-lg p-4 top-full">
-                <p className="text-sm text-gray-500 text-center">No clients found matching "{searchTerm}"</p>
-              </div>
-            )}
+        {/* Client Code Display */}
+        {clientCode ? (
+          <div className="alert alert-info mb-4">
+            <span>Selected Client Code: <strong className="font-mono">{clientCode}</strong></span>
           </div>
-        </div>
-
-        <div className="divider">Or Enter Client Code Manually</div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-4">
-          <div className="form-control">
-            <input
-              type="text"
-              placeholder="Enter 4-digit client code"
-              className="input input-bordered"
-              value={clientCode}
-              onChange={(e) => setClientCode(e.target.value)}
-              maxLength={4}
-              pattern="\d{4}"
-            />
+        ) : (
+          <div className="alert alert-warning mb-4">
+            <span>Please select a client using the search above</span>
           </div>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-4">
           <div className="form-control">
             <select
               className="select select-bordered"
               value={taxYear}
               onChange={(e) => setTaxYear(e.target.value)}
+              disabled={!clientCode}
             >
               <option value="">Choose tax filing year</option>
               {taxYearOptions.map((option) => (
@@ -451,7 +367,7 @@ export default function DocumentBrowser({ useGoogleDrive = false, documentCatego
         </div>
 
         {/* Include Spouse Documents Checkbox - Only for Personal Documents */}
-        {!isCorporate && (
+        {!isCorporate && clientCode && (
           <div className="form-control mb-4">
             <label className="label cursor-pointer justify-start gap-3">
               <input
@@ -484,14 +400,38 @@ export default function DocumentBrowser({ useGoogleDrive = false, documentCatego
             <table className="table table-compact">
               <thead>
                 <tr>
-                  <th className="w-2/5">Document</th>
-                  <th className="hidden sm:table-cell w-1/6">Size</th>
-                  <th className="hidden md:table-cell w-1/4">Upload Date</th>
+                  <th className="w-2/5">
+                    <button
+                      className="flex items-center gap-1 hover:text-primary transition-colors"
+                      onClick={() => handleSort('name')}
+                    >
+                      Document
+                      <SortIcon column="name" />
+                    </button>
+                  </th>
+                  <th className="hidden sm:table-cell w-1/6">
+                    <button
+                      className="flex items-center gap-1 hover:text-primary transition-colors"
+                      onClick={() => handleSort('size')}
+                    >
+                      Size
+                      <SortIcon column="size" />
+                    </button>
+                  </th>
+                  <th className="hidden md:table-cell w-1/4">
+                    <button
+                      className="flex items-center gap-1 hover:text-primary transition-colors"
+                      onClick={() => handleSort('date')}
+                    >
+                      Upload Date
+                      <SortIcon column="date" />
+                    </button>
+                  </th>
                   <th className="text-center w-1/6">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {documents.map((doc) => (
+                {sortedDocuments.map((doc) => (
                   <tr key={doc.id} className="hover">
                     <td className="w-2/5">
                       <div className="flex items-center gap-2">
