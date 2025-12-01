@@ -196,8 +196,13 @@ export default function TaxPrepPipeline() {
       const data = await response.json();
 
       if (!response.ok) {
-        console.error("Server error:", data);
-        throw new Error(data.error || "Failed to update tax preparer");
+        console.error("Server error response:", data);
+        console.error("Response status:", response.status, response.statusText);
+        const errorMsg = data.error || "Failed to update tax preparer";
+        if (data.details) {
+          console.error("Error details:", data.details);
+        }
+        throw new Error(errorMsg);
       }
 
       // Update local state

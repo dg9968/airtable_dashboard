@@ -157,7 +157,8 @@ app.patch('/:id', async (c) => {
     }
 
     console.log('Updating Subscriptions Personal record:', id);
-    console.log('Fields to update:', fields);
+    console.log('Fields to update:', JSON.stringify(fields, null, 2));
+    console.log('Base ID:', baseId);
 
     const records = await updateRecords(baseId, 'Subscriptions Personal', [
       {
@@ -175,10 +176,12 @@ app.patch('/:id', async (c) => {
     });
   } catch (error) {
     console.error('Error updating subscription:', error);
+    console.error('Error details:', error instanceof Error ? error.stack : error);
     return c.json(
       {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to update subscription',
+        details: error instanceof Error ? error.stack : String(error),
       },
       500
     );
