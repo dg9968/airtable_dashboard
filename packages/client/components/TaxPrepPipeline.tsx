@@ -15,6 +15,12 @@ interface PipelineClient {
   addedAt: string;
 }
 
+interface TaxPreparer {
+  id: string;
+  name: string;
+  email: string;
+}
+
 export default function TaxPrepPipeline() {
   const [pipelineClients, setPipelineClients] = useState<PipelineClient[]>([]);
   const [loading, setLoading] = useState(true);
@@ -23,22 +29,34 @@ export default function TaxPrepPipeline() {
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [updating, setUpdating] = useState<string | null>(null);
   const [taxPreparerFilter, setTaxPreparerFilter] = useState<string>("");
+  const [taxPreparers, setTaxPreparers] = useState<TaxPreparer[]>([]);
 
-  // Available tax preparers (you can make this dynamic by fetching from Airtable if needed)
-  const taxPreparers = [
-    "Daniel Galindo",
-    "Genesis Hernandez",
-    "Evelina Galindo",
-    "Javier Lopez",
-    "Scarlett Torres",
-  ];
+  // Fetch tax preparers from Teams table
+  useEffect(() => {
+    const fetchTeams = async () => {
+      try {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+        const response = await fetch(`${apiUrl}/api/teams`);
+        const data = await response.json();
+
+        if (data.success) {
+          setTaxPreparers(data.data);
+        }
+      } catch (error) {
+        console.error("Failed to fetch teams:", error);
+      }
+    };
+
+    fetchTeams();
+  }, []);
 
   // Fetch pipeline from Airtable
   useEffect(() => {
     const fetchPipeline = async () => {
       try {
         setLoading(true);
-        const response = await fetch("/api/subscriptions-personal");
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+        const response = await fetch(`${apiUrl}/api/subscriptions-personal`);
         const data = await response.json();
 
         if (data.success) {
@@ -116,6 +134,7 @@ export default function TaxPrepPipeline() {
     if (taxPreparerFilter === "unassigned") {
       matchesTaxPreparer = !client.taxPreparer || client.taxPreparer.length === 0;
     } else if (taxPreparerFilter) {
+      // taxPreparerFilter is now a record ID, check if it's in the client's taxPreparer array
       matchesTaxPreparer = Boolean(client.taxPreparer && client.taxPreparer.includes(taxPreparerFilter));
     }
 
@@ -156,19 +175,20 @@ export default function TaxPrepPipeline() {
     }
   };
 
-  const updateTaxPreparer = async (clientId: string, newPreparer: string) => {
+  const updateTaxPreparer = async (clientId: string, newPreparerId: string) => {
     try {
       setUpdating(clientId);
 
-      // Update via API
-      const response = await fetch(`/api/subscriptions-personal/${clientId}`, {
+      // Update via API - send the record ID from the Teams table
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+      const response = await fetch(`${apiUrl}/api/subscriptions-personal/${clientId}`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
           fields: {
-            "Tax Preparer": newPreparer ? [newPreparer] : [],
+            "Tax Preparer": newPreparerId ? [newPreparerId] : [],
           },
         }),
       });
@@ -181,7 +201,7 @@ export default function TaxPrepPipeline() {
       setPipelineClients((prevClients) =>
         prevClients.map((client) =>
           client.id === clientId
-            ? { ...client, taxPreparer: newPreparer ? [newPreparer] : [] }
+            ? { ...client, taxPreparer: newPreparerId ? [newPreparerId] : [] }
             : client
         )
       );
@@ -264,8 +284,8 @@ export default function TaxPrepPipeline() {
                   <option value="">All Tax Preparers</option>
                   <option value="unassigned">Unassigned</option>
                   {taxPreparers.map((preparer) => (
-                    <option key={preparer} value={preparer}>
-                      {preparer}
+                    <option key={preparer.id} value={preparer.id}>
+                      {preparer.name}
                     </option>
                   ))}
                 </select>
@@ -341,8 +361,8 @@ export default function TaxPrepPipeline() {
                           >
                             <option value="">Unassigned</option>
                             {taxPreparers.map((preparer) => (
-                              <option key={preparer} value={preparer}>
-                                {preparer}
+                              <option key={preparer.id} value={preparer.id}>
+                                {preparer.name}
                               </option>
                             ))}
                           </select>
