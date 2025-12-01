@@ -193,8 +193,11 @@ export default function TaxPrepPipeline() {
         }),
       });
 
+      const data = await response.json();
+
       if (!response.ok) {
-        throw new Error("Failed to update tax preparer");
+        console.error("Server error:", data);
+        throw new Error(data.error || "Failed to update tax preparer");
       }
 
       // Update local state
@@ -207,7 +210,8 @@ export default function TaxPrepPipeline() {
       );
     } catch (error) {
       console.error("Error updating tax preparer:", error);
-      alert("Failed to update tax preparer. Please try again.");
+      const errorMessage = error instanceof Error ? error.message : "Failed to update tax preparer. Please try again.";
+      alert(errorMessage);
     } finally {
       setUpdating(null);
     }
