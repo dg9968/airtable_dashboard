@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 
 interface CorporateClient {
   id: string;
+  clientCode?: string;
   name: string;
   ein: string;
   entityNumber: string;
@@ -92,6 +93,7 @@ export default function CorporateClientSearch({
         const clientsList: CorporateClient[] = data.data
           .map((company: any) => ({
             id: company.id,
+            clientCode: (company.clientCode || '').toString().trim(),
             name: (company.name || '').toString().trim(),
             ein: (company.taxId || '').toString().trim(),
             entityNumber: (company.entityNumber || '').toString().trim(),
@@ -189,6 +191,11 @@ export default function CorporateClientSearch({
           <div className="mt-2 p-3 bg-success/10 border border-success/20 rounded-lg">
             <div className="text-sm">
               <div className="font-medium text-success">{selectedClient.name}</div>
+              {selectedClient.clientCode && (
+                <div className="text-base-content/70">
+                  <span className="font-medium">Client Code:</span> <span className="font-mono">{selectedClient.clientCode}</span>
+                </div>
+              )}
               {selectedClient.ein && (
                 <div className="text-base-content/70">
                   <span className="font-medium">EIN:</span> {selectedClient.ein}
@@ -239,6 +246,9 @@ export default function CorporateClientSearch({
                 >
                   <div className="font-medium text-base-content">{client.name}</div>
                   <div className="text-sm text-base-content/70 space-y-1">
+                    {client.clientCode && (
+                      <div><span className="font-medium">Client Code:</span> <span className="font-mono">{client.clientCode}</span></div>
+                    )}
                     {client.ein && (
                       <div><span className="font-medium">EIN:</span> {client.ein}</div>
                     )}

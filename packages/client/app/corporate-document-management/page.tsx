@@ -8,6 +8,7 @@ import CorporateClientSearch from '../../components/CorporateClientSearch';
 
 interface CorporateClient {
   id: string;
+  clientCode?: string;
   name: string;
   ein: string;
   entityNumber: string;
@@ -179,6 +180,7 @@ export default function CorporateDocumentManagementPage() {
               useGoogleDrive={useGoogleDrive}
               documentCategory={selectedCategory}
               isCorporate={true}
+              clientCode={selectedClient.clientCode || ''}
             />
           </div>
 
@@ -196,10 +198,11 @@ export default function CorporateDocumentManagementPage() {
               </div>
             </div>
             <DocumentBrowser
-              key={`${refreshKey}-${useGoogleDrive ? 'gdrive' : 'local'}-${selectedCategory}-${selectedClient.id}`}
+              key={`${refreshKey}-${useGoogleDrive ? 'gdrive' : 'local'}-${selectedCategory}-${selectedClient.clientCode}`}
               useGoogleDrive={useGoogleDrive}
               documentCategory={selectedCategory}
               isCorporate={true}
+              clientCode={selectedClient.clientCode || ''}
             />
           </div>
         </div>

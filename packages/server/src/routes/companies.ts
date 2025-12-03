@@ -38,6 +38,7 @@ app.get("/", async (c) => {
 
       return {
         id: record.id,
+        clientCode: record.fields["Client Code"],
         name:
           record.fields["Company"] ||
           record.fields["Company Name"] ||
@@ -113,6 +114,7 @@ app.get("/:id", async (c) => {
       success: true,
       data: {
         id: record.id,
+        clientCode: record.fields["Client Code"],
         name:
           record.fields["Company"] ||
           record.fields["Company Name"] ||
