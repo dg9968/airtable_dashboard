@@ -60,6 +60,93 @@ export async function getOrCreateTaxYearFolder(taxYear: string): Promise<string>
   }
 }
 
+// Get or create corporate category folder (for year-independent categories like business-credentials, notices-letters)
+export async function getOrCreateCorporateCategoryFolder(clientCode: string, category: string): Promise<string> {
+  try {
+    const rootFolderId = await getRootFolderId();
+
+    // Create/get "Corporate" folder
+    const corporateFolderName = 'Corporate';
+    let corporateFolderId: string;
+
+    const corporateSearchResponse = await drive.files.list({
+      q: `name='${corporateFolderName}' and parents in '${rootFolderId}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+      fields: 'files(id, name)',
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+    });
+
+    if (corporateSearchResponse.data.files && corporateSearchResponse.data.files.length > 0) {
+      corporateFolderId = corporateSearchResponse.data.files[0].id!;
+    } else {
+      const createResponse = await drive.files.create({
+        requestBody: {
+          name: corporateFolderName,
+          parents: [rootFolderId],
+          mimeType: 'application/vnd.google-apps.folder',
+        },
+        supportsAllDrives: true,
+      });
+      corporateFolderId = createResponse.data.id!;
+    }
+
+    // Create/get client folder under Corporate
+    const clientFolderName = `Client ${clientCode}`;
+    let clientFolderId: string;
+
+    const clientSearchResponse = await drive.files.list({
+      q: `name='${clientFolderName}' and parents in '${corporateFolderId}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+      fields: 'files(id, name)',
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+    });
+
+    if (clientSearchResponse.data.files && clientSearchResponse.data.files.length > 0) {
+      clientFolderId = clientSearchResponse.data.files[0].id!;
+    } else {
+      const createResponse = await drive.files.create({
+        requestBody: {
+          name: clientFolderName,
+          parents: [corporateFolderId],
+          mimeType: 'application/vnd.google-apps.folder',
+        },
+        supportsAllDrives: true,
+      });
+      clientFolderId = createResponse.data.id!;
+    }
+
+    // Create/get category folder under client
+    const categoryFolderName = category === 'business-credentials' ? 'Business Credentials' :
+                               category === 'notices-letters' ? 'Notices and Letters' :
+                               category;
+
+    const categorySearchResponse = await drive.files.list({
+      q: `name='${categoryFolderName}' and parents in '${clientFolderId}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+      fields: 'files(id, name)',
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+    });
+
+    if (categorySearchResponse.data.files && categorySearchResponse.data.files.length > 0) {
+      return categorySearchResponse.data.files[0].id!;
+    }
+
+    const createResponse = await drive.files.create({
+      requestBody: {
+        name: categoryFolderName,
+        parents: [clientFolderId],
+        mimeType: 'application/vnd.google-apps.folder',
+      },
+      supportsAllDrives: true,
+    });
+
+    return createResponse.data.id!;
+  } catch (error) {
+    console.error('Error getting/creating corporate category folder:', error);
+    throw error;
+  }
+}
+
 // Get or create client folder within tax year folder
 export async function getOrCreateClientFolder(clientCode: string, taxYear: string): Promise<string> {
   try {
@@ -97,14 +184,24 @@ export async function getOrCreateClientFolder(clientCode: string, taxYear: strin
 
 // Upload file to Google Drive
 export async function uploadFileToGoogleDrive(
-  file: Buffer, 
-  fileName: string, 
-  mimeType: string, 
-  clientCode: string, 
-  taxYear: string
+  file: Buffer,
+  fileName: string,
+  mimeType: string,
+  clientCode: string,
+  taxYear: string,
+  documentCategory?: string,
+  isCorporate?: boolean
 ): Promise<{ fileId: string; webViewLink: string; webContentLink: string }> {
   try {
-    const clientFolderId = await getOrCreateClientFolder(clientCode, taxYear);
+    let clientFolderId: string;
+
+    // For year-independent corporate categories, use a different folder structure
+    const yearIndependentCategories = ['business-credentials', 'notices-letters'];
+    if (isCorporate && documentCategory && yearIndependentCategories.includes(documentCategory)) {
+      clientFolderId = await getOrCreateCorporateCategoryFolder(clientCode, documentCategory);
+    } else {
+      clientFolderId = await getOrCreateClientFolder(clientCode, taxYear);
+    }
 
     // Generate unique filename with timestamp
     const timestamp = Date.now();

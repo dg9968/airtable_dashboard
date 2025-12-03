@@ -46,8 +46,9 @@ export default function DocumentUpload({ onUploadComplete, useGoogleDrive = fals
       return;
     }
 
-    // Validate tax year is selected (except for business credentials)
-    if (!taxYear && !(isCorporate && documentCategory === 'business-credentials')) {
+    // Validate tax year is selected (except for business credentials and notices-letters)
+    const yearIndependentCategories = ['business-credentials', 'notices-letters'];
+    if (!taxYear && !(isCorporate && yearIndependentCategories.includes(documentCategory || ''))) {
       setError('Please select a tax filing year');
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
@@ -82,8 +83,9 @@ export default function DocumentUpload({ onUploadComplete, useGoogleDrive = fals
           formData.append('file', file);
           formData.append('clientCode', clientCode.trim());
 
-          // For business credentials, use 'N/A' as tax year
-          if (isCorporate && documentCategory === 'business-credentials') {
+          // For year-independent categories, use 'N/A' as tax year
+          const yearIndependentCategories = ['business-credentials', 'notices-letters'];
+          if (isCorporate && yearIndependentCategories.includes(documentCategory || '')) {
             formData.append('taxYear', 'N/A');
           } else {
             formData.append('taxYear', taxYear);
@@ -168,14 +170,14 @@ export default function DocumentUpload({ onUploadComplete, useGoogleDrive = fals
           <label className="label">
             <span className="label-text">Select tax filing year</span>
             <span className="label-text-alt text-error">
-              {isCorporate && documentCategory === 'business-credentials' ? 'Not required for Business Credentials' : '*Required'}
+              {isCorporate && (documentCategory === 'business-credentials' || documentCategory === 'notices-letters') ? 'Not required for this category' : '*Required'}
             </span>
           </label>
           <select
             className="select select-bordered w-full"
             value={taxYear}
             onChange={(e) => setTaxYear(e.target.value)}
-            disabled={isUploading || (isCorporate && documentCategory === 'business-credentials') || !clientCode}
+            disabled={isUploading || (isCorporate && (documentCategory === 'business-credentials' || documentCategory === 'notices-letters')) || !clientCode}
           >
             <option value="">Choose tax filing year</option>
             {taxYearOptions.map((option) => (
@@ -188,6 +190,8 @@ export default function DocumentUpload({ onUploadComplete, useGoogleDrive = fals
             <span className="label-text-alt">
               {isCorporate && documentCategory === 'business-credentials' ?
                 'Business credentials are year-independent' :
+                isCorporate && documentCategory === 'notices-letters' ?
+                'Notices and letters are stored in a single folder regardless of year' :
                 'Select relevant tax year'
               }
             </span>
@@ -205,7 +209,7 @@ export default function DocumentUpload({ onUploadComplete, useGoogleDrive = fals
             className="file-input file-input-bordered w-full"
             accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png,.gif"
             onChange={handleFileUpload}
-            disabled={isUploading || !clientCode.trim() || !/^\d{4}$/.test(clientCode.trim()) || (!taxYear && !(isCorporate && documentCategory === 'business-credentials')) || (isCorporate && !documentCategory)}
+            disabled={isUploading || !clientCode.trim() || !/^\d{4}$/.test(clientCode.trim()) || (!taxYear && !(isCorporate && (documentCategory === 'business-credentials' || documentCategory === 'notices-letters'))) || (isCorporate && !documentCategory)}
           />
           <label className="label">
             <span className="label-text-alt">
@@ -214,7 +218,7 @@ export default function DocumentUpload({ onUploadComplete, useGoogleDrive = fals
           </label>
         </div>
 
-        {clientCode && /^\d{4}$/.test(clientCode) && (taxYear || (isCorporate && documentCategory === 'business-credentials')) && (!isCorporate || documentCategory) && (
+        {clientCode && /^\d{4}$/.test(clientCode) && (taxYear || (isCorporate && (documentCategory === 'business-credentials' || documentCategory === 'notices-letters'))) && (!isCorporate || documentCategory) && (
           <div className="alert alert-success">
             <div className="flex items-center">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" className="stroke-current shrink-0 w-6 h-6">
@@ -224,10 +228,12 @@ export default function DocumentUpload({ onUploadComplete, useGoogleDrive = fals
                 <div>Ready to upload to client code: <strong>{clientCode}</strong></div>
                 {isCorporate && documentCategory === 'business-credentials' ? (
                   <div className="text-sm">Category: <strong>Business Credentials</strong> (Year-independent)</div>
+                ) : isCorporate && documentCategory === 'notices-letters' ? (
+                  <div className="text-sm">Category: <strong>Notices and Letters</strong> (Year-independent)</div>
                 ) : (
                   <div className="text-sm">Tax filing year: <strong>{taxYearOptions.find(opt => opt.value === taxYear)?.label}</strong></div>
                 )}
-                {isCorporate && documentCategory && documentCategory !== 'business-credentials' && (
+                {isCorporate && documentCategory && documentCategory !== 'business-credentials' && documentCategory !== 'notices-letters' && (
                   <div className="text-sm">Category: <strong>{documentCategory}</strong></div>
                 )}
               </div>

@@ -66,7 +66,8 @@ export default function DocumentBrowser({ useGoogleDrive = false, documentCatego
       return;
     }
 
-    if (!taxYear && !(isCorporate && documentCategory === 'business-credentials')) {
+    const yearIndependentCategories = ['business-credentials', 'notices-letters'];
+    if (!taxYear && !(isCorporate && yearIndependentCategories.includes(documentCategory || ''))) {
       setError('Please select a tax filing year');
       return;
     }
@@ -78,8 +79,9 @@ export default function DocumentBrowser({ useGoogleDrive = false, documentCatego
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
       const apiEndpoint = `${apiUrl}/api/documents`;
 
-      // For business credentials, use 'N/A' as tax year
-      const effectiveTaxYear = (isCorporate && documentCategory === 'business-credentials') ? 'N/A' : taxYear;
+      // For year-independent categories, use 'N/A' as tax year
+      const yearIndependentCategories = ['business-credentials', 'notices-letters'];
+      const effectiveTaxYear = (isCorporate && yearIndependentCategories.includes(documentCategory || '')) ? 'N/A' : taxYear;
       let queryParams = `clientCode=${clientCode.trim()}&taxYear=${effectiveTaxYear}`;
 
       if (isCorporate && documentCategory) {
@@ -346,9 +348,9 @@ export default function DocumentBrowser({ useGoogleDrive = false, documentCatego
               className="select select-bordered"
               value={taxYear}
               onChange={(e) => setTaxYear(e.target.value)}
-              disabled={!clientCode}
+              disabled={!clientCode || (isCorporate && (documentCategory === 'business-credentials' || documentCategory === 'notices-letters'))}
             >
-              <option value="">Choose tax filing year</option>
+              <option value="">{isCorporate && (documentCategory === 'business-credentials' || documentCategory === 'notices-letters') ? 'Year not required for this category' : 'Choose tax filing year'}</option>
               {taxYearOptions.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
@@ -359,7 +361,7 @@ export default function DocumentBrowser({ useGoogleDrive = false, documentCatego
           <button
             className="btn btn-primary"
             onClick={fetchDocuments}
-            disabled={isLoading || !clientCode.trim() || (!taxYear && !(isCorporate && documentCategory === 'business-credentials'))}
+            disabled={isLoading || !clientCode.trim() || (!taxYear && !(isCorporate && (documentCategory === 'business-credentials' || documentCategory === 'notices-letters')))}
           >
             {isLoading && <span className="loading loading-spinner loading-sm"></span>}
             Search Documents

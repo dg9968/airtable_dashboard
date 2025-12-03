@@ -93,10 +93,11 @@ app.post('/', async (c) => {
       return c.json({ error: 'Valid tax year is required (2022-2025 or N/A)' }, 400);
     }
 
-    // Business credentials should use N/A as tax year
-    const isBusinessCredentials = isCorporate && documentCategory === 'business-credentials';
-    if (isBusinessCredentials && taxYear !== 'N/A') {
-      return c.json({ error: 'Business credentials should use N/A as tax year' }, 400);
+    // Year-independent categories should use N/A as tax year
+    const yearIndependentCategories = ['business-credentials', 'notices-letters'];
+    const isYearIndependent = isCorporate && yearIndependentCategories.includes(documentCategory);
+    if (isYearIndependent && taxYear !== 'N/A') {
+      return c.json({ error: `${documentCategory} should use N/A as tax year` }, 400);
     }
 
     // Validate by MIME type or file extension (fallback for when MIME type is incorrect)
@@ -116,7 +117,9 @@ app.post('/', async (c) => {
       file,
       clientCode.trim(),
       taxYear,
-      'system' // TODO: Replace with actual user email from session
+      'system', // TODO: Replace with actual user email from session
+      documentCategory,
+      isCorporate
     );
 
     return c.json({

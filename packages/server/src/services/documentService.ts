@@ -222,7 +222,9 @@ export async function saveDocument(
   file: File,
   clientCode: string,
   taxYear: string,
-  uploadedBy: string
+  uploadedBy: string,
+  documentCategory?: string,
+  isCorporate?: boolean
 ): Promise<{ id: string; fileName: string; googleDriveFileId?: string }> {
   // Generate unique filename
   const timestamp = Date.now();
@@ -244,7 +246,9 @@ export async function saveDocument(
       file.name,
       file.type,
       clientCode,
-      taxYear
+      taxYear,
+      documentCategory,
+      isCorporate
     );
 
     googleDriveFileId = driveUpload.fileId;
