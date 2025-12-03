@@ -13,7 +13,7 @@ import {
   generateUniqueClientCode,
   getDocumentById,
 } from '../services/documentService';
-import { listClientBanks } from '../googleDrive';
+import { listClientBanks, downloadFileFromGoogleDrive, getFileMetadata } from '../googleDrive';
 import {
   isValidClientCode,
   isValidTaxYear,
@@ -268,21 +268,31 @@ app.get('/download', async (c) => {
       return c.json({ error: 'Document not found' }, 404);
     }
 
-    if (!document.webContentLink) {
-      console.error('Document missing webContentLink:', {
+    if (!document.googleDriveFileId) {
+      console.error('Document missing googleDriveFileId:', {
         recordId,
         fileName: document.fileName,
-        googleDriveFileId: document.googleDriveFileId,
       });
       return c.json({
-        error: 'Document download link not available',
+        error: 'Document not available',
         details: 'This document may not have been uploaded to Google Drive. Please contact support.',
         fileName: document.originalName,
       }, 404);
     }
 
-    // Redirect to Google Drive download link
-    return c.redirect(document.webContentLink);
+    // Get file metadata to determine content type
+    const metadata = await getFileMetadata(document.googleDriveFileId);
+
+    // Download file from Google Drive
+    const fileBuffer = await downloadFileFromGoogleDrive(document.googleDriveFileId);
+
+    // Set response headers for file download
+    c.header('Content-Type', metadata.mimeType || 'application/octet-stream');
+    c.header('Content-Disposition', `attachment; filename="${encodeURIComponent(document.originalName)}"`);
+    c.header('Content-Length', fileBuffer.length.toString());
+
+    // Return the file buffer
+    return c.body(fileBuffer);
   } catch (error) {
     console.error('Error downloading document:', error);
     return c.json({ error: 'Internal server error' }, 500);
