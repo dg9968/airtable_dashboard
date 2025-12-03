@@ -35,6 +35,8 @@ export interface DocumentMetadata {
   googleDriveFileId?: string;
   webViewLink?: string;
   webContentLink?: string;
+  documentCategory?: string;
+  bankName?: string;
 }
 
 /**
@@ -160,12 +162,14 @@ export async function getSpouseClientCode(clientCode: string): Promise<string | 
 export async function getDocuments(
   clientCode: string,
   taxYear: string,
-  includeSpouse: boolean = false
+  includeSpouse: boolean = false,
+  documentCategory?: string,
+  bankName?: string
 ): Promise<DocumentMetadata[]> {
   let filterFormula = `AND({Client Code} = '${clientCode}', {Tax Year} = '${taxYear}')`;
 
   try {
-    console.log(`[documentService] getDocuments called with clientCode: "${clientCode}", taxYear: "${taxYear}", includeSpouse: ${includeSpouse}`);
+    console.log(`[documentService] getDocuments called with clientCode: "${clientCode}", taxYear: "${taxYear}", includeSpouse: ${includeSpouse}, category: "${documentCategory}", bankName: "${bankName}"`);
     console.log(`[documentService] Using Airtable base: ${process.env.AIRTABLE_BASE_ID?.substring(0, 8)}...`);
 
     // If includeSpouse, get spouse's client code and include their documents
@@ -175,6 +179,16 @@ export async function getDocuments(
         console.log(`[documentService] Found spouse client code: ${spouseClientCode}`);
         filterFormula = `AND(OR({Client Code} = '${clientCode}', {Client Code} = '${spouseClientCode}'), {Tax Year} = '${taxYear}')`;
       }
+    }
+
+    // Add document category filter if provided
+    if (documentCategory) {
+      filterFormula = filterFormula.replace(')', `, {Document Category} = '${documentCategory}')`);
+    }
+
+    // Add bank name filter if provided
+    if (bankName) {
+      filterFormula = filterFormula.replace(')', `, {Bank Name} = '${bankName}')`);
     }
 
     console.log(`[documentService] Filter formula: ${filterFormula}`);
@@ -206,6 +220,8 @@ export async function getDocuments(
       googleDriveFileId: record.fields['Google Drive File ID'] as string,
       webViewLink: record.fields['Web View Link'] as string,
       webContentLink: record.fields['Web Content Link'] as string,
+      documentCategory: record.fields['Document Category'] as string,
+      bankName: record.fields['Bank Name'] as string,
     }));
   } catch (error) {
     console.error('[documentService] Airtable fetch failed, using local metadata:', error);
@@ -224,7 +240,8 @@ export async function saveDocument(
   taxYear: string,
   uploadedBy: string,
   documentCategory?: string,
-  isCorporate?: boolean
+  isCorporate?: boolean,
+  bankName?: string
 ): Promise<{ id: string; fileName: string; googleDriveFileId?: string }> {
   // Generate unique filename
   const timestamp = Date.now();
@@ -248,7 +265,8 @@ export async function saveDocument(
       clientCode,
       taxYear,
       documentCategory,
-      isCorporate
+      isCorporate,
+      bankName
     );
 
     googleDriveFileId = driveUpload.fileId;
@@ -295,6 +313,8 @@ export async function saveDocument(
           ...(googleDriveFileId && { 'Google Drive File ID': googleDriveFileId }),
           ...(webViewLink && { 'Web View Link': webViewLink }),
           ...(webContentLink && { 'Web Content Link': webContentLink }),
+          ...(documentCategory && { 'Document Category': documentCategory }),
+          ...(bankName && { 'Bank Name': bankName }),
         }
       }
     ]);

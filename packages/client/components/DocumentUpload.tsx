@@ -1,7 +1,7 @@
 // components/DocumentUpload.tsx
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 
 interface DocumentUploadProps {
   onUploadComplete?: (result: any) => void;
@@ -14,10 +14,56 @@ interface DocumentUploadProps {
 
 export default function DocumentUpload({ onUploadComplete, useGoogleDrive = false, documentCategory, isCorporate = false, clientCode = '', onCategoryChange }: DocumentUploadProps) {
   const [taxYear, setTaxYear] = useState('');
+  const [bankName, setBankName] = useState('');
+  const [existingBanks, setExistingBanks] = useState<string[]>([]);
+  const [isLoadingBanks, setIsLoadingBanks] = useState(false);
+  const [showNewBankInput, setShowNewBankInput] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState<any>(null);
   const [error, setError] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Fetch existing banks when client code changes and category is statements
+  useEffect(() => {
+    if (isCorporate && documentCategory === 'statements' && clientCode && /^\d{4}$/.test(clientCode)) {
+      fetchExistingBanks();
+    } else {
+      setExistingBanks([]);
+      setBankName('');
+      setShowNewBankInput(false);
+    }
+  }, [clientCode, documentCategory, isCorporate]);
+
+  const fetchExistingBanks = async () => {
+    setIsLoadingBanks(true);
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+      const url = `${apiUrl}/api/documents/banks/${clientCode}`;
+      console.log('[DocumentUpload] Fetching banks from:', url);
+
+      const response = await fetch(url);
+      console.log('[DocumentUpload] Response status:', response.status);
+
+      const result = await response.json();
+      console.log('[DocumentUpload] Response data:', result);
+
+      if (result.success && result.banks) {
+        setExistingBanks(result.banks);
+        console.log('[DocumentUpload] Set existing banks:', result.banks);
+        if (result.banks.length === 0) {
+          console.log('[DocumentUpload] No banks found, showing new bank input');
+          setShowNewBankInput(true);
+        }
+      } else {
+        console.log('[DocumentUpload] Invalid response format:', result);
+      }
+    } catch (err) {
+      console.error('[DocumentUpload] Error fetching banks:', err);
+      setShowNewBankInput(true);
+    } finally {
+      setIsLoadingBanks(false);
+    }
+  };
 
   const taxYearOptions = [
     { value: '2022', label: 'Tax Filing Year 2022' },
@@ -75,6 +121,15 @@ export default function DocumentUpload({ onUploadComplete, useGoogleDrive = fals
       return;
     }
 
+    // Validate bank name for financial statements
+    if (isCorporate && documentCategory === 'statements' && !bankName.trim()) {
+      setError('Please enter a bank name for financial statements');
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      return;
+    }
+
     setIsUploading(true);
     setError('');
     setUploadResult(null);
@@ -104,6 +159,11 @@ export default function DocumentUpload({ onUploadComplete, useGoogleDrive = fals
           if (isCorporate && documentCategory) {
             formData.append('documentCategory', documentCategory);
             formData.append('isCorporate', 'true');
+
+            // Add bank name for financial statements
+            if (documentCategory === 'statements' && bankName.trim()) {
+              formData.append('bankName', bankName.trim());
+            }
           }
 
           const response = await fetch(`${apiUrl}/api/documents`, {
@@ -208,6 +268,82 @@ export default function DocumentUpload({ onUploadComplete, useGoogleDrive = fals
           </div>
         )}
 
+        {/* Bank Name Input - Only for Financial Statements */}
+        {isCorporate && documentCategory === 'statements' && (
+          <div className="form-control w-full mb-4">
+            <label className="label">
+              <span className="label-text font-medium">Bank Name</span>
+              <span className="label-text-alt text-error">*Required</span>
+            </label>
+
+            {isLoadingBanks ? (
+              <div className="flex items-center gap-2 p-3 bg-base-200 rounded-lg">
+                <span className="loading loading-spinner loading-sm"></span>
+                <span className="text-sm">Loading existing banks...</span>
+              </div>
+            ) : !showNewBankInput && existingBanks.length > 0 ? (
+              <div className="space-y-2">
+                <select
+                  className="select select-bordered w-full"
+                  value={bankName}
+                  onChange={(e) => {
+                    if (e.target.value === '__new__') {
+                      setShowNewBankInput(true);
+                      setBankName('');
+                    } else {
+                      setBankName(e.target.value);
+                    }
+                  }}
+                  disabled={isUploading || !clientCode}
+                >
+                  <option value="">Select existing bank or add new</option>
+                  {existingBanks.map((bank) => (
+                    <option key={bank} value={bank}>
+                      {bank}
+                    </option>
+                  ))}
+                  <option value="__new__">+ Add New Bank</option>
+                </select>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <input
+                  type="text"
+                  className="input input-bordered w-full"
+                  placeholder="Enter bank name (e.g., Chase, Bank of America, Wells Fargo)"
+                  value={bankName}
+                  onChange={(e) => setBankName(e.target.value)}
+                  disabled={isUploading || !clientCode}
+                />
+                {existingBanks.length > 0 && (
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-ghost"
+                    onClick={() => {
+                      setShowNewBankInput(false);
+                      setBankName('');
+                    }}
+                  >
+                    ← Back to existing banks
+                  </button>
+                )}
+              </div>
+            )}
+
+            <label className="label">
+              <span className="label-text-alt">
+                {bankName ? (
+                  <span className="text-success">✓ Bank selected: <strong>{bankName}</strong></span>
+                ) : (
+                  <span className="text-base-content/60">
+                    {existingBanks.length > 0 ? 'Select an existing bank or add a new one' : 'Each bank account will have its own folder organized by year'}
+                  </span>
+                )}
+              </span>
+            </label>
+          </div>
+        )}
+
         <div className="form-control w-full mb-4">
           <label className="label">
             <span className="label-text">Select tax filing year</span>
@@ -251,7 +387,7 @@ export default function DocumentUpload({ onUploadComplete, useGoogleDrive = fals
             className="file-input file-input-bordered w-full"
             accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png,.gif"
             onChange={handleFileUpload}
-            disabled={isUploading || !clientCode.trim() || !/^\d{4}$/.test(clientCode.trim()) || (!taxYear && !(isCorporate && (documentCategory === 'business-credentials' || documentCategory === 'notices-letters'))) || (isCorporate && !documentCategory)}
+            disabled={isUploading || !clientCode.trim() || !/^\d{4}$/.test(clientCode.trim()) || (!taxYear && !(isCorporate && (documentCategory === 'business-credentials' || documentCategory === 'notices-letters'))) || (isCorporate && !documentCategory) || (isCorporate && documentCategory === 'statements' && !bankName.trim())}
           />
           <label className="label">
             <span className="label-text-alt">

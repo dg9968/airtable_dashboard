@@ -23,6 +23,12 @@ function validateGoogleDriveEnvironment() {
   }
 }
 
+// Get root folder ID from environment
+async function getRootFolderId(): Promise<string> {
+  validateGoogleDriveEnvironment();
+  return process.env.GOOGLE_DRIVE_FOLDER_ID!;
+}
+
 // Get or create tax year folder
 export async function getOrCreateTaxYearFolder(taxYear: string): Promise<string> {
   try {
@@ -147,6 +153,214 @@ export async function getOrCreateCorporateCategoryFolder(clientCode: string, cat
   }
 }
 
+// Get or create financial statements folder (organized by bank, then year)
+export async function getOrCreateFinancialStatementsFolder(clientCode: string, bankName: string, taxYear: string): Promise<string> {
+  try {
+    const rootFolderId = await getRootFolderId();
+
+    // Create/get "Corporate" folder
+    const corporateFolderName = 'Corporate';
+    let corporateFolderId: string;
+
+    const corporateSearchResponse = await drive.files.list({
+      q: `name='${corporateFolderName}' and parents in '${rootFolderId}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+      fields: 'files(id, name)',
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+    });
+
+    if (corporateSearchResponse.data.files && corporateSearchResponse.data.files.length > 0) {
+      corporateFolderId = corporateSearchResponse.data.files[0].id!;
+    } else {
+      const createResponse = await drive.files.create({
+        requestBody: {
+          name: corporateFolderName,
+          parents: [rootFolderId],
+          mimeType: 'application/vnd.google-apps.folder',
+        },
+        supportsAllDrives: true,
+      });
+      corporateFolderId = createResponse.data.id!;
+    }
+
+    // Create/get client folder under Corporate
+    const clientFolderName = `Client ${clientCode}`;
+    let clientFolderId: string;
+
+    const clientSearchResponse = await drive.files.list({
+      q: `name='${clientFolderName}' and parents in '${corporateFolderId}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+      fields: 'files(id, name)',
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+    });
+
+    if (clientSearchResponse.data.files && clientSearchResponse.data.files.length > 0) {
+      clientFolderId = clientSearchResponse.data.files[0].id!;
+    } else {
+      const createResponse = await drive.files.create({
+        requestBody: {
+          name: clientFolderName,
+          parents: [corporateFolderId],
+          mimeType: 'application/vnd.google-apps.folder',
+        },
+        supportsAllDrives: true,
+      });
+      clientFolderId = createResponse.data.id!;
+    }
+
+    // Create/get "Financial Statements" folder under client
+    const statementsFolderName = 'Financial Statements';
+    let statementsFolderId: string;
+
+    const statementsSearchResponse = await drive.files.list({
+      q: `name='${statementsFolderName}' and parents in '${clientFolderId}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+      fields: 'files(id, name)',
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+    });
+
+    if (statementsSearchResponse.data.files && statementsSearchResponse.data.files.length > 0) {
+      statementsFolderId = statementsSearchResponse.data.files[0].id!;
+    } else {
+      const createResponse = await drive.files.create({
+        requestBody: {
+          name: statementsFolderName,
+          parents: [clientFolderId],
+          mimeType: 'application/vnd.google-apps.folder',
+        },
+        supportsAllDrives: true,
+      });
+      statementsFolderId = createResponse.data.id!;
+    }
+
+    // Create/get bank folder under Financial Statements
+    let bankFolderId: string;
+
+    const bankSearchResponse = await drive.files.list({
+      q: `name='${bankName}' and parents in '${statementsFolderId}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+      fields: 'files(id, name)',
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+    });
+
+    if (bankSearchResponse.data.files && bankSearchResponse.data.files.length > 0) {
+      bankFolderId = bankSearchResponse.data.files[0].id!;
+    } else {
+      const createResponse = await drive.files.create({
+        requestBody: {
+          name: bankName,
+          parents: [statementsFolderId],
+          mimeType: 'application/vnd.google-apps.folder',
+        },
+        supportsAllDrives: true,
+      });
+      bankFolderId = createResponse.data.id!;
+    }
+
+    // Create/get year folder under bank
+    const yearSearchResponse = await drive.files.list({
+      q: `name='${taxYear}' and parents in '${bankFolderId}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+      fields: 'files(id, name)',
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+    });
+
+    if (yearSearchResponse.data.files && yearSearchResponse.data.files.length > 0) {
+      return yearSearchResponse.data.files[0].id!;
+    }
+
+    const createResponse = await drive.files.create({
+      requestBody: {
+        name: taxYear,
+        parents: [bankFolderId],
+        mimeType: 'application/vnd.google-apps.folder',
+      },
+      supportsAllDrives: true,
+    });
+
+    return createResponse.data.id!;
+  } catch (error) {
+    console.error('Error getting/creating financial statements folder:', error);
+    throw error;
+  }
+}
+
+// List existing banks for a client in Financial Statements
+export async function listClientBanks(clientCode: string): Promise<string[]> {
+  try {
+    console.log(`[listClientBanks] Fetching banks for client code: ${clientCode}`);
+    const rootFolderId = await getRootFolderId();
+    console.log(`[listClientBanks] Root folder ID: ${rootFolderId}`);
+
+    // Find Corporate folder
+    const corporateSearchResponse = await drive.files.list({
+      q: `name='Corporate' and parents in '${rootFolderId}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+      fields: 'files(id, name)',
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+    });
+
+    if (!corporateSearchResponse.data.files || corporateSearchResponse.data.files.length === 0) {
+      console.log(`[listClientBanks] Corporate folder not found`);
+      return [];
+    }
+    const corporateFolderId = corporateSearchResponse.data.files[0].id!;
+    console.log(`[listClientBanks] Corporate folder ID: ${corporateFolderId}`);
+
+    // Find client folder
+    const clientFolderName = `Client ${clientCode}`;
+    const clientSearchResponse = await drive.files.list({
+      q: `name='${clientFolderName}' and parents in '${corporateFolderId}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+      fields: 'files(id, name)',
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+    });
+
+    if (!clientSearchResponse.data.files || clientSearchResponse.data.files.length === 0) {
+      console.log(`[listClientBanks] Client folder '${clientFolderName}' not found`);
+      return [];
+    }
+    const clientFolderId = clientSearchResponse.data.files[0].id!;
+    console.log(`[listClientBanks] Client folder ID: ${clientFolderId}`);
+
+    // Find Financial Statements folder
+    const statementsSearchResponse = await drive.files.list({
+      q: `name='Financial Statements' and parents in '${clientFolderId}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+      fields: 'files(id, name)',
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+    });
+
+    if (!statementsSearchResponse.data.files || statementsSearchResponse.data.files.length === 0) {
+      console.log(`[listClientBanks] Financial Statements folder not found for client ${clientCode}`);
+      return [];
+    }
+    const statementsFolderId = statementsSearchResponse.data.files[0].id!;
+    console.log(`[listClientBanks] Financial Statements folder ID: ${statementsFolderId}`);
+
+    // List all bank folders
+    const banksSearchResponse = await drive.files.list({
+      q: `parents in '${statementsFolderId}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+      fields: 'files(id, name)',
+      orderBy: 'name',
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+    });
+
+    if (!banksSearchResponse.data.files) {
+      console.log(`[listClientBanks] No bank folders found`);
+      return [];
+    }
+
+    const banks = banksSearchResponse.data.files.map(file => file.name!);
+    console.log(`[listClientBanks] Found ${banks.length} banks:`, banks);
+    return banks;
+  } catch (error) {
+    console.error('[listClientBanks] Error listing client banks:', error);
+    return [];
+  }
+}
+
 // Get or create client folder within tax year folder
 export async function getOrCreateClientFolder(clientCode: string, taxYear: string): Promise<string> {
   try {
@@ -190,16 +404,21 @@ export async function uploadFileToGoogleDrive(
   clientCode: string,
   taxYear: string,
   documentCategory?: string,
-  isCorporate?: boolean
+  isCorporate?: boolean,
+  bankName?: string
 ): Promise<{ fileId: string; webViewLink: string; webContentLink: string }> {
   try {
     let clientFolderId: string;
 
+    // For financial statements, use bank-organized folder structure
+    if (isCorporate && documentCategory === 'statements' && bankName) {
+      clientFolderId = await getOrCreateFinancialStatementsFolder(clientCode, bankName, taxYear);
+    }
     // For year-independent corporate categories, use a different folder structure
-    const yearIndependentCategories = ['business-credentials', 'notices-letters'];
-    if (isCorporate && documentCategory && yearIndependentCategories.includes(documentCategory)) {
+    else if (isCorporate && documentCategory && ['business-credentials', 'notices-letters'].includes(documentCategory)) {
       clientFolderId = await getOrCreateCorporateCategoryFolder(clientCode, documentCategory);
-    } else {
+    }
+    else {
       clientFolderId = await getOrCreateClientFolder(clientCode, taxYear);
     }
 

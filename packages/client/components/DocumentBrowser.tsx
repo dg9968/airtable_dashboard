@@ -25,6 +25,10 @@ interface DocumentBrowserProps {
 
 export default function DocumentBrowser({ useGoogleDrive = false, documentCategory, isCorporate = false, clientCode = '', personalId, onCategoryChange }: DocumentBrowserProps) {
   const [taxYear, setTaxYear] = useState('');
+  const [bankName, setBankName] = useState('');
+  const [existingBanks, setExistingBanks] = useState<string[]>([]);
+  const [isLoadingBanks, setIsLoadingBanks] = useState(false);
+  const [showNewBankInput, setShowNewBankInput] = useState(false);
   const [documents, setDocuments] = useState<Document[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string>('');
@@ -42,6 +46,48 @@ export default function DocumentBrowser({ useGoogleDrive = false, documentCatego
   const [includeSpouse, setIncludeSpouse] = useState(true);
   const [sortColumn, setSortColumn] = useState<'name' | 'size' | 'date'>('name');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+
+  // Fetch existing banks when client code changes and category is statements
+  useEffect(() => {
+    if (isCorporate && documentCategory === 'statements' && clientCode && /^\d{4}$/.test(clientCode)) {
+      fetchExistingBanks();
+    } else {
+      setExistingBanks([]);
+      setBankName('');
+      setShowNewBankInput(false);
+    }
+  }, [clientCode, documentCategory, isCorporate]);
+
+  const fetchExistingBanks = async () => {
+    setIsLoadingBanks(true);
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+      const url = `${apiUrl}/api/documents/banks/${clientCode}`;
+      console.log('[DocumentBrowser] Fetching banks from:', url);
+
+      const response = await fetch(url);
+      console.log('[DocumentBrowser] Response status:', response.status);
+
+      const result = await response.json();
+      console.log('[DocumentBrowser] Response data:', result);
+
+      if (result.success && result.banks) {
+        setExistingBanks(result.banks);
+        console.log('[DocumentBrowser] Set existing banks:', result.banks);
+        if (result.banks.length === 0) {
+          console.log('[DocumentBrowser] No banks found, showing new bank input');
+          setShowNewBankInput(true);
+        }
+      } else {
+        console.log('[DocumentBrowser] Invalid response format:', result);
+      }
+    } catch (err) {
+      console.error('[DocumentBrowser] Error fetching banks:', err);
+      setShowNewBankInput(true);
+    } finally {
+      setIsLoadingBanks(false);
+    }
+  };
 
   const taxYearOptions = [
     { value: '2022', label: 'Tax Filing Year 2022' },
@@ -82,6 +128,12 @@ export default function DocumentBrowser({ useGoogleDrive = false, documentCatego
       return;
     }
 
+    // Validate bank name for financial statements
+    if (isCorporate && documentCategory === 'statements' && !bankName.trim()) {
+      setError('Please enter a bank name for financial statements');
+      return;
+    }
+
     setIsLoading(true);
     setError('');
 
@@ -96,6 +148,11 @@ export default function DocumentBrowser({ useGoogleDrive = false, documentCatego
 
       if (isCorporate && documentCategory) {
         queryParams += `&documentCategory=${documentCategory}&isCorporate=true`;
+
+        // Add bank name for financial statements
+        if (documentCategory === 'statements' && bankName.trim()) {
+          queryParams += `&bankName=${encodeURIComponent(bankName.trim())}`;
+        }
       }
 
       // Add includeSpouse parameter for personal documents
@@ -384,6 +441,82 @@ export default function DocumentBrowser({ useGoogleDrive = false, documentCatego
           </div>
         )}
 
+        {/* Bank Name Input - Only for Financial Statements */}
+        {isCorporate && documentCategory === 'statements' && (
+          <div className="form-control w-full mb-4">
+            <label className="label">
+              <span className="label-text font-medium">Bank Name</span>
+              <span className="label-text-alt text-error">*Required</span>
+            </label>
+
+            {isLoadingBanks ? (
+              <div className="flex items-center gap-2 p-3 bg-base-200 rounded-lg">
+                <span className="loading loading-spinner loading-sm"></span>
+                <span className="text-sm">Loading existing banks...</span>
+              </div>
+            ) : !showNewBankInput && existingBanks.length > 0 ? (
+              <div className="space-y-2">
+                <select
+                  className="select select-bordered w-full"
+                  value={bankName}
+                  onChange={(e) => {
+                    if (e.target.value === '__new__') {
+                      setShowNewBankInput(true);
+                      setBankName('');
+                    } else {
+                      setBankName(e.target.value);
+                    }
+                  }}
+                  disabled={!clientCode}
+                >
+                  <option value="">Select existing bank or add new</option>
+                  {existingBanks.map((bank) => (
+                    <option key={bank} value={bank}>
+                      {bank}
+                    </option>
+                  ))}
+                  <option value="__new__">+ Add New Bank</option>
+                </select>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <input
+                  type="text"
+                  className="input input-bordered w-full"
+                  placeholder="Enter bank name (e.g., Chase, Bank of America, Wells Fargo)"
+                  value={bankName}
+                  onChange={(e) => setBankName(e.target.value)}
+                  disabled={!clientCode}
+                />
+                {existingBanks.length > 0 && (
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-ghost"
+                    onClick={() => {
+                      setShowNewBankInput(false);
+                      setBankName('');
+                    }}
+                  >
+                    ← Back to existing banks
+                  </button>
+                )}
+              </div>
+            )}
+
+            <label className="label">
+              <span className="label-text-alt">
+                {bankName ? (
+                  <span className="text-success">✓ Bank selected: <strong>{bankName}</strong></span>
+                ) : (
+                  <span className="text-base-content/60">
+                    {existingBanks.length > 0 ? 'Select an existing bank or add a new one' : 'Enter the bank name to browse statements organized by year'}
+                  </span>
+                )}
+              </span>
+            </label>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-4">
           <div className="form-control">
             <select
@@ -403,7 +536,7 @@ export default function DocumentBrowser({ useGoogleDrive = false, documentCatego
           <button
             className="btn btn-primary"
             onClick={fetchDocuments}
-            disabled={isLoading || !clientCode.trim() || (!taxYear && !(isCorporate && (documentCategory === 'business-credentials' || documentCategory === 'notices-letters')))}
+            disabled={isLoading || !clientCode.trim() || (!taxYear && !(isCorporate && (documentCategory === 'business-credentials' || documentCategory === 'notices-letters'))) || (isCorporate && documentCategory === 'statements' && !bankName.trim())}
           >
             {isLoading && <span className="loading loading-spinner loading-sm"></span>}
             Search Documents

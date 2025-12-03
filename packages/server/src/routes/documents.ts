@@ -13,6 +13,7 @@ import {
   generateUniqueClientCode,
   getDocumentById,
 } from '../services/documentService';
+import { listClientBanks } from '../googleDrive';
 import {
   isValidClientCode,
   isValidTaxYear,
@@ -36,8 +37,10 @@ app.get('/', async (c) => {
     const clientCode = c.req.query('clientCode');
     const taxYear = c.req.query('taxYear');
     const includeSpouse = c.req.query('includeSpouse') === 'true';
+    const documentCategory = c.req.query('documentCategory');
+    const bankName = c.req.query('bankName');
 
-    console.log(`Fetching documents for clientCode: ${clientCode}, taxYear: ${taxYear}, includeSpouse: ${includeSpouse}`);
+    console.log(`Fetching documents for clientCode: ${clientCode}, taxYear: ${taxYear}, includeSpouse: ${includeSpouse}, category: ${documentCategory}, bankName: ${bankName}`);
 
     if (!clientCode) {
       return c.json({ error: 'Client code is required' }, 400);
@@ -47,7 +50,7 @@ app.get('/', async (c) => {
       return c.json({ error: 'Tax year is required' }, 400);
     }
 
-    const documents = await getDocuments(clientCode, taxYear, includeSpouse);
+    const documents = await getDocuments(clientCode, taxYear, includeSpouse, documentCategory, bankName);
 
     console.log(`Found ${documents.length} documents for clientCode: ${clientCode}, taxYear: ${taxYear}`);
 
@@ -75,6 +78,7 @@ app.post('/', async (c) => {
     const taxYear = formData.get('taxYear') as string;
     const documentCategory = formData.get('documentCategory') as string;
     const isCorporate = formData.get('isCorporate') === 'true';
+    const bankName = formData.get('bankName') as string;
 
     // Validation
     if (!file) {
@@ -112,6 +116,11 @@ app.post('/', async (c) => {
       return c.json({ error: 'File too large (max 20MB)' }, 400);
     }
 
+    // Validate bank name for financial statements
+    if (isCorporate && documentCategory === 'statements' && (!bankName || !bankName.trim())) {
+      return c.json({ error: 'Bank name is required for financial statements' }, 400);
+    }
+
     // Save document
     const result = await saveDocument(
       file,
@@ -119,7 +128,8 @@ app.post('/', async (c) => {
       taxYear,
       'system', // TODO: Replace with actual user email from session
       documentCategory,
-      isCorporate
+      isCorporate,
+      bankName?.trim()
     );
 
     return c.json({
@@ -370,6 +380,33 @@ app.get('/debug-all', async (c) => {
   } catch (error) {
     console.error('Error fetching all documents:', error);
     return c.json({ error: 'Failed to fetch documents', details: error instanceof Error ? error.message : 'Unknown error' }, 500);
+  }
+});
+
+/**
+ * GET /api/documents/banks/:clientCode
+ * Get list of existing banks for a client
+ */
+app.get('/banks/:clientCode', async (c) => {
+  try {
+    const clientCode = c.req.param('clientCode');
+    console.log(`[API] Fetching banks for client code: ${clientCode}`);
+
+    if (!clientCode || !isValidClientCode(clientCode)) {
+      console.log(`[API] Invalid client code: ${clientCode}`);
+      return c.json({ error: 'Valid client code is required' }, 400);
+    }
+
+    const banks = await listClientBanks(clientCode);
+    console.log(`[API] Returning ${banks.length} banks for client ${clientCode}`);
+
+    return c.json({
+      success: true,
+      banks,
+    });
+  } catch (error) {
+    console.error('[API] Error fetching banks:', error);
+    return c.json({ error: 'Failed to fetch banks' }, 500);
   }
 });
 
