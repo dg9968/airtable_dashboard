@@ -9,9 +9,10 @@ interface DocumentUploadProps {
   documentCategory?: string;
   isCorporate?: boolean;
   clientCode?: string;
+  onCategoryChange?: (category: string) => void;
 }
 
-export default function DocumentUpload({ onUploadComplete, useGoogleDrive = false, documentCategory, isCorporate = false, clientCode = '' }: DocumentUploadProps) {
+export default function DocumentUpload({ onUploadComplete, useGoogleDrive = false, documentCategory, isCorporate = false, clientCode = '', onCategoryChange }: DocumentUploadProps) {
   const [taxYear, setTaxYear] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState<any>(null);
@@ -23,6 +24,15 @@ export default function DocumentUpload({ onUploadComplete, useGoogleDrive = fals
     { value: '2023', label: 'Tax Filing Year 2023' },
     { value: '2024', label: 'Tax Filing Year 2024' },
     { value: '2025', label: 'Tax Filing Year 2025' },
+  ];
+
+  const documentCategoryOptions = [
+    { value: 'statements', label: 'Financial Statements', icon: '📊' },
+    { value: 'tax-returns', label: 'Tax Returns', icon: '📋' },
+    { value: 'notices-letters', label: 'Notices and Letters', icon: '📄' },
+    { value: 'sales-tax', label: 'Sales Tax', icon: '🛒' },
+    { value: 'payroll-tax', label: 'Payroll Tax', icon: '👥' },
+    { value: 'business-credentials', label: 'Business Credentials', icon: '🏢' }
   ];
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -163,6 +173,38 @@ export default function DocumentUpload({ onUploadComplete, useGoogleDrive = fals
         ) : (
           <div className="alert alert-warning mb-4">
             <span>Please select a client using the search above</span>
+          </div>
+        )}
+
+        {/* Document Category Selector - Only for Corporate Documents */}
+        {isCorporate && (
+          <div className="form-control w-full mb-4">
+            <label className="label">
+              <span className="label-text font-medium">Document Category</span>
+              <span className="label-text-alt text-error">*Required</span>
+            </label>
+            <select
+              className="select select-bordered w-full"
+              value={documentCategory || ''}
+              onChange={(e) => onCategoryChange?.(e.target.value)}
+              disabled={!clientCode}
+            >
+              <option value="">Select document category</option>
+              {documentCategoryOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.icon} {option.label}
+                </option>
+              ))}
+            </select>
+            <label className="label">
+              <span className="label-text-alt">
+                {documentCategory ? (
+                  <span className="text-success">✓ Category selected: <strong>{documentCategoryOptions.find(opt => opt.value === documentCategory)?.label}</strong></span>
+                ) : (
+                  <span className="text-base-content/60">Select a category to organize your documents</span>
+                )}
+              </span>
+            </label>
           </div>
         )}
 

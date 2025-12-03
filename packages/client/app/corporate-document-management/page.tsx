@@ -181,6 +181,7 @@ export default function CorporateDocumentManagementPage() {
               documentCategory={selectedCategory}
               isCorporate={true}
               clientCode={selectedClient.clientCode || ''}
+              onCategoryChange={setSelectedCategory}
             />
           </div>
 
@@ -203,6 +204,7 @@ export default function CorporateDocumentManagementPage() {
               documentCategory={selectedCategory}
               isCorporate={true}
               clientCode={selectedClient.clientCode || ''}
+              onCategoryChange={setSelectedCategory}
             />
           </div>
         </div>
