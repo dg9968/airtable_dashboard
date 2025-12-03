@@ -44,7 +44,10 @@ export function isAllowedFileType(mimeType: string): boolean {
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     'application/vnd.ms-word',
     'application/doc',
-    'application/docx'
+    'application/docx',
+    'text/csv',
+    'application/csv',
+    'application/vnd.ms-excel'
   ];
 
   return allowedTypes.includes(mimeType);
@@ -54,7 +57,7 @@ export function isAllowedFileType(mimeType: string): boolean {
  * Validate file extension
  */
 export function isAllowedFileExtension(filename: string): boolean {
-  const allowedExtensions = ['.pdf', '.doc', '.docx', '.txt', '.jpg', '.jpeg', '.png', '.gif'];
+  const allowedExtensions = ['.pdf', '.doc', '.docx', '.txt', '.jpg', '.jpeg', '.png', '.gif', '.csv'];
   const ext = filename.toLowerCase().substring(filename.lastIndexOf('.'));
   return allowedExtensions.includes(ext);
 }
