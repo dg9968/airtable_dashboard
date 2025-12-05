@@ -12,9 +12,13 @@ interface CorporateRecord {
     "Company"?: string;
     "Company Name"?: string;
     "EIN"?: string;
+    "ADDRESS"?: string;
     "Address"?: string;
+    "CITY"?: string;
     "City"?: string;
+    "STATE"?: string;
     "State"?: string;
+    "ZIP CODE"?: string;
     "ZIP"?: string;
     "Phone"?: string;
     "🤷‍♂️Email"?: string;
