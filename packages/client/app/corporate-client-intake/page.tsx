@@ -1,9 +1,10 @@
 'use client';
 
+import { Suspense } from 'react';
 import { useRequireRole } from '@/hooks/useAuth';
-import ManageBusiness from '@/components/ManageBusiness';
+import CorporateClientIntake from '@/components/CorporateClientIntake';
 
-export default function AirtableDashboardPage() {
+export default function CorporateClientIntakePage() {
   const { session, status } = useRequireRole(['staff', 'admin']);
 
   if (status === 'loading') {
@@ -27,5 +28,9 @@ export default function AirtableDashboardPage() {
     return null;
   }
 
-  return <ManageBusiness />;
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <CorporateClientIntake />
+    </Suspense>
+  );
 }

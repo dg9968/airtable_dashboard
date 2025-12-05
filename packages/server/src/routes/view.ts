@@ -5,7 +5,7 @@
  */
 
 import { Hono } from 'hono';
-import { testConnection, fetchRecords } from '../lib/airtable-service';
+import { testConnection, fetchRecords, findRecord, createRecords, updateRecords } from '../lib/airtable-service';
 
 const app = new Hono();
 
@@ -150,6 +150,111 @@ app.get('/', async (c) => {
         success: false,
         error: errorMessage,
         suggestion,
+      },
+      500
+    );
+  }
+});
+
+/**
+ * GET /api/view/:tableName/:recordId
+ * Get a specific record by ID from a table
+ */
+app.get('/:tableName/:recordId', async (c) => {
+  try {
+    const tableName = c.req.param('tableName');
+    const recordId = c.req.param('recordId');
+
+    console.log(`Fetching record ${recordId} from table "${tableName}"`);
+
+    const record = await findRecord(tableName, recordId);
+
+    return c.json({
+      success: true,
+      data: record
+    });
+
+  } catch (error) {
+    console.error('Error fetching record:', error);
+    return c.json(
+      {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to fetch record'
+      },
+      404
+    );
+  }
+});
+
+/**
+ * POST /api/view/:tableName
+ * Create a new record in the specified table
+ */
+app.post('/:tableName', async (c) => {
+  try {
+    const tableName = c.req.param('tableName');
+    const { fields } = await c.req.json();
+
+    if (!fields) {
+      return c.json(
+        { success: false, error: 'Missing required field: fields' },
+        400
+      );
+    }
+
+    console.log(`Creating record in table "${tableName}"`, fields);
+
+    const records = await createRecords(tableName, [{ fields }]);
+
+    return c.json({
+      success: true,
+      data: records[0]
+    }, 201);
+
+  } catch (error) {
+    console.error('Error creating record:', error);
+    return c.json(
+      {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to create record'
+      },
+      500
+    );
+  }
+});
+
+/**
+ * PATCH /api/view/:tableName/:recordId
+ * Update a record in the specified table
+ */
+app.patch('/:tableName/:recordId', async (c) => {
+  try {
+    const tableName = c.req.param('tableName');
+    const recordId = c.req.param('recordId');
+    const { fields } = await c.req.json();
+
+    if (!fields) {
+      return c.json(
+        { success: false, error: 'Missing required field: fields' },
+        400
+      );
+    }
+
+    console.log(`Updating record ${recordId} in table "${tableName}"`, fields);
+
+    const records = await updateRecords(tableName, [{ id: recordId, fields }]);
+
+    return c.json({
+      success: true,
+      data: records[0]
+    });
+
+  } catch (error) {
+    console.error('Error updating record:', error);
+    return c.json(
+      {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to update record'
       },
       500
     );

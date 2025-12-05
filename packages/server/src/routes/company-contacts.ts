@@ -383,18 +383,27 @@ app.get('/company/:companyId/contacts', async (c) => {
         const matchesStatus = String(record.fields['Status']) === String(status);
         return matchesCompany && matchesStatus;
       })
-      .map((record) => ({
-        relationshipId: record.id,
-        contactId: Array.isArray(record.fields['Contact']) ? record.fields['Contact'][0] : record.fields['Contact'],
-        contactName: record.fields['Contact Name (from Contact)'] || record.fields['Contact Name'],
-        role: record.fields['Role'],
-        isPrimary: record.fields['Is Primary Contact'] || false,
-        workEmail: record.fields['Work Email'],
-        workPhone: record.fields['Work Phone'],
-        department: record.fields['Department'],
-        startDate: record.fields['Start Date'],
-        endDate: record.fields['End Date']
-      }));
+      .map((record) => {
+        // Try multiple possible field names for contact name
+        const contactName = record.fields['Contact Name (from Contact)']
+          || record.fields['Contact Name']
+          || record.fields['Full Name (from Contact)']
+          || record.fields['Name (from Contact)']
+          || 'Unknown Contact';
+
+        return {
+          relationshipId: record.id,
+          contactId: Array.isArray(record.fields['Contact']) ? record.fields['Contact'][0] : record.fields['Contact'],
+          contactName: contactName,
+          role: record.fields['Role'],
+          isPrimary: record.fields['Is Primary Contact'] || false,
+          workEmail: record.fields['Work Email'],
+          workPhone: record.fields['Work Phone'],
+          department: record.fields['Department'],
+          startDate: record.fields['Start Date'],
+          endDate: record.fields['End Date']
+        };
+      });
 
     return c.json({
       success: true,
