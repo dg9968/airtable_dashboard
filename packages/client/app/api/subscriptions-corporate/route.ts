@@ -1,14 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getApiHeaders, getHonoApiUrl } from '@/lib/api-client';
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ path?: string[] }> }
-) {
-  const { path: pathArray } = await params;
-  const path = pathArray?.join('/') || '';
+export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams.toString();
-  const url = getHonoApiUrl(`/api/subscriptions-corporate${path ? '/' + path : ''}${searchParams ? '?' + searchParams : ''}`);
+  const url = getHonoApiUrl(`/api/subscriptions-corporate${searchParams ? '?' + searchParams : ''}`);
 
   try {
     const response = await fetch(url, {
@@ -27,13 +22,8 @@ export async function GET(
   }
 }
 
-export async function POST(
-  request: NextRequest,
-  { params }: { params: Promise<{ path?: string[] }> }
-) {
-  const { path: pathArray } = await params;
-  const path = pathArray?.join('/') || '';
-  const url = getHonoApiUrl(`/api/subscriptions-corporate${path ? '/' + path : ''}`);
+export async function POST(request: NextRequest) {
+  const url = getHonoApiUrl('/api/subscriptions-corporate');
 
   try {
     const body = await request.json();
@@ -54,13 +44,8 @@ export async function POST(
   }
 }
 
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: Promise<{ path?: string[] }> }
-) {
-  const { path: pathArray } = await params;
-  const path = pathArray?.join('/') || '';
-  const url = getHonoApiUrl(`/api/subscriptions-corporate${path ? '/' + path : ''}`);
+export async function PATCH(request: NextRequest) {
+  const url = getHonoApiUrl('/api/subscriptions-corporate');
 
   try {
     const body = await request.json();
@@ -81,13 +66,8 @@ export async function PATCH(
   }
 }
 
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: Promise<{ path?: string[] }> }
-) {
-  const { path: pathArray } = await params;
-  const path = pathArray?.join('/') || '';
-  const url = getHonoApiUrl(`/api/subscriptions-corporate${path ? '/' + path : ''}`);
+export async function DELETE(request: NextRequest) {
+  const url = getHonoApiUrl('/api/subscriptions-corporate');
 
   try {
     const response = await fetch(url, {
