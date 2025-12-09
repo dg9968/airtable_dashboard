@@ -30,7 +30,7 @@ app.get('/', async (c) => {
     const baseId = process.env.AIRTABLE_BASE_ID || '';
 
     // Try different possible table names
-    const possibleTableNames = ['Teams', 'Team', 'teams', 'team'];
+    const possibleTableNames = ['Users', 'Teams', 'Team', 'teams', 'team'];
     let records = [];
     let tableName = '';
 
@@ -48,7 +48,7 @@ app.get('/', async (c) => {
     }
 
     if (records.length === 0 && !tableName) {
-      throw new Error('Could not find Teams table. Please check the table name in Airtable.');
+      throw new Error('Could not find Users/Teams table. Please check the table name in Airtable.');
     }
 
     // Map to a simpler format

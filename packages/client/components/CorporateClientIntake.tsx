@@ -76,6 +76,19 @@ export default function CorporateClientIntake() {
   const [selectedContacts, setSelectedContacts] = useState<CompanyContactRelationship[]>([]);
   const [searchingContacts, setSearchingContacts] = useState(false);
 
+  // Pipeline management
+  const [pipelineCompanies, setPipelineCompanies] = useState<any[]>([]);
+  const [addingToPipeline, setAddingToPipeline] = useState(false);
+  const [selectedService, setSelectedService] = useState<string>("Reconciling Banks for Tax Prep");
+
+  // Available services
+  const services = [
+    "Reconciling Banks for Tax Prep",
+    "Payroll",
+    "Bookkeeping",
+    "Annual Report"
+  ];
+
   // Form data
   const [formData, setFormData] = useState({
     companyName: "",
@@ -118,13 +131,30 @@ export default function CorporateClientIntake() {
     }
   }, [searchParams]);
 
+  // Fetch pipeline data to check if company is already in pipeline
+  useEffect(() => {
+    const fetchPipeline = async () => {
+      try {
+        const response = await fetch(`/api/subscriptions-corporate`);
+        const data = await response.json();
+
+        if (data.success) {
+          setPipelineCompanies(data.data);
+        }
+      } catch (error) {
+        console.error("Failed to fetch pipeline data:", error);
+      }
+    };
+
+    fetchPipeline();
+  }, []);
+
   const loadCompanyById = async (id: string) => {
     setLoading(true);
     setError(null);
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-      const response = await fetch(`${apiUrl}/api/view/Corporations/${id}`);
+      const response = await fetch(`/api/view/Corporations/${id}`);
       const result = await response.json();
 
       if (result.success && result.data) {
@@ -145,9 +175,8 @@ export default function CorporateClientIntake() {
 
   const loadCompanyContacts = async (companyId: string) => {
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
       console.log(`Loading contacts for company: ${companyId}`);
-      const response = await fetch(`${apiUrl}/api/company-contacts/company/${companyId}/contacts`);
+      const response = await fetch(`/api/company-contacts/company/${companyId}/contacts`);
       const result = await response.json();
       console.log('Company contacts API response:', result);
 
@@ -200,8 +229,7 @@ export default function CorporateClientIntake() {
     setError(null);
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-      const response = await fetch(`${apiUrl}/api/view?table=Corporations&view=Grid view`);
+      const response = await fetch(`/api/view?table=Corporations&view=Grid view`);
       const result = await response.json();
 
       if (result.success && result.data) {
@@ -240,8 +268,7 @@ export default function CorporateClientIntake() {
 
     setSearchingContacts(true);
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-      const response = await fetch(`${apiUrl}/api/view?table=Personal&view=Grid view`);
+      const response = await fetch(`/api/view?table=Personal&view=Grid view`);
       const result = await response.json();
 
       if (result.success && result.data) {
@@ -468,6 +495,133 @@ export default function CorporateClientIntake() {
     setSearchResults([]);
   };
 
+  const handleAddToPipeline = async () => {
+    if (!selectedCompany) {
+      setError("Please save the company first before adding to pipeline");
+      setTimeout(() => setError(null), 3000);
+      return;
+    }
+
+    try {
+      setAddingToPipeline(true);
+
+      // First, fetch all services from Services Corporate to find the service ID
+      const servicesResponse = await fetch(`/api/services`);
+      const servicesData = await servicesResponse.json();
+
+      if (!servicesData.success) {
+        throw new Error("Failed to fetch services");
+      }
+
+      // Find the selected service
+      const selectedServiceRecord = servicesData.data?.services?.find(
+        (service: any) => service.name === selectedService
+      );
+
+      if (!selectedServiceRecord) {
+        setError(
+          `${selectedService} service not found in Services Corporate table. Please create it first.`
+        );
+        setTimeout(() => setError(null), 5000);
+        setAddingToPipeline(false);
+        return;
+      }
+
+      // Refresh pipeline data to get latest subscriptions
+      const latestPipelineResponse = await fetch(`/api/subscriptions-corporate`);
+      const latestPipelineData = await latestPipelineResponse.json();
+      const currentSubscriptions = latestPipelineData.success ? latestPipelineData.data : [];
+
+      console.log('Checking for existing subscription:', {
+        companyId: selectedCompany.id,
+        serviceId: selectedServiceRecord.id,
+        serviceName: selectedService,
+        totalSubscriptions: currentSubscriptions.length
+      });
+
+      // Check if company is already subscribed to THIS specific service
+      const existingSubscription = currentSubscriptions.find((subscription: any) => {
+        const companyIds = subscription.fields["Customer"];
+        const companyIdArray = Array.isArray(companyIds) ? companyIds : [companyIds];
+        const serviceIds = subscription.fields["Services"];
+        const serviceIdArray = Array.isArray(serviceIds) ? serviceIds : [serviceIds];
+
+        const matches = companyIdArray.includes(selectedCompany.id) &&
+               serviceIdArray.includes(selectedServiceRecord.id);
+
+        if (companyIdArray.includes(selectedCompany.id)) {
+          console.log('Found subscription for this company:', {
+            subscriptionId: subscription.id,
+            companyIds,
+            serviceIds,
+            matchesService: serviceIdArray.includes(selectedServiceRecord.id)
+          });
+        }
+
+        return matches;
+      });
+
+      if (existingSubscription) {
+        const addedDate = existingSubscription.createdTime
+          ? new Date(existingSubscription.createdTime).toLocaleString("en-US", {
+              year: "numeric",
+              month: "long",
+              day: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            })
+          : "Unknown date";
+
+        setError(
+          `⚠️ Company "${formData.companyName}" is already subscribed to ${selectedService}. Originally added on: ${addedDate}`
+        );
+        setTimeout(() => setError(null), 6000);
+        setAddingToPipeline(false);
+        return;
+      }
+
+      // Create the junction record in Subscriptions Corporate
+      const subscriptionResponse = await fetch(`/api/subscriptions-corporate`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          corporateId: selectedCompany.id,
+          serviceId: selectedServiceRecord.id,
+        }),
+      });
+
+      const subscriptionData = await subscriptionResponse.json();
+
+      if (!subscriptionData.success) {
+        throw new Error(
+          subscriptionData.error || "Failed to create subscription"
+        );
+      }
+
+      // Refresh pipeline data
+      const pipelineResponse = await fetch(`/api/subscriptions-corporate`);
+      const pipelineData = await pipelineResponse.json();
+
+      if (pipelineData.success) {
+        setPipelineCompanies(pipelineData.data);
+      }
+
+      setSuccessMessage(
+        `✅ Company "${formData.companyName}" has been successfully added to ${selectedService}!`
+      );
+      setTimeout(() => setSuccessMessage(null), 5000);
+
+    } catch (err) {
+      console.error("Error adding to pipeline:", err);
+      setError(err instanceof Error ? err.message : "Failed to add company to pipeline");
+      setTimeout(() => setError(null), 5000);
+    } finally {
+      setAddingToPipeline(false);
+    }
+  };
+
   // Form sections
   const formSections = [
     { id: "company-info", label: "Company Information", icon: "🏢" },
@@ -512,9 +666,14 @@ export default function CorporateClientIntake() {
                 {isNewCompany ? "Create new corporate client" : "Update corporate client information"}
               </p>
             </div>
-            <button onClick={handleNewCompany} className="btn btn-primary btn-sm">
-              + New Company
-            </button>
+            <div className="flex gap-2">
+              <Link href="/corporate-services-pipeline" className="btn btn-accent btn-sm">
+                🏦 View Pipeline
+              </Link>
+              <button onClick={handleNewCompany} className="btn btn-primary btn-sm">
+                + New Company
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -969,44 +1128,83 @@ export default function CorporateClientIntake() {
                 <div className="divider"></div>
                 <div className="flex justify-between items-center">
                   <div className="flex gap-2">
-                    {formSections.map((section, index) => (
-                      <button
-                        key={section.id}
-                        onClick={() => setActiveSection(formSections[Math.max(0, index - 1)].id)}
-                        className="btn btn-ghost btn-sm"
-                        disabled={index === 0 || activeSection !== section.id}
-                      >
-                        Previous
-                      </button>
-                    ))}
-                    {formSections.map((section, index) => (
-                      <button
-                        key={section.id}
-                        onClick={() => setActiveSection(formSections[Math.min(formSections.length - 1, index + 1)].id)}
-                        className="btn btn-ghost btn-sm"
-                        disabled={index === formSections.length - 1 || activeSection !== section.id}
-                      >
-                        Next
-                      </button>
-                    ))}
+                    <button
+                      onClick={() => {
+                        const currentIndex = formSections.findIndex(s => s.id === activeSection);
+                        if (currentIndex > 0) {
+                          setActiveSection(formSections[currentIndex - 1].id);
+                        }
+                      }}
+                      className="btn btn-ghost btn-sm"
+                      disabled={formSections.findIndex(s => s.id === activeSection) === 0}
+                    >
+                      ← Previous
+                    </button>
+                    <button
+                      onClick={() => {
+                        const currentIndex = formSections.findIndex(s => s.id === activeSection);
+                        if (currentIndex < formSections.length - 1) {
+                          setActiveSection(formSections[currentIndex + 1].id);
+                        }
+                      }}
+                      className="btn btn-ghost btn-sm"
+                      disabled={formSections.findIndex(s => s.id === activeSection) === formSections.length - 1}
+                    >
+                      Next →
+                    </button>
                   </div>
 
-                  <button
-                    onClick={handleSave}
-                    disabled={saving}
-                    className="btn btn-primary"
-                  >
-                    {saving ? (
-                      <>
-                        <span className="loading loading-spinner loading-sm"></span>
-                        Saving...
-                      </>
-                    ) : (
-                      <>
-                        {isNewCompany ? "Create Company" : "Update Company"}
-                      </>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleSave}
+                      disabled={saving}
+                      className="btn btn-primary"
+                    >
+                      {saving ? (
+                        <>
+                          <span className="loading loading-spinner loading-sm"></span>
+                          Saving...
+                        </>
+                      ) : (
+                        <>
+                          {isNewCompany ? "Create Company" : "Update Company"}
+                        </>
+                      )}
+                    </button>
+
+                    {!isNewCompany && selectedCompany && (
+                      <div className="flex gap-2 items-center">
+                        <select
+                          value={selectedService}
+                          onChange={(e) => setSelectedService(e.target.value)}
+                          className="select select-bordered"
+                          disabled={addingToPipeline}
+                        >
+                          {services.map((service) => (
+                            <option key={service} value={service}>
+                              {service}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          onClick={handleAddToPipeline}
+                          disabled={addingToPipeline}
+                          className="btn btn-success"
+                        >
+                          {addingToPipeline ? (
+                            <>
+                              <span className="loading loading-spinner loading-sm"></span>
+                              Adding...
+                            </>
+                          ) : (
+                            <>
+                              🏦 Add to Service
+                            </>
+                          )}
+                        </button>
+                      </div>
                     )}
-                  </button>
+                  </div>
                 </div>
               </div>
             </div>
