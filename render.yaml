@@ -3,7 +3,7 @@ services:
     name: airtable-dashboard
     env: node
     plan: free
-    buildCommand: cd ../.. && bun install && cd packages/client && npm run build
+    buildCommand: cd ../.. && bun install && cd packages/client && rm -rf .next && npm run build
     startCommand: npm start
     healthCheckPath: /
     envVars:
