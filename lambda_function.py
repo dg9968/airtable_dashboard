@@ -468,10 +468,12 @@ def _build_creditcard_qbo(transactions, account_number=""):
         f"<BANKTRANLIST><DTSTART>{dtstart}</DTSTART><DTEND>{dtend}</DTEND>"
     ]
 
-    # Transactions - for credit cards, charges are typically negative, payments positive
+    # Transactions - for credit cards:
+    # Positive amounts from PDF = charges (DEBIT in QBO)
+    # Negative amounts from PDF = payments/credits (CREDIT in QBO)
     for t in transactions:
-        # For credit cards: negative amounts = charges, positive = payments/credits
-        trntype = "CREDIT" if t["amount"] > 0 else "DEBIT"
+        # Invert the logic for credit cards vs banks
+        trntype = "DEBIT" if t["amount"] > 0 else "CREDIT"
         dt = t["date"].strftime("%Y%m%d")
         amt = f"{t['amount']:.2f}"
         name = (t.get("desc") or "")[:32]
