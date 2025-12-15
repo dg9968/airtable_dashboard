@@ -32,12 +32,19 @@ const app = new Hono();
 app.use('*', logger());
 app.use('*', cors({
   origin: (origin) => {
+    console.log('CORS request from origin:', origin);
     // Allow requests from any localhost port in development
     if (origin && origin.match(/^http:\/\/localhost:\d+$/)) {
       return origin;
     }
+    // Allow any .onrender.com domain
+    if (origin && origin.match(/^https:\/\/.*\.onrender\.com$/)) {
+      return origin;
+    }
     // Allow configured CLIENT_URL in production
-    return process.env.CLIENT_URL || 'http://localhost:3000';
+    const clientUrl = process.env.CLIENT_URL || 'http://localhost:3000';
+    console.log('Using CLIENT_URL:', clientUrl);
+    return clientUrl;
   },
   credentials: true,
   exposeHeaders: ['Content-Disposition'],
