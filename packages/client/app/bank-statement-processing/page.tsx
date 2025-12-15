@@ -63,6 +63,7 @@ export default function BankStatementProcessing() {
       formData.append('accountNumber', accountNumber)
 
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      console.log('Uploading to API:', apiUrl)
       const response = await fetch(`${apiUrl}/api/bank-statement-processing`, {
         method: 'POST',
         headers: {
@@ -130,6 +131,7 @@ export default function BankStatementProcessing() {
         }
 
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+        console.log('Polling status from API:', apiUrl)
         const response = await fetch(`${apiUrl}/api/bank-statement-processing/status?fileKey=${encodeURIComponent(fileKey)}`, {
           headers: {
             'Authorization': `Bearer ${token}`,
