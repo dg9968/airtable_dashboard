@@ -172,14 +172,27 @@ app.get('/status', async (c) => {
     let status: string;
 
     try {
-      await s3Client.send(new HeadObjectCommand({
+      const parsedFileMetadata = await s3Client.send(new HeadObjectCommand({
         Bucket: bucketName,
         Key: parsedFileKey
       }));
 
-      processed = true;
-      status = 'Processing complete';
-      qboUrl = `/api/bank-statement-processing/download?fileKey=${encodeURIComponent(fileKey)}`;
+      // Check if the parsed file was created AFTER the incoming file was uploaded
+      const parsedFileTime = parsedFileMetadata.LastModified?.getTime() || 0;
+      const incomingFileTime = uploadTime;
+
+      // Only mark as processed if the parsed file is newer than the incoming file
+      if (parsedFileTime > incomingFileTime) {
+        processed = true;
+        status = 'Processing complete';
+        qboUrl = `/api/bank-statement-processing/download?fileKey=${encodeURIComponent(fileKey)}`;
+      } else {
+        // File exists but is old - still processing
+        if (elapsedTime < 10000) status = 'Processing bank statement...';
+        else if (elapsedTime < 30000) status = 'Extracting transaction data...';
+        else if (elapsedTime < 60000) status = 'Converting to QBO format...';
+        else status = 'Processing taking longer than expected';
+      }
 
     } catch (s3Error: any) {
       if (s3Error.name === 'NoSuchKey' || s3Error.$metadata?.httpStatusCode === 404) {
