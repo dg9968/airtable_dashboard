@@ -40,6 +40,7 @@ app.use('*', cors({
     return process.env.CLIENT_URL || 'http://localhost:3000';
   },
   credentials: true,
+  exposeHeaders: ['Content-Disposition'],
 }));
 
 // Health check

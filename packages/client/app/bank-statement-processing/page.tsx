@@ -13,6 +13,8 @@ export default function BankStatementProcessing() {
   const [qboDownloadUrl, setQboDownloadUrl] = useState<string>('')
   const [processingStage, setProcessingStage] = useState<number>(0)
   const [estimatedTimeRemaining, setEstimatedTimeRemaining] = useState<number>(0)
+  const [accountType, setAccountType] = useState<'bank' | 'credit-card'>('bank')
+  const [accountNumber, setAccountNumber] = useState<string>('')
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -57,6 +59,8 @@ export default function BankStatementProcessing() {
       const formData = new FormData()
       formData.append('file', file)
       formData.append('processingType', 'bank-statement')
+      formData.append('accountType', accountType)
+      formData.append('accountNumber', accountNumber)
 
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
       const response = await fetch(`${apiUrl}/api/bank-statement-processing`, {
@@ -134,6 +138,7 @@ export default function BankStatementProcessing() {
         const statusResult = await response.json()
 
         if (response.ok) {
+          console.log('Status response:', statusResult)
           setProcessingStatus(statusResult.status)
 
           // Update processing stage based on status message
@@ -259,11 +264,59 @@ export default function BankStatementProcessing() {
 
         <div className="card bg-base-100 shadow-xl">
           <div className="card-body">
-            <h2 className="card-title mb-4">Upload Bank Statement</h2>
-            
+            <h2 className="card-title mb-4">Upload Bank/Credit Card Statement</h2>
+
+            <div className="form-control w-full mb-4">
+              <label className="label">
+                <span className="label-text">Account Type</span>
+              </label>
+              <div className="flex gap-4">
+                <label className="label cursor-pointer">
+                  <input
+                    type="radio"
+                    name="accountType"
+                    className="radio radio-primary mr-2"
+                    checked={accountType === 'bank'}
+                    onChange={() => setAccountType('bank')}
+                  />
+                  <span className="label-text">Bank Account</span>
+                </label>
+                <label className="label cursor-pointer">
+                  <input
+                    type="radio"
+                    name="accountType"
+                    className="radio radio-primary mr-2"
+                    checked={accountType === 'credit-card'}
+                    onChange={() => setAccountType('credit-card')}
+                  />
+                  <span className="label-text">Credit Card</span>
+                </label>
+              </div>
+            </div>
+
+            <div className="form-control w-full mb-4">
+              <label className="label">
+                <span className="label-text">Account Number (last 4-6 digits)</span>
+                <span className="label-text-alt">Optional</span>
+              </label>
+              <input
+                type="text"
+                placeholder={accountType === 'credit-card' ? 'e.g., 941004' : 'e.g., 1234'}
+                className="input input-bordered w-full"
+                value={accountNumber}
+                onChange={(e) => setAccountNumber(e.target.value)}
+                maxLength={6}
+              />
+              <label className="label">
+                <span className="label-text-alt">
+                  This will be included in the QBO file for identification
+                </span>
+              </label>
+            </div>
+
             <div className="form-control w-full">
               <label className="label">
-                <span className="label-text">Select bank statement file</span>
+                <span className="label-text">Select statement file</span>
                 <span className="label-text-alt">PDF or CSV format</span>
               </label>
               <input
@@ -480,12 +533,19 @@ export default function BankStatementProcessing() {
             <div className="bg-base-200 p-4 rounded-lg">
               <h3 className="font-semibold mb-2">How it works:</h3>
               <ol className="list-decimal list-inside space-y-1 text-sm">
-                <li>Upload your bank statement (PDF or CSV format)</li>
+                <li>Select account type (bank account or credit card)</li>
+                <li>Upload your statement (PDF or CSV format)</li>
                 <li>File is uploaded to Amazon S3 for processing</li>
                 <li>Our AWS functions automatically parse the statement</li>
-                <li>The processed file is converted to QBO format</li>
+                <li>The processed file is converted to QBO format with appropriate tags</li>
                 <li>Download your QBO file when processing is complete</li>
               </ol>
+              <div className="mt-3 p-3 bg-info/10 rounded border border-info/20">
+                <p className="text-sm">
+                  <strong>Note:</strong> Credit card statements will use CREDITCARDMSGSRSV1 and CCSTMTTRNRS tags,
+                  while bank statements use BANKMSGSRSV1 and STMTTRNRS tags for proper QuickBooks import.
+                </p>
+              </div>
             </div>
           </div>
         </div>

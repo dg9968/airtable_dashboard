@@ -29,6 +29,8 @@ app.post('/', async (c) => {
     const formData = await c.req.formData();
     const file = formData.get('file') as File;
     const processingType = formData.get('processingType') as string;
+    const accountType = formData.get('accountType') as string || 'bank';
+    const accountNumber = formData.get('accountNumber') as string || '';
 
     if (!file) {
       return c.json({ error: 'No file provided' }, 400);
@@ -36,6 +38,10 @@ app.post('/', async (c) => {
 
     if (processingType !== 'bank-statement') {
       return c.json({ error: 'Invalid processing type' }, 400);
+    }
+
+    if (accountType !== 'bank' && accountType !== 'credit-card') {
+      return c.json({ error: 'Invalid account type. Must be "bank" or "credit-card"' }, 400);
     }
 
     const allowedTypes = [
@@ -77,6 +83,8 @@ app.post('/', async (c) => {
           originalName: file.name,
           uploadedBy: 'system',
           processingType: 'bank-statement',
+          accountType: accountType,
+          accountNumber: accountNumber,
           uploadedAt: new Date().toISOString()
         }
       }));
@@ -87,6 +95,8 @@ app.post('/', async (c) => {
         bucket: bucketName,
         originalName: file.name,
         size: file.size,
+        accountType,
+        accountNumber,
         uploadedAt: new Date().toISOString(),
         s3ETag: result.ETag,
         s3Location: `s3://${bucketName}/${fileKey}`
@@ -129,13 +139,29 @@ app.get('/status', async (c) => {
       return c.json({ error: 'File key is required' }, 400);
     }
 
-    const parsedFileKey = fileKey
-      .replace('incoming/', 'parsed/')
-      .replace(/\.(pdf|csv|xlsx?)$/i, '.qbo');
-
     const bucketName = process.env.AWS_S3_BUCKET || process.env.AWS_S3_BUCKET_NAME;
     if (!bucketName) {
       return c.json({ error: 'AWS S3 bucket not configured. Set AWS_S3_BUCKET in your .env file.' }, 500);
+    }
+
+    // Get original filename from metadata to construct parsed filename
+    let parsedFileKey = fileKey
+      .replace('incoming/', 'parsed/')
+      .replace(/\.(pdf|csv|xlsx?)$/i, '.qbo');
+
+    try {
+      const originalMetadata = await s3Client.send(new HeadObjectCommand({
+        Bucket: bucketName,
+        Key: fileKey
+      }));
+      const originalName = originalMetadata.Metadata?.originalname || '';
+      if (originalName) {
+        // Lambda uses original filename, so we should too
+        const baseName = originalName.replace(/\.(pdf|csv|xlsx?)$/i, '').replace(/ /g, '_').replace(/[()]/g, '');
+        parsedFileKey = `parsed/${baseName}.qbo`;
+      }
+    } catch (e) {
+      // If can't get metadata, use default logic
     }
 
     const uploadTime = extractTimestampFromFileKey(fileKey);
@@ -166,12 +192,28 @@ app.get('/status', async (c) => {
       }
     }
 
+    // Try to get metadata from the original file
+    let accountType = 'bank';
+    let accountNumber = '';
+    try {
+      const originalMetadata = await s3Client.send(new HeadObjectCommand({
+        Bucket: bucketName,
+        Key: fileKey
+      }));
+      accountType = originalMetadata.Metadata?.accounttype || 'bank';
+      accountNumber = originalMetadata.Metadata?.accountnumber || '';
+    } catch (e) {
+      // Metadata not available, use defaults
+    }
+
     return c.json({
       fileKey,
       parsedFileKey,
       status,
       processed,
       qboUrl,
+      accountType,
+      accountNumber,
       elapsedTime: Math.floor(elapsedTime / 1000),
       timestamp: new Date().toISOString()
     });
@@ -193,13 +235,29 @@ app.get('/download', async (c) => {
       return c.json({ error: 'File key is required' }, 400);
     }
 
-    const parsedFileKey = fileKey
-      .replace('incoming/', 'parsed/')
-      .replace(/\.(pdf|csv|xlsx?)$/i, '.qbo');
-
     const bucketName = process.env.AWS_S3_BUCKET || process.env.AWS_S3_BUCKET_NAME;
     if (!bucketName) {
       return c.json({ error: 'AWS S3 bucket not configured. Set AWS_S3_BUCKET in your .env file.' }, 500);
+    }
+
+    // Get original filename from metadata to construct parsed filename
+    let parsedFileKey = fileKey
+      .replace('incoming/', 'parsed/')
+      .replace(/\.(pdf|csv|xlsx?)$/i, '.qbo');
+
+    try {
+      const originalMetadata = await s3Client.send(new HeadObjectCommand({
+        Bucket: bucketName,
+        Key: fileKey
+      }));
+      const originalName = originalMetadata.Metadata?.originalname || '';
+      if (originalName) {
+        // Lambda uses original filename, so we should too
+        const baseName = originalName.replace(/\.(pdf|csv|xlsx?)$/i, '').replace(/ /g, '_').replace(/[()]/g, '');
+        parsedFileKey = `parsed/${baseName}.qbo`;
+      }
+    } catch (e) {
+      // If can't get metadata, use default logic
     }
 
     try {
@@ -232,8 +290,21 @@ app.get('/download', async (c) => {
         offset += chunk.length;
       }
 
-      const originalName = s3Response.Metadata?.originalname || 'bank_statement';
-      const filename = `${originalName.replace(/\.[^/.]+$/, '')}_${Date.now()}.qbo`;
+      // Get original name from the incoming file metadata (not the parsed file)
+      let originalName = 'bank_statement';
+      try {
+        const incomingMetadata = await s3Client.send(new HeadObjectCommand({
+          Bucket: bucketName,
+          Key: fileKey
+        }));
+        originalName = incomingMetadata.Metadata?.originalname || 'bank_statement';
+        console.log('Download: Retrieved original filename from metadata:', originalName);
+      } catch (e) {
+        console.log('Download: Failed to get metadata, using default');
+      }
+
+      const filename = `${originalName.replace(/\.[^/.]+$/, '')}.qbo`;
+      console.log('Download: Setting filename to:', filename);
 
       return c.body(buffer, 200, {
         'Content-Type': 'application/vnd.intu.qbo',
