@@ -29,8 +29,8 @@ app.get('/', async (c) => {
 
     const baseId = process.env.AIRTABLE_BASE_ID || '';
 
-    // Try different possible table names
-    const possibleTableNames = ['Users', 'Teams', 'Team', 'teams', 'team'];
+    // Try different possible table names - prioritize Team/Teams tables over Users
+    const possibleTableNames = ['Team', 'Teams', 'team', 'teams', 'Users'];
     let records = [];
     let tableName = '';
 
@@ -39,7 +39,7 @@ app.get('/', async (c) => {
         console.log(`Trying table name: ${name}`);
         records = await fetchAllRecords(baseId, name);
         tableName = name;
-        console.log(`Successfully fetched from table: ${name}`);
+        console.log(`Successfully fetched from table: ${name} (${records.length} records)`);
         break;
       } catch (err) {
         console.log(`Failed to fetch from table: ${name}`);
@@ -48,7 +48,7 @@ app.get('/', async (c) => {
     }
 
     if (records.length === 0 && !tableName) {
-      throw new Error('Could not find Users/Teams table. Please check the table name in Airtable.');
+      throw new Error('Could not find Team/Teams table. Please check the table name in Airtable.');
     }
 
     // Map to a simpler format

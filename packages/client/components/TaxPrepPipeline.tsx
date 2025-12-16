@@ -13,6 +13,8 @@ interface PipelineClient {
   clientCode?: string;
   taxPreparer?: string[];
   addedAt: string;
+  status?: string; // "Active" | "Hold for Customer" | "Escalate to Manager"
+  priority?: number; // Auto-calculated based on addedAt
 }
 
 interface TaxPreparer {
@@ -25,11 +27,12 @@ export default function TaxPrepPipeline() {
   const [pipelineClients, setPipelineClients] = useState<PipelineClient[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [sortBy, setSortBy] = useState<"name" | "date">("date");
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const [sortBy, setSortBy] = useState<"name" | "date" | "priority">("priority");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [updating, setUpdating] = useState<string | null>(null);
   const [taxPreparerFilter, setTaxPreparerFilter] = useState<string>("");
   const [taxPreparers, setTaxPreparers] = useState<TaxPreparer[]>([]);
+  const [statusFilter, setStatusFilter] = useState<string>("");
 
   // Fetch tax preparers from Teams table
   useEffect(() => {
@@ -95,6 +98,16 @@ export default function TaxPrepPipeline() {
             // Get Tax Preparer (multiple select field)
             const taxPreparer = record.fields["Tax Preparer"] || [];
 
+            // Get Status (single select field)
+            const status = record.fields["Status"] || "Active";
+
+            // Calculate priority based on how long ago they were added (in days)
+            const addedDate = new Date(record.createdTime);
+            const today = new Date();
+            const daysInPipeline = Math.floor(
+              (today.getTime() - addedDate.getTime()) / (1000 * 60 * 60 * 24)
+            );
+
             return {
               id: record.id,
               personalId: personalIdStr,
@@ -107,6 +120,8 @@ export default function TaxPrepPipeline() {
                 ? taxPreparer
                 : [taxPreparer],
               addedAt: record.createdTime,
+              status,
+              priority: daysInPipeline,
             };
           });
           setPipelineClients(pipeline);
@@ -121,7 +136,7 @@ export default function TaxPrepPipeline() {
     fetchPipeline();
   }, []);
 
-  // Filter clients by search term and tax preparer
+  // Filter clients by search term, tax preparer, and status
   const filteredClients = pipelineClients.filter((client) => {
     const searchLower = searchTerm.toLowerCase();
     const matchesSearch =
@@ -138,7 +153,9 @@ export default function TaxPrepPipeline() {
       matchesTaxPreparer = Boolean(client.taxPreparer && client.taxPreparer.includes(taxPreparerFilter));
     }
 
-    return matchesSearch && matchesTaxPreparer;
+    const matchesStatus = !statusFilter || client.status === statusFilter;
+
+    return matchesSearch && matchesTaxPreparer && matchesStatus;
   });
 
   // Sort clients
@@ -149,6 +166,11 @@ export default function TaxPrepPipeline() {
       return sortOrder === "asc"
         ? nameA.localeCompare(nameB)
         : nameB.localeCompare(nameA);
+    } else if (sortBy === "priority") {
+      // Higher priority (more days) should come first when desc
+      const priorityA = a.priority || 0;
+      const priorityB = b.priority || 0;
+      return sortOrder === "asc" ? priorityA - priorityB : priorityB - priorityA;
     } else {
       const dateA = new Date(a.addedAt).getTime();
       const dateB = new Date(b.addedAt).getTime();
@@ -166,12 +188,12 @@ export default function TaxPrepPipeline() {
     });
   };
 
-  const toggleSort = (field: "name" | "date") => {
+  const toggleSort = (field: "name" | "date" | "priority") => {
     if (sortBy === field) {
       setSortOrder(sortOrder === "asc" ? "desc" : "asc");
     } else {
       setSortBy(field);
-      setSortOrder("asc");
+      setSortOrder(field === "priority" ? "desc" : "asc");
     }
   };
 
@@ -181,6 +203,8 @@ export default function TaxPrepPipeline() {
 
       // Update via API - send the record ID from the Teams table
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+      console.log('Updating tax preparer:', { clientId, newPreparerId, apiUrl });
+
       const response = await fetch(`${apiUrl}/api/subscriptions-personal/${clientId}`, {
         method: "PATCH",
         headers: {
@@ -193,12 +217,20 @@ export default function TaxPrepPipeline() {
         }),
       });
 
-      const data = await response.json();
+      console.log('Response status:', response.status, response.statusText);
+
+      let data;
+      try {
+        data = await response.json();
+        console.log('Response data:', data);
+      } catch (parseError) {
+        console.error('Failed to parse response:', parseError);
+        throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+      }
 
       if (!response.ok) {
         console.error("Server error response:", data);
-        console.error("Response status:", response.status, response.statusText);
-        const errorMsg = data.error || "Failed to update tax preparer";
+        const errorMsg = data.error || data.message || `Server error: ${response.status}`;
         if (data.details) {
           console.error("Error details:", data.details);
         }
@@ -219,6 +251,83 @@ export default function TaxPrepPipeline() {
       alert(errorMessage);
     } finally {
       setUpdating(null);
+    }
+  };
+
+  const updateStatus = async (clientId: string, newStatus: string) => {
+    try {
+      setUpdating(clientId);
+
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+      console.log('Updating status:', { clientId, newStatus, apiUrl });
+
+      const response = await fetch(`${apiUrl}/api/subscriptions-personal/${clientId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          fields: {
+            "Status": newStatus,
+          },
+        }),
+      });
+
+      console.log('Response status:', response.status, response.statusText);
+
+      let data;
+      try {
+        data = await response.json();
+        console.log('Response data:', data);
+      } catch (parseError) {
+        console.error('Failed to parse response:', parseError);
+        throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+      }
+
+      if (!response.ok) {
+        console.error("Server error response:", data);
+        const errorMsg = data.error || data.message || `Server error: ${response.status}`;
+        if (data.details) {
+          console.error("Error details:", data.details);
+        }
+        throw new Error(errorMsg);
+      }
+
+      // Update local state
+      setPipelineClients((prevClients) =>
+        prevClients.map((client) =>
+          client.id === clientId
+            ? { ...client, status: newStatus }
+            : client
+        )
+      );
+    } catch (error) {
+      console.error("Error updating status:", error);
+      const errorMessage = error instanceof Error ? error.message : "Failed to update status. Please try again.";
+      alert(errorMessage);
+    } finally {
+      setUpdating(null);
+    }
+  };
+
+  const getPriorityBadge = (priority: number) => {
+    if (priority >= 14) {
+      return <span className="badge badge-error badge-sm">🔥 High ({priority}d)</span>;
+    } else if (priority >= 7) {
+      return <span className="badge badge-warning badge-sm">⚡ Medium ({priority}d)</span>;
+    } else {
+      return <span className="badge badge-success badge-sm">✓ Normal ({priority}d)</span>;
+    }
+  };
+
+  const getStatusBadge = (status?: string) => {
+    switch (status) {
+      case "Hold for Customer":
+        return <span className="badge badge-warning badge-sm">⏸️ On Hold</span>;
+      case "Escalate to Manager":
+        return <span className="badge badge-error badge-sm">⬆️ Escalated</span>;
+      default:
+        return <span className="badge badge-info badge-sm">▶️ Active</span>;
     }
   };
 
@@ -284,7 +393,7 @@ export default function TaxPrepPipeline() {
               </div>
 
               {/* Tax Preparer Filter */}
-              <div className="form-control w-full md:w-64">
+              <div className="form-control w-full md:w-48">
                 <select
                   className="select select-bordered w-full"
                   value={taxPreparerFilter}
@@ -300,8 +409,30 @@ export default function TaxPrepPipeline() {
                 </select>
               </div>
 
+              {/* Status Filter */}
+              <div className="form-control w-full md:w-48">
+                <select
+                  className="select select-bordered w-full"
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                >
+                  <option value="">All Statuses</option>
+                  <option value="Active">Active</option>
+                  <option value="Hold for Customer">Hold for Customer</option>
+                  <option value="Escalate to Manager">Escalate to Manager</option>
+                </select>
+              </div>
+
               {/* Sort Options */}
               <div className="flex gap-2">
+                <button
+                  onClick={() => toggleSort("priority")}
+                  className={`btn ${
+                    sortBy === "priority" ? "btn-primary" : "btn-outline"
+                  }`}
+                >
+                  Priority {sortBy === "priority" && (sortOrder === "asc" ? "↑" : "↓")}
+                </button>
                 <button
                   onClick={() => toggleSort("name")}
                   className={`btn ${
@@ -340,11 +471,12 @@ export default function TaxPrepPipeline() {
                   <thead>
                     <tr>
                       <th>#</th>
+                      <th>Priority</th>
+                      <th>Status</th>
                       <th>Name</th>
                       <th>Phone</th>
-                      <th>Email</th>
                       <th>Tax Preparer</th>
-                      <th>Added to Pipeline</th>
+                      <th>Added</th>
                       <th>Actions</th>
                     </tr>
                   </thead>
@@ -352,13 +484,43 @@ export default function TaxPrepPipeline() {
                     {sortedClients.map((client, index) => (
                       <tr key={client.id}>
                         <td>{index + 1}</td>
+                        <td>{getPriorityBadge(client.priority || 0)}</td>
+                        <td>
+                          <div className="flex flex-col gap-1">
+                            {getStatusBadge(client.status)}
+                            <div className="dropdown dropdown-bottom">
+                              <label tabIndex={0} className="btn btn-xs btn-ghost">
+                                Change
+                              </label>
+                              <ul
+                                tabIndex={0}
+                                className="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-56"
+                              >
+                                <li>
+                                  <button onClick={() => updateStatus(client.id, "Active")}>
+                                    ▶️ Set Active
+                                  </button>
+                                </li>
+                                <li>
+                                  <button onClick={() => updateStatus(client.id, "Hold for Customer")}>
+                                    ⏸️ Hold for Customer
+                                  </button>
+                                </li>
+                                <li>
+                                  <button onClick={() => updateStatus(client.id, "Escalate to Manager")}>
+                                    ⬆️ Escalate to Manager
+                                  </button>
+                                </li>
+                              </ul>
+                            </div>
+                          </div>
+                        </td>
                         <td>
                           <div className="font-semibold">
                             {client.firstName} {client.lastName}
                           </div>
                         </td>
                         <td>{client.phone || "N/A"}</td>
-                        <td>{client.email || "N/A"}</td>
                         <td>
                           <select
                             className="select select-bordered select-sm w-full max-w-xs"
@@ -377,7 +539,7 @@ export default function TaxPrepPipeline() {
                           </select>
                         </td>
                         <td>
-                          <div className="text-sm">
+                          <div className="text-xs">
                             {formatDate(client.addedAt)}
                           </div>
                         </td>
@@ -389,7 +551,7 @@ export default function TaxPrepPipeline() {
                                 className="btn btn-sm btn-ghost"
                                 title="View client details"
                               >
-                                👤 View
+                                👤
                               </Link>
                             )}
                             {client.clientCode && (
@@ -398,7 +560,7 @@ export default function TaxPrepPipeline() {
                                 className="btn btn-sm btn-primary"
                                 title="View client documents"
                               >
-                                📄 Documents
+                                📄
                               </Link>
                             )}
                           </div>

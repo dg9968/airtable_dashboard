@@ -656,12 +656,20 @@ export default function ClientIntake() {
                     }`}
               </p>
             </div>
-            <button
-              onClick={handleNewClient}
-              className="btn btn-outline btn-sm"
-            >
-              + New Client
-            </button>
+            <div className="flex gap-2">
+              <Link
+                href="/tax-prep-pipeline"
+                className="btn btn-outline btn-sm"
+              >
+                📊 View Full Pipeline
+              </Link>
+              <button
+                onClick={handleNewClient}
+                className="btn btn-outline btn-sm"
+              >
+                + New Client
+              </button>
+            </div>
           </div>
 
           {/* Success/Error Messages */}
