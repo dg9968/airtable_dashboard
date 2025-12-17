@@ -34,6 +34,9 @@ export default function TaxPrepPipeline() {
   const [taxPreparerFilter, setTaxPreparerFilter] = useState<string>("");
   const [taxPreparers, setTaxPreparers] = useState<TaxPreparer[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>("");
+  const [showAmountModal, setShowAmountModal] = useState(false);
+  const [selectedClientForReturn, setSelectedClientForReturn] = useState<string | null>(null);
+  const [amountCharged, setAmountCharged] = useState<string>("");
 
   // Fetch tax preparers from Teams table
   useEffect(() => {
@@ -129,7 +132,10 @@ export default function TaxPrepPipeline() {
               notes,
             };
           });
-          setPipelineClients(pipeline);
+
+          // Filter out clients with "File Return" status - they should not appear in active pipeline
+          const activePipeline = pipeline.filter((client: PipelineClient) => client.status !== "File Return");
+          setPipelineClients(activePipeline);
         }
       } catch (error) {
         console.error("Failed to fetch pipeline data:", error);
@@ -331,6 +337,8 @@ export default function TaxPrepPipeline() {
         return <span className="badge badge-warning badge-sm">⏸️ On Hold</span>;
       case "Escalate to Manager":
         return <span className="badge badge-error badge-sm">⬆️ Escalated</span>;
+      case "File Return":
+        return <span className="badge badge-success badge-sm">✅ Filed</span>;
       default:
         return <span className="badge badge-info badge-sm">▶️ Active</span>;
     }
@@ -382,6 +390,77 @@ export default function TaxPrepPipeline() {
       console.error("Error updating notes:", error);
       const errorMessage = error instanceof Error ? error.message : "Failed to update notes. Please try again.";
       alert(errorMessage);
+    }
+  };
+
+  const handleFileReturn = async () => {
+    if (!selectedClientForReturn || !amountCharged) {
+      alert("Please enter the amount charged");
+      return;
+    }
+
+    try {
+      setUpdating(selectedClientForReturn);
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+
+      // Find the client to get their name
+      const client = pipelineClients.find((c) => c.id === selectedClientForReturn);
+      if (!client) {
+        throw new Error("Client not found");
+      }
+
+      const clientName = `${client.firstName} ${client.lastName}`;
+
+      // Create ledger entry
+      const ledgerResponse = await fetch(`${apiUrl}/api/ledger`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          subscriptionId: selectedClientForReturn,
+          clientName: clientName,
+          amountCharged: parseFloat(amountCharged),
+          receiptDate: new Date().toISOString(),
+        }),
+      });
+
+      const ledgerData = await ledgerResponse.json();
+
+      if (!ledgerResponse.ok) {
+        throw new Error(ledgerData.error || "Failed to create ledger entry");
+      }
+
+      // Update status to File Return (keeps record but marks as filed)
+      await updateStatus(selectedClientForReturn, "File Return");
+
+      // Remove from local state (will be filtered out from pipeline view)
+      setPipelineClients((prevClients) =>
+        prevClients.filter((client) => client.id !== selectedClientForReturn)
+      );
+
+      // Close modal and reset
+      setShowAmountModal(false);
+      setSelectedClientForReturn(null);
+      setAmountCharged("");
+
+      alert("✅ File Return completed! Ledger entry created.");
+    } catch (error) {
+      console.error("Error handling file return:", error);
+      alert(error instanceof Error ? error.message : "Failed to process file return");
+    } finally {
+      setUpdating(null);
+    }
+  };
+
+  const handleStatusChange = (clientId: string, newStatus: string) => {
+    if (newStatus === "File Return") {
+      // Show modal to get amount charged
+      setSelectedClientForReturn(clientId);
+      setShowAmountModal(true);
+    } else {
+      // Update status directly
+      updateStatus(clientId, newStatus);
     }
   };
 
@@ -474,6 +553,7 @@ export default function TaxPrepPipeline() {
                   <option value="Active">Active</option>
                   <option value="Hold for Customer">Hold for Customer</option>
                   <option value="Escalate to Manager">Escalate to Manager</option>
+                  <option value="File Return">File Return</option>
                 </select>
               </div>
 
@@ -552,18 +632,23 @@ export default function TaxPrepPipeline() {
                                 className="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-56"
                               >
                                 <li>
-                                  <button onClick={() => updateStatus(client.id, "Active")}>
+                                  <button onClick={() => handleStatusChange(client.id, "Active")}>
                                     ▶️ Set Active
                                   </button>
                                 </li>
                                 <li>
-                                  <button onClick={() => updateStatus(client.id, "Hold for Customer")}>
+                                  <button onClick={() => handleStatusChange(client.id, "Hold for Customer")}>
                                     ⏸️ Hold for Customer
                                   </button>
                                 </li>
                                 <li>
-                                  <button onClick={() => updateStatus(client.id, "Escalate to Manager")}>
+                                  <button onClick={() => handleStatusChange(client.id, "Escalate to Manager")}>
                                     ⬆️ Escalate to Manager
+                                  </button>
+                                </li>
+                                <li>
+                                  <button onClick={() => handleStatusChange(client.id, "File Return")} className="text-success font-semibold">
+                                    ✅ File Return
                                   </button>
                                 </li>
                               </ul>
@@ -737,6 +822,52 @@ export default function TaxPrepPipeline() {
           </div>
         </div>
       </main>
+
+      {/* Amount Charged Modal */}
+      {showAmountModal && (
+        <div className="modal modal-open">
+          <div className="modal-box">
+            <h3 className="font-bold text-lg mb-4">File Return - Enter Amount Charged</h3>
+            <p className="text-sm text-base-content/70 mb-4">
+              This will create a permanent ledger entry for "Personal Tax Return" with the client's name, today's date, and the amount charged.
+            </p>
+            <div className="form-control">
+              <label className="label">
+                <span className="label-text">Amount Charged ($)</span>
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="0.00"
+                className="input input-bordered"
+                value={amountCharged}
+                onChange={(e) => setAmountCharged(e.target.value)}
+                autoFocus
+              />
+            </div>
+            <div className="modal-action">
+              <button
+                className="btn btn-ghost"
+                onClick={() => {
+                  setShowAmountModal(false);
+                  setSelectedClientForReturn(null);
+                  setAmountCharged("");
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn btn-success"
+                onClick={handleFileReturn}
+                disabled={!amountCharged || parseFloat(amountCharged) <= 0}
+              >
+                ✅ Complete File Return
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
