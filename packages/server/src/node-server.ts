@@ -26,6 +26,7 @@ import syncGdriveRoutes from './routes/sync-gdrive';
 import personalRoutes from './routes/personal';
 import subscriptionsPersonalRoutes from './routes/subscriptions-personal';
 import teamsRoutes from './routes/teams';
+import ledgerRoutes from './routes/ledger';
 
 const app = new Hono();
 
@@ -81,6 +82,7 @@ app.route('/api/sync-gdrive', syncGdriveRoutes);
 app.route('/api/personal', personalRoutes);
 app.route('/api/subscriptions-personal', subscriptionsPersonalRoutes);
 app.route('/api/teams', teamsRoutes);
+app.route('/api/ledger', ledgerRoutes);
 
 // 404 handler
 app.notFound((c) => {
