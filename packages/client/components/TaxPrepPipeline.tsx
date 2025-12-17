@@ -37,6 +37,7 @@ export default function TaxPrepPipeline() {
   const [showAmountModal, setShowAmountModal] = useState(false);
   const [selectedClientForReturn, setSelectedClientForReturn] = useState<string | null>(null);
   const [amountCharged, setAmountCharged] = useState<string>("");
+  const [paymentMethod, setPaymentMethod] = useState<string>("");
 
   // Fetch tax preparers from Teams table
   useEffect(() => {
@@ -409,8 +410,8 @@ export default function TaxPrepPipeline() {
   };
 
   const handleFileReturn = async () => {
-    if (!selectedClientForReturn || !amountCharged) {
-      alert("Please enter the amount charged");
+    if (!selectedClientForReturn || !amountCharged || !paymentMethod) {
+      alert("Please enter the amount charged and payment method");
       return;
     }
 
@@ -437,6 +438,7 @@ export default function TaxPrepPipeline() {
           clientName: clientName,
           amountCharged: parseFloat(amountCharged),
           receiptDate: new Date().toISOString(),
+          paymentMethod: paymentMethod,
         }),
       });
 
@@ -458,6 +460,7 @@ export default function TaxPrepPipeline() {
       setShowAmountModal(false);
       setSelectedClientForReturn(null);
       setAmountCharged("");
+      setPaymentMethod("");
 
       alert("✅ File Return completed! Ledger entry created.");
     } catch (error) {
@@ -844,9 +847,9 @@ export default function TaxPrepPipeline() {
           <div className="modal-box">
             <h3 className="font-bold text-lg mb-4">File Return - Enter Amount Charged</h3>
             <p className="text-sm text-base-content/70 mb-4">
-              This will create a permanent ledger entry for "Personal Tax Return" with the client's name, today's date, and the amount charged.
+              This will create a permanent ledger entry for "Personal Tax Return" with the client's name, today's date, amount charged, and payment method.
             </p>
-            <div className="form-control">
+            <div className="form-control mb-4">
               <label className="label">
                 <span className="label-text">Amount Charged ($)</span>
               </label>
@@ -861,6 +864,23 @@ export default function TaxPrepPipeline() {
                 autoFocus
               />
             </div>
+            <div className="form-control">
+              <label className="label">
+                <span className="label-text">Payment Method</span>
+              </label>
+              <select
+                className="select select-bordered"
+                value={paymentMethod}
+                onChange={(e) => setPaymentMethod(e.target.value)}
+              >
+                <option value="">Select payment method...</option>
+                <option value="Credit Card">Credit Card</option>
+                <option value="Cash">Cash</option>
+                <option value="Zelle">Zelle</option>
+                <option value="TPG Bank Product">TPG Bank Product</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
             <div className="modal-action">
               <button
                 className="btn btn-ghost"
@@ -868,6 +888,7 @@ export default function TaxPrepPipeline() {
                   setShowAmountModal(false);
                   setSelectedClientForReturn(null);
                   setAmountCharged("");
+                  setPaymentMethod("");
                 }}
               >
                 Cancel
@@ -875,7 +896,7 @@ export default function TaxPrepPipeline() {
               <button
                 className="btn btn-success"
                 onClick={handleFileReturn}
-                disabled={!amountCharged || parseFloat(amountCharged) <= 0}
+                disabled={!amountCharged || parseFloat(amountCharged) <= 0 || !paymentMethod}
               >
                 ✅ Complete File Return
               </button>

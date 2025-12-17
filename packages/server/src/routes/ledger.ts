@@ -19,7 +19,8 @@ const app = new Hono();
  *   subscriptionId: string,  // Airtable record ID from Subscriptions Personal table
  *   clientName: string,      // Full name of the client
  *   amountCharged: number,   // Amount charged for the service
- *   receiptDate: string      // ISO date string for when the service was rendered
+ *   receiptDate: string,     // ISO date string for when the service was rendered
+ *   paymentMethod: string    // Payment method used (Credit Card, Cash, Zelle, TPG Bank Product, Other)
  * }
  */
 app.post('/', async (c) => {
@@ -35,19 +36,19 @@ app.post('/', async (c) => {
       );
     }
 
-    const { subscriptionId, clientName, amountCharged, receiptDate } = await c.req.json();
+    const { subscriptionId, clientName, amountCharged, receiptDate, paymentMethod } = await c.req.json();
 
-    if (!subscriptionId || !clientName || !amountCharged || !receiptDate) {
+    if (!subscriptionId || !clientName || !amountCharged || !receiptDate || !paymentMethod) {
       return c.json(
         {
           success: false,
-          error: 'Missing required fields: subscriptionId, clientName, amountCharged, receiptDate',
+          error: 'Missing required fields: subscriptionId, clientName, amountCharged, receiptDate, paymentMethod',
         },
         400
       );
     }
 
-    console.log('Creating Ledger entry:', { subscriptionId, clientName, amountCharged, receiptDate });
+    console.log('Creating Ledger entry:', { subscriptionId, clientName, amountCharged, receiptDate, paymentMethod });
 
     const baseId = process.env.AIRTABLE_BASE_ID || '';
 
@@ -66,12 +67,13 @@ app.post('/', async (c) => {
     }
 
     // Create the ledger record
-    // Field names: "Service Rendered" (text), "Receipt Date" (date), "Amount Charged" (currency), "Name of Client" (text), "Subscription" (link to Subscriptions Personal)
+    // Field names: "Service Rendered" (text), "Receipt Date" (date), "Amount Charged" (currency), "Name of Client" (text), "Payment Method" (single select), "Subscription" (link to Subscriptions Personal)
     const recordData: any = {
       'Service Rendered': 'Personal Tax Return',
       'Receipt Date': receiptDate,
       'Amount Charged': amountCharged,
       'Name of Client': clientName,
+      'Payment Method': paymentMethod,
       'Subscription': [subscriptionId], // Link to Subscriptions Personal table
     };
 
