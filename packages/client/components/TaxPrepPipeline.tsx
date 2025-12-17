@@ -15,6 +15,7 @@ interface PipelineClient {
   addedAt: string;
   status?: string; // "Active" | "Hold for Customer" | "Escalate to Manager"
   priority?: number; // Auto-calculated based on addedAt
+  notes?: string; // Notes field for tracking client information
 }
 
 interface TaxPreparer {
@@ -101,6 +102,9 @@ export default function TaxPrepPipeline() {
             // Get Status (single select field)
             const status = record.fields["Status"] || "Active";
 
+            // Get Notes (long text field)
+            const notes = record.fields["Notes"] || "";
+
             // Calculate priority based on how long ago they were added (in days)
             const addedDate = new Date(record.createdTime);
             const today = new Date();
@@ -122,6 +126,7 @@ export default function TaxPrepPipeline() {
               addedAt: record.createdTime,
               status,
               priority: daysInPipeline,
+              notes,
             };
           });
           setPipelineClients(pipeline);
@@ -331,6 +336,55 @@ export default function TaxPrepPipeline() {
     }
   };
 
+  const updateNotes = async (clientId: string, newNotes: string) => {
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+      console.log('Updating notes:', { clientId, newNotes, apiUrl });
+
+      const response = await fetch(`${apiUrl}/api/subscriptions-personal/${clientId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          fields: {
+            "Notes": newNotes,
+          },
+        }),
+      });
+
+      console.log('Response status:', response.status, response.statusText);
+
+      let data;
+      try {
+        data = await response.json();
+        console.log('Response data:', data);
+      } catch (parseError) {
+        console.error('Failed to parse response:', parseError);
+        throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+      }
+
+      if (!response.ok) {
+        console.error("Server error response:", data);
+        const errorMsg = data.error || data.message || `Server error: ${response.status}`;
+        throw new Error(errorMsg);
+      }
+
+      // Update local state
+      setPipelineClients((prevClients) =>
+        prevClients.map((client) =>
+          client.id === clientId
+            ? { ...client, notes: newNotes }
+            : client
+        )
+      );
+    } catch (error) {
+      console.error("Error updating notes:", error);
+      const errorMessage = error instanceof Error ? error.message : "Failed to update notes. Please try again.";
+      alert(errorMessage);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-base-200">
       {/* Header */}
@@ -476,6 +530,7 @@ export default function TaxPrepPipeline() {
                       <th>Name</th>
                       <th>Phone</th>
                       <th>Tax Preparer</th>
+                      <th>Notes</th>
                       <th>Added</th>
                       <th>Actions</th>
                     </tr>
@@ -537,6 +592,26 @@ export default function TaxPrepPipeline() {
                               </option>
                             ))}
                           </select>
+                        </td>
+                        <td>
+                          <textarea
+                            className="textarea textarea-bordered textarea-xs w-full min-w-[200px] text-xs leading-tight rounded-sm"
+                            placeholder="Add notes..."
+                            value={client.notes || ""}
+                            onChange={(e) => {
+                              // Update local state immediately for responsiveness
+                              setPipelineClients((prevClients) =>
+                                prevClients.map((c) =>
+                                  c.id === client.id ? { ...c, notes: e.target.value } : c
+                                )
+                              );
+                            }}
+                            onBlur={(e) => {
+                              // Save to server when user finishes editing
+                              updateNotes(client.id, e.target.value);
+                            }}
+                            rows={1}
+                          />
                         </td>
                         <td>
                           <div className="text-xs">
