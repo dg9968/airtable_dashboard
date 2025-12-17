@@ -323,11 +323,26 @@ export default function TaxPrepPipeline() {
 
   const getPriorityBadge = (priority: number) => {
     if (priority >= 14) {
-      return <span className="badge badge-error badge-sm">🔥 High ({priority}d)</span>;
+      return (
+        <div className="flex items-center gap-2">
+          <span className="w-3 h-3 rounded-full bg-error"></span>
+          <span className="text-xs whitespace-nowrap">High ({priority}d)</span>
+        </div>
+      );
     } else if (priority >= 7) {
-      return <span className="badge badge-warning badge-sm">⚡ Medium ({priority}d)</span>;
+      return (
+        <div className="flex items-center gap-2">
+          <span className="w-3 h-3 rounded-full bg-warning"></span>
+          <span className="text-xs whitespace-nowrap">Medium ({priority}d)</span>
+        </div>
+      );
     } else {
-      return <span className="badge badge-success badge-sm">✓ Normal ({priority}d)</span>;
+      return (
+        <div className="flex items-center gap-2">
+          <span className="w-3 h-3 rounded-full bg-success"></span>
+          <span className="text-xs whitespace-nowrap">Normal ({priority}d)</span>
+        </div>
+      );
     }
   };
 
