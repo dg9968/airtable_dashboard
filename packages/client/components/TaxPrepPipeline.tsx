@@ -350,13 +350,33 @@ export default function TaxPrepPipeline() {
   const getStatusBadge = (status?: string) => {
     switch (status) {
       case "Hold for Customer":
-        return <span className="badge badge-warning badge-sm">⏸️ On Hold</span>;
+        return (
+          <div className="flex items-center gap-2">
+            <span className="w-3 h-3 rounded-full bg-warning"></span>
+            <span className="text-xs whitespace-nowrap">On Hold</span>
+          </div>
+        );
       case "Escalate to Manager":
-        return <span className="badge badge-error badge-sm">⬆️ Escalated</span>;
+        return (
+          <div className="flex items-center gap-2">
+            <span className="w-3 h-3 rounded-full bg-error"></span>
+            <span className="text-xs whitespace-nowrap">Escalated</span>
+          </div>
+        );
       case "File Return":
-        return <span className="badge badge-success badge-sm">✅ Filed</span>;
+        return (
+          <div className="flex items-center gap-2">
+            <span className="w-3 h-3 rounded-full bg-success"></span>
+            <span className="text-xs whitespace-nowrap">Filed</span>
+          </div>
+        );
       default:
-        return <span className="badge badge-info badge-sm">▶️ Active</span>;
+        return (
+          <div className="flex items-center gap-2">
+            <span className="w-3 h-3 rounded-full bg-info"></span>
+            <span className="text-xs whitespace-nowrap">Active</span>
+          </div>
+        );
     }
   };
 
