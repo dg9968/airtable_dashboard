@@ -53,7 +53,9 @@ export default function CorporateDocumentManagementPage() {
     { value: 'notices-letters', label: 'Notices and Letters', icon: '📄' },
     { value: 'sales-tax', label: 'Sales Tax', icon: '🛒' },
     { value: 'payroll-tax', label: 'Payroll Tax', icon: '👥' },
-    { value: 'business-credentials', label: 'Business Credentials', icon: '🏢' }
+    { value: 'business-credentials', label: 'Business Credentials', icon: '🏢' },
+    { value: 'bookkeeping', label: 'Bookkeeping', icon: '📚' },
+    { value: 'bills-invoices', label: 'Bills and Invoices', icon: '🧾' }
   ];
 
   const handleUploadComplete = (result: any) => {
@@ -127,7 +129,7 @@ export default function CorporateDocumentManagementPage() {
                 <span className="mr-2">📂</span>
                 Step 2: Select Document Category
               </h2>
-            <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-8 gap-4">
               {documentCategories.map((category) => (
                 <div
                   key={category.value}

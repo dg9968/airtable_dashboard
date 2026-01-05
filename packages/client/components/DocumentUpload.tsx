@@ -70,6 +70,7 @@ export default function DocumentUpload({ onUploadComplete, useGoogleDrive = fals
     { value: '2023', label: 'Tax Filing Year 2023' },
     { value: '2024', label: 'Tax Filing Year 2024' },
     { value: '2025', label: 'Tax Filing Year 2025' },
+    { value: '2026', label: 'Tax Filing Year 2026' },
   ];
 
   const documentCategoryOptions = [
@@ -78,7 +79,9 @@ export default function DocumentUpload({ onUploadComplete, useGoogleDrive = fals
     { value: 'notices-letters', label: 'Notices and Letters', icon: '📄' },
     { value: 'sales-tax', label: 'Sales Tax', icon: '🛒' },
     { value: 'payroll-tax', label: 'Payroll Tax', icon: '👥' },
-    { value: 'business-credentials', label: 'Business Credentials', icon: '🏢' }
+    { value: 'business-credentials', label: 'Business Credentials', icon: '🏢' },
+    { value: 'bookkeeping', label: 'Bookkeeping', icon: '📚' },
+    { value: 'bills-invoices', label: 'Bills and Invoices', icon: '🧾' }
   ];
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
