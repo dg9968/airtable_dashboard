@@ -657,6 +657,14 @@ export default function ClientIntake() {
               </p>
             </div>
             <div className="flex gap-2">
+              {!isNewClient && selectedClient?.id && (
+                <Link
+                  href={`/tax-family-dashboard?id=${selectedClient.id}`}
+                  className="btn btn-outline btn-primary btn-sm"
+                >
+                  👨‍👩‍👧‍👦 Tax Family
+                </Link>
+              )}
               <Link
                 href="/tax-prep-pipeline"
                 className="btn btn-outline btn-sm"

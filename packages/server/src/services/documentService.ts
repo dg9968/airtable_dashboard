@@ -176,6 +176,50 @@ export async function getSpouseClientCode(clientCode: string): Promise<string | 
 }
 
 /**
+ * Get dependent client codes from Personal table
+ */
+export async function getDependentClientCodes(clientCode: string): Promise<string[]> {
+  try {
+    const PERSONAL_TABLE = 'Personal';
+
+    // Find the person with this client code
+    const records = await base(PERSONAL_TABLE)
+      .select({
+        filterByFormula: `{Client Code} = '${clientCode}'`,
+        maxRecords: 1
+      })
+      .firstPage();
+
+    if (records.length === 0) {
+      return [];
+    }
+
+    const person = records[0];
+    const dependentLinks = person.fields['Dependent (Linked)'] as string[] | undefined;
+
+    if (!dependentLinks || dependentLinks.length === 0) {
+      return [];
+    }
+
+    // Get client codes for all dependents
+    const dependentCodes: string[] = [];
+    for (const dependentId of dependentLinks) {
+      const depRecord = await base(PERSONAL_TABLE).find(dependentId);
+      const depClientCode = depRecord.fields['Client Code'] as string;
+      if (depClientCode) {
+        dependentCodes.push(depClientCode);
+        console.log(`[documentService] Found dependent code ${depClientCode} for primary person ${clientCode}`);
+      }
+    }
+
+    return dependentCodes;
+  } catch (error) {
+    console.error('[documentService] Error finding dependents:', error);
+    return [];
+  }
+}
+
+/**
  * Get documents by client code and tax year
  */
 export async function getDocuments(
@@ -183,21 +227,39 @@ export async function getDocuments(
   taxYear: string,
   includeSpouse: boolean = false,
   documentCategory?: string,
-  bankName?: string
+  bankName?: string,
+  includeDependents: boolean = false
 ): Promise<DocumentMetadata[]> {
   let filterFormula = `AND({Client Code} = '${clientCode}', {Tax Year} = '${taxYear}')`;
 
   try {
-    console.log(`[documentService] getDocuments called with clientCode: "${clientCode}", taxYear: "${taxYear}", includeSpouse: ${includeSpouse}, category: "${documentCategory}", bankName: "${bankName}"`);
+    console.log(`[documentService] getDocuments called with clientCode: "${clientCode}", taxYear: "${taxYear}", includeSpouse: ${includeSpouse}, includeDependents: ${includeDependents}, category: "${documentCategory}", bankName: "${bankName}"`);
     console.log(`[documentService] Using Airtable base: ${process.env.AIRTABLE_BASE_ID?.substring(0, 8)}...`);
+
+    const clientCodesToInclude: string[] = [clientCode];
 
     // If includeSpouse, get spouse's client code and include their documents
     if (includeSpouse) {
       const spouseClientCode = await getSpouseClientCode(clientCode);
       if (spouseClientCode) {
         console.log(`[documentService] Found spouse client code: ${spouseClientCode}`);
-        filterFormula = `AND(OR({Client Code} = '${clientCode}', {Client Code} = '${spouseClientCode}'), {Tax Year} = '${taxYear}')`;
+        clientCodesToInclude.push(spouseClientCode);
       }
+    }
+
+    // If includeDependents, get all dependent client codes
+    if (includeDependents) {
+      const dependentCodes = await getDependentClientCodes(clientCode);
+      if (dependentCodes.length > 0) {
+        console.log(`[documentService] Found ${dependentCodes.length} dependent client codes`);
+        clientCodesToInclude.push(...dependentCodes);
+      }
+    }
+
+    // Build OR clause for all client codes
+    if (clientCodesToInclude.length > 1) {
+      const orClauses = clientCodesToInclude.map(code => `{Client Code} = '${code}'`).join(', ');
+      filterFormula = `AND(OR(${orClauses}), {Tax Year} = '${taxYear}')`;
     }
 
     // Add document category filter if provided

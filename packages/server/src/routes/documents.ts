@@ -28,6 +28,7 @@ const app = new Hono();
  * GET /api/documents
  * Retrieve documents by client code and tax year
  * Optional: includeSpouse=true to include spouse's documents
+ * Optional: includeDependents=true to include dependents' documents
  */
 app.get('/', async (c) => {
   try {
@@ -37,10 +38,11 @@ app.get('/', async (c) => {
     const clientCode = c.req.query('clientCode');
     const taxYear = c.req.query('taxYear');
     const includeSpouse = c.req.query('includeSpouse') === 'true';
+    const includeDependents = c.req.query('includeDependents') === 'true';
     const documentCategory = c.req.query('documentCategory');
     const bankName = c.req.query('bankName');
 
-    console.log(`Fetching documents for clientCode: ${clientCode}, taxYear: ${taxYear}, includeSpouse: ${includeSpouse}, category: ${documentCategory}, bankName: ${bankName}`);
+    console.log(`Fetching documents for clientCode: ${clientCode}, taxYear: ${taxYear}, includeSpouse: ${includeSpouse}, includeDependents: ${includeDependents}, category: ${documentCategory}, bankName: ${bankName}`);
 
     if (!clientCode) {
       return c.json({ error: 'Client code is required' }, 400);
@@ -50,7 +52,7 @@ app.get('/', async (c) => {
       return c.json({ error: 'Tax year is required' }, 400);
     }
 
-    const documents = await getDocuments(clientCode, taxYear, includeSpouse, documentCategory, bankName);
+    const documents = await getDocuments(clientCode, taxYear, includeSpouse, documentCategory, bankName, includeDependents);
 
     console.log(`Found ${documents.length} documents for clientCode: ${clientCode}, taxYear: ${taxYear}`);
 

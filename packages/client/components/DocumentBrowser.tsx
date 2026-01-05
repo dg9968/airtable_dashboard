@@ -44,6 +44,7 @@ export default function DocumentBrowser({ useGoogleDrive = false, documentCatego
   const [newFileName, setNewFileName] = useState('');
   const [isRenaming, setIsRenaming] = useState(false);
   const [includeSpouse, setIncludeSpouse] = useState(true);
+  const [includeDependents, setIncludeDependents] = useState(true);
   const [sortColumn, setSortColumn] = useState<'name' | 'size' | 'date'>('name');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
@@ -161,6 +162,11 @@ export default function DocumentBrowser({ useGoogleDrive = false, documentCatego
       // Add includeSpouse parameter for personal documents
       if (!isCorporate && includeSpouse) {
         queryParams += `&includeSpouse=true`;
+      }
+
+      // Add includeDependents parameter for personal documents
+      if (!isCorporate && includeDependents) {
+        queryParams += `&includeDependents=true`;
       }
 
       const response = await fetch(`${apiEndpoint}?${queryParams}`);
@@ -546,23 +552,41 @@ export default function DocumentBrowser({ useGoogleDrive = false, documentCatego
           </button>
         </div>
 
-        {/* Include Spouse Documents Checkbox - Only for Personal Documents */}
+        {/* Include Family Documents Checkboxes - Only for Personal Documents */}
         {!isCorporate && clientCode && (
-          <div className="form-control mb-4">
-            <label className="label cursor-pointer justify-start gap-3">
-              <input
-                type="checkbox"
-                className="checkbox checkbox-primary"
-                checked={includeSpouse}
-                onChange={(e) => setIncludeSpouse(e.target.checked)}
-              />
-              <span className="label-text">
-                Include spouse documents (if married)
-              </span>
-            </label>
-            <p className="text-xs text-gray-500 ml-8">
-              When enabled, this will also show documents from the linked spouse's client code
-            </p>
+          <div className="space-y-2 mb-4">
+            <div className="form-control">
+              <label className="label cursor-pointer justify-start gap-3">
+                <input
+                  type="checkbox"
+                  className="checkbox checkbox-primary"
+                  checked={includeSpouse}
+                  onChange={(e) => setIncludeSpouse(e.target.checked)}
+                />
+                <span className="label-text">
+                  Include spouse documents (if married)
+                </span>
+              </label>
+              <p className="text-xs text-gray-500 ml-8">
+                When enabled, this will also show documents from the linked spouse's client code
+              </p>
+            </div>
+            <div className="form-control">
+              <label className="label cursor-pointer justify-start gap-3">
+                <input
+                  type="checkbox"
+                  className="checkbox checkbox-primary"
+                  checked={includeDependents}
+                  onChange={(e) => setIncludeDependents(e.target.checked)}
+                />
+                <span className="label-text">
+                  Include dependents documents
+                </span>
+              </label>
+              <p className="text-xs text-gray-500 ml-8">
+                When enabled, this will also show documents from all linked dependents' client codes
+              </p>
+            </div>
           </div>
         )}
 
@@ -630,10 +654,10 @@ export default function DocumentBrowser({ useGoogleDrive = false, documentCatego
                           <div className="text-xs opacity-60 hidden sm:block md:hidden truncate">
                             {formatDate(doc.uploadDate)}
                           </div>
-                          {/* Show client code badge if it's different from the searched code and spouse is included */}
-                          {includeSpouse && !isCorporate && doc.clientCode !== clientCode && (
+                          {/* Show client code badge if it's different from the searched code */}
+                          {!isCorporate && doc.clientCode !== clientCode && (
                             <div className="badge badge-sm badge-ghost mt-1">
-                              Spouse: {doc.clientCode}
+                              Family Member: {doc.clientCode}
                             </div>
                           )}
                         </div>
