@@ -134,8 +134,10 @@ export default function TaxPrepPipeline() {
             };
           });
 
-          // Filter out clients with "File Return" status - they should not appear in active pipeline
-          const activePipeline = pipeline.filter((client: PipelineClient) => client.status !== "File Return");
+          // Filter out clients with "File Return" or "Filed" status - they should not appear in active pipeline
+          const activePipeline = pipeline.filter((client: PipelineClient) =>
+            client.status !== "File Return" && client.status !== "Filed"
+          );
           setPipelineClients(activePipeline);
         }
       } catch (error) {
