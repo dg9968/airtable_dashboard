@@ -124,32 +124,51 @@ export async function generateUniqueClientCode(): Promise<string> {
 }
 
 /**
- * Get spouse client code from Personal table
+ * Get spouse client code from Personal table (bidirectional)
+ * If the given client code is a primary person, returns their spouse's code
+ * If the given client code is a spouse, returns the primary person's code
  */
 export async function getSpouseClientCode(clientCode: string): Promise<string | null> {
   try {
     const PERSONAL_TABLE = 'Personal';
 
-    // Find the person with this client code
-    const records = await base(PERSONAL_TABLE)
+    // First, check if this is a primary person with a spouse
+    const primaryRecords = await base(PERSONAL_TABLE)
       .select({
         filterByFormula: `{Client Code} = '${clientCode}'`,
         maxRecords: 1
       })
       .firstPage();
 
-    if (records.length === 0) {
-      return null;
+    if (primaryRecords.length > 0) {
+      const person = primaryRecords[0];
+      const spouseClientCode = person.fields['Spouse Client Code'] as string;
+
+      if (spouseClientCode) {
+        console.log(`[documentService] Found spouse code ${spouseClientCode} for primary person ${clientCode}`);
+        return spouseClientCode;
+      }
     }
 
-    const person = records[0];
-    const spouseClientCode = person.fields['Spouse Client Code'] as string;
+    // Second, check if this client code is someone's spouse (reverse lookup)
+    const spouseRecords = await base(PERSONAL_TABLE)
+      .select({
+        filterByFormula: `{Spouse Client Code} = '${clientCode}'`,
+        maxRecords: 1
+      })
+      .firstPage();
 
-    if (!spouseClientCode) {
-      return null;
+    if (spouseRecords.length > 0) {
+      const primaryPerson = spouseRecords[0];
+      const primaryClientCode = primaryPerson.fields['Client Code'] as string;
+
+      if (primaryClientCode) {
+        console.log(`[documentService] Found primary person code ${primaryClientCode} for spouse ${clientCode}`);
+        return primaryClientCode;
+      }
     }
 
-    return spouseClientCode;
+    return null;
   } catch (error) {
     console.error('[documentService] Error finding spouse:', error);
     return null;
