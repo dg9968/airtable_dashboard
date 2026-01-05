@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useRequireRole } from '@/hooks/useAuth';
 import Link from 'next/link';
@@ -35,7 +35,7 @@ interface TaxFamily {
   parents: Person[];
 }
 
-export default function TaxFamilyDashboard() {
+function TaxFamilyDashboardContent() {
   const { session, status } = useRequireRole(['staff', 'admin']);
   const searchParams = useSearchParams();
   const [searchTerm, setSearchTerm] = useState('');
@@ -811,5 +811,20 @@ export default function TaxFamilyDashboard() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function TaxFamilyDashboard() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-base-200 flex items-center justify-center">
+        <div className="text-center">
+          <span className="loading loading-spinner loading-lg"></span>
+          <p className="mt-4 text-base-content/70">Loading...</p>
+        </div>
+      </div>
+    }>
+      <TaxFamilyDashboardContent />
+    </Suspense>
   );
 }
