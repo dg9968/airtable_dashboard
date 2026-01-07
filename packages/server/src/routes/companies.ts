@@ -93,6 +93,100 @@ app.get("/", async (c) => {
 });
 
 /**
+ * GET /api/companies/search
+ * Search companies by name, EIN, entity number, or client code
+ */
+app.get("/search", async (c) => {
+  try {
+    const query = c.req.query("q");
+
+    if (!query || query.trim().length < 2) {
+      return c.json({
+        success: true,
+        data: [],
+        message: "Query must be at least 2 characters"
+      });
+    }
+
+    const searchTerm = query.trim().toLowerCase();
+
+    // Fetch all records and filter in memory
+    // For better performance with large datasets, consider using Airtable filterByFormula
+    const records = await fetchRecords(COMPANIES_TABLE, { view: "Grid view" });
+
+    const filteredCompanies = records
+      .map((record) => {
+        // Extract registered agent
+        let registeredAgent = record.fields["Registered Agent"];
+        if (registeredAgent && typeof registeredAgent === "object") {
+          registeredAgent =
+            registeredAgent.value ||
+            registeredAgent.name ||
+            JSON.stringify(registeredAgent);
+        }
+
+        const name =
+          record.fields["Company"] ||
+          record.fields["Company Name"] ||
+          record.fields["Name"] ||
+          record.fields["Business Name"] ||
+          record.fields["Legal Name"] ||
+          "Unnamed Company";
+
+        const clientCode = record.fields["Client Code"] || "";
+        const ein = record.fields["EIN"] || record.fields["Tax ID"] || "";
+        const entityNumber =
+          record.fields["Entity Number"] ||
+          record.fields["Business Partner Number"] ||
+          record.fields["Sunbiz Document Number"] ||
+          "";
+
+        return {
+          id: record.id,
+          clientCode,
+          name,
+          email: record.fields["🤷‍♂️Email"] || record.fields["Email"],
+          phone: record.fields["Phone"],
+          registeredAgent:
+            typeof registeredAgent === "string" ? registeredAgent : undefined,
+          taxId: ein,
+          ein,
+          status: record.fields["Status"] || "Active",
+          entityNumber,
+          address: record.fields["ADDRESS"] || record.fields["Address"],
+          city: record.fields["CITY"] || record.fields["City"],
+          state: record.fields["STATE"] || record.fields["State"],
+          zipCode: record.fields["ZIP CODE"] || record.fields["Zip Code"] || record.fields["ZIP"],
+        };
+      })
+      .filter((company) => {
+        // Search in name, EIN, entity number, and client code
+        return (
+          company.name.toLowerCase().includes(searchTerm) ||
+          company.ein.toLowerCase().includes(searchTerm) ||
+          company.entityNumber.toLowerCase().includes(searchTerm) ||
+          company.clientCode.toLowerCase().includes(searchTerm)
+        );
+      });
+
+    return c.json({
+      success: true,
+      data: filteredCompanies,
+      count: filteredCompanies.length,
+    });
+  } catch (error) {
+    console.error("Error searching companies:", error);
+    return c.json(
+      {
+        success: false,
+        error: error instanceof Error ? error.message : "Search failed",
+      },
+      500
+    );
+  }
+});
+
+/**
  * GET /api/companies/:id
  * Get a specific company
  */

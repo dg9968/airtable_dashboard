@@ -28,19 +28,13 @@ export default function CorporateClientSearch({
   placeholder = "Search corporate clients...",
   className = ""
 }: CorporateClientSearchProps) {
-  const [clients, setClients] = useState<CorporateClient[]>([]);
-  const [filteredClients, setFilteredClients] = useState<CorporateClient[]>([]);
+  const [searchResults, setSearchResults] = useState<CorporateClient[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-
-  // Load clients on component mount
-  useEffect(() => {
-    loadCorporateClients();
-  }, []);
 
   // Handle clicks outside dropdown to close it
   useEffect(() => {
@@ -54,20 +48,6 @@ export default function CorporateClientSearch({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Filter clients based on search term
-  useEffect(() => {
-    if (!searchTerm.trim()) {
-      setFilteredClients(clients);
-    } else {
-      const filtered = clients.filter(client =>
-        client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        client.ein.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        client.entityNumber.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-      setFilteredClients(filtered);
-    }
-  }, [searchTerm, clients]);
-
   // Update search term when selected client changes
   useEffect(() => {
     if (selectedClient) {
@@ -78,19 +58,24 @@ export default function CorporateClientSearch({
     }
   }, [selectedClient]);
 
-  const loadCorporateClients = async () => {
+  const searchCorporateClients = async (query: string) => {
+    if (query.length < 2) {
+      setSearchResults([]);
+      setIsDropdownOpen(false);
+      return;
+    }
+
+    setIsSearching(true);
     try {
-      setLoading(true);
       setError(null);
 
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-      const response = await fetch(`${apiUrl}/api/companies`);
+      const response = await fetch(`${apiUrl}/api/companies/search?q=${encodeURIComponent(query)}`);
 
       const data = await response.json();
 
-      // Check if the response indicates success (even with 200 status but success: false)
       if (!data.success) {
-        throw new Error(data.error || 'Failed to load corporate clients');
+        throw new Error(data.error || 'Search failed');
       }
 
       if (data.data) {
@@ -107,25 +92,20 @@ export default function CorporateClientSearch({
             zipCode: (company.zipCode || '').toString().trim(),
             phone: (company.phone || '').toString().trim()
           }))
-          .filter((client: CorporateClient) => client.name) // Only include clients with names
-          .sort((a: CorporateClient, b: CorporateClient) => a.name.localeCompare(b.name));
+          .filter((client: CorporateClient) => client.name);
 
-        setClients(clientsList);
-        setFilteredClients(clientsList);
+        setSearchResults(clientsList);
+        setIsDropdownOpen(true);
       } else {
-        // Handle empty data
-        setClients([]);
-        setFilteredClients([]);
+        setSearchResults([]);
       }
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to load corporate clients';
+      const errorMessage = err instanceof Error ? err.message : 'Search failed';
       setError(errorMessage);
-      console.error('Error loading clients:', err);
-      // Set empty arrays so UI doesn't break
-      setClients([]);
-      setFilteredClients([]);
+      console.error('Error searching clients:', err);
+      setSearchResults([]);
     } finally {
-      setLoading(false);
+      setIsSearching(false);
     }
   };
 
@@ -137,16 +117,20 @@ export default function CorporateClientSearch({
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setSearchTerm(value);
-    setIsDropdownOpen(true);
 
     // Clear selection if user starts typing
     if (selectedClient && value !== selectedClient.name) {
       onClientSelect(null);
     }
+
+    // Search as user types
+    searchCorporateClients(value);
   };
 
   const handleInputFocus = () => {
-    setIsDropdownOpen(true);
+    if (searchTerm.length >= 2) {
+      setIsDropdownOpen(true);
+    }
   };
 
   const clearSelection = () => {
@@ -180,10 +164,10 @@ export default function CorporateClientSearch({
             value={searchTerm}
             onChange={handleInputChange}
             onFocus={handleInputFocus}
-            disabled={loading}
+            disabled={isSearching}
           />
 
-          {loading && (
+          {isSearching && (
             <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
               <span className="loading loading-spinner loading-xs"></span>
             </div>
@@ -239,18 +223,18 @@ export default function CorporateClientSearch({
       {/* Dropdown */}
       {isDropdownOpen && !selectedClient && (
         <div className="absolute z-50 w-full mt-1 bg-base-100 border border-base-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-          {loading ? (
+          {isSearching ? (
             <div className="p-4 text-center">
               <span className="loading loading-spinner loading-sm"></span>
-              <div className="text-sm text-base-content/60 mt-2">Loading clients...</div>
+              <div className="text-sm text-base-content/60 mt-2">Searching...</div>
             </div>
-          ) : filteredClients.length === 0 ? (
+          ) : searchResults.length === 0 ? (
             <div className="p-4 text-center text-base-content/60">
-              {searchTerm ? 'No clients found matching your search' : 'No corporate clients available'}
+              {searchTerm ? 'No clients found matching your search' : 'Type to search corporate clients'}
             </div>
           ) : (
             <div className="py-1">
-              {filteredClients.map((client) => (
+              {searchResults.map((client) => (
                 <button
                   key={client.id}
                   className="w-full px-4 py-3 text-left hover:bg-base-200 border-b border-base-200 last:border-b-0 transition-colors"

@@ -399,29 +399,82 @@ export async function listClientBanks(clientCode: string): Promise<string[]> {
   }
 }
 
-// Get or create client folder within tax year folder
+// Get or create client folder within Personal folder, then tax year folder inside it
 export async function getOrCreateClientFolder(clientCode: string, taxYear: string): Promise<string> {
   try {
-    const taxYearFolderId = await getOrCreateTaxYearFolder(taxYear);
-    const folderName = `Client ${clientCode}`;
+    const rootFolderId = await getRootFolderId();
 
-    // Search for existing client folder
-    const searchResponse = await drive.files.list({
-      q: `name='${folderName}' and parents in '${taxYearFolderId}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+    // Create/get "Personal" folder
+    const personalFolderName = 'Personal';
+    let personalFolderId: string;
+
+    const personalSearchResponse = await drive.files.list({
+      q: `name='${personalFolderName}' and '${rootFolderId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
       fields: 'files(id, name)',
       supportsAllDrives: true,
       includeItemsFromAllDrives: true,
+      corpora: 'allDrives',
     });
 
-    if (searchResponse.data.files && searchResponse.data.files.length > 0) {
-      return searchResponse.data.files[0].id!;
+    if (personalSearchResponse.data.files && personalSearchResponse.data.files.length > 0) {
+      personalFolderId = personalSearchResponse.data.files[0].id!;
+    } else {
+      const createResponse = await drive.files.create({
+        requestBody: {
+          name: personalFolderName,
+          parents: [rootFolderId],
+          mimeType: 'application/vnd.google-apps.folder',
+        },
+        supportsAllDrives: true,
+      });
+      personalFolderId = createResponse.data.id!;
     }
 
-    // Create client folder if it doesn't exist
+    // Create/get client folder under Personal
+    const clientFolderName = `Client ${clientCode}`;
+    let clientFolderId: string;
+
+    const clientSearchResponse = await drive.files.list({
+      q: `name='${clientFolderName}' and '${personalFolderId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+      fields: 'files(id, name)',
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+      corpora: 'allDrives',
+    });
+
+    if (clientSearchResponse.data.files && clientSearchResponse.data.files.length > 0) {
+      clientFolderId = clientSearchResponse.data.files[0].id!;
+    } else {
+      const createResponse = await drive.files.create({
+        requestBody: {
+          name: clientFolderName,
+          parents: [personalFolderId],
+          mimeType: 'application/vnd.google-apps.folder',
+        },
+        supportsAllDrives: true,
+      });
+      clientFolderId = createResponse.data.id!;
+    }
+
+    // Create/get tax year folder under client folder
+    const taxYearFolderName = `Tax Year ${taxYear}`;
+    const taxYearSearchResponse = await drive.files.list({
+      q: `name='${taxYearFolderName}' and '${clientFolderId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+      fields: 'files(id, name)',
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+      corpora: 'allDrives',
+    });
+
+    if (taxYearSearchResponse.data.files && taxYearSearchResponse.data.files.length > 0) {
+      return taxYearSearchResponse.data.files[0].id!;
+    }
+
+    // Create tax year folder if it doesn't exist
     const createResponse = await drive.files.create({
       requestBody: {
-        name: folderName,
-        parents: [taxYearFolderId],
+        name: taxYearFolderName,
+        parents: [clientFolderId],
         mimeType: 'application/vnd.google-apps.folder',
       },
       supportsAllDrives: true,
