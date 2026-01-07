@@ -49,93 +49,7 @@ function TaxFamilyDashboardContent() {
   const [showAddChild, setShowAddChild] = useState(false);
   const [allPersons, setAllPersons] = useState<Person[]>([]);
 
-  // All hooks must be called before any conditional returns
-  useEffect(() => {
-    const loadAllPersons = async () => {
-      try {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-        const response = await fetch(`${apiUrl}/api/personal`);
-        const result = await response.json();
-
-        if (result.success) {
-          setAllPersons(result.data || []);
-        }
-      } catch (err) {
-        console.error('Error loading persons:', err);
-      }
-    };
-
-    loadAllPersons();
-  }, []);
-
-  // Load person from URL parameter if provided
-  useEffect(() => {
-    const loadPersonFromUrl = async () => {
-      const personId = searchParams.get('id');
-      if (!personId || selectedPerson) return;
-
-      try {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-        const response = await fetch(`${apiUrl}/api/personal/${personId}`);
-        const result = await response.json();
-
-        if (result.success && result.data) {
-          selectPerson(result.data);
-        }
-      } catch (err) {
-        console.error('Error loading person from URL:', err);
-      }
-    };
-
-    loadPersonFromUrl();
-  }, [searchParams]);
-
-  // Conditional returns after all hooks
-  if (status === 'loading') {
-    return (
-      <div className="min-h-screen bg-base-200 flex items-center justify-center">
-        <div className="text-center">
-          <span className="loading loading-spinner loading-lg"></span>
-          <p className="mt-4 text-base-content/70">Loading...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!session) {
-    return null;
-  }
-
-  const userRole = (session.user as any)?.role;
-  if (userRole !== 'staff' && userRole !== 'admin') {
-    return null;
-  }
-
-  const searchClients = async (query: string) => {
-    if (query.length < 2) {
-      setSearchResults([]);
-      return;
-    }
-
-    setIsSearching(true);
-    try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-      const response = await fetch(`${apiUrl}/api/personal/search?q=${encodeURIComponent(query)}`);
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Search failed');
-      }
-
-      setSearchResults(result.data || []);
-    } catch (err) {
-      console.error('Search error:', err);
-      setSearchResults([]);
-    } finally {
-      setIsSearching(false);
-    }
-  };
-
+  // Define functions before useEffect hooks that use them
   const loadTaxFamily = async (person: Person) => {
     setIsLoadingFamily(true);
     try {
@@ -205,6 +119,93 @@ function TaxFamilyDashboardContent() {
     setSearchTerm('');
     setSearchResults([]);
     loadTaxFamily(person);
+  };
+
+  // All hooks must be called before any conditional returns
+  useEffect(() => {
+    const loadAllPersons = async () => {
+      try {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+        const response = await fetch(`${apiUrl}/api/personal`);
+        const result = await response.json();
+
+        if (result.success) {
+          setAllPersons(result.data || []);
+        }
+      } catch (err) {
+        console.error('Error loading persons:', err);
+      }
+    };
+
+    loadAllPersons();
+  }, []);
+
+  // Load person from URL parameter if provided
+  useEffect(() => {
+    const loadPersonFromUrl = async () => {
+      const personId = searchParams.get('id');
+      if (!personId || selectedPerson) return;
+
+      try {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+        const response = await fetch(`${apiUrl}/api/personal/${personId}`);
+        const result = await response.json();
+
+        if (result.success && result.data) {
+          selectPerson(result.data);
+        }
+      } catch (err) {
+        console.error('Error loading person from URL:', err);
+      }
+    };
+
+    loadPersonFromUrl();
+  }, [searchParams, selectedPerson]);
+
+  // Conditional returns after all hooks
+  if (status === 'loading') {
+    return (
+      <div className="min-h-screen bg-base-200 flex items-center justify-center">
+        <div className="text-center">
+          <span className="loading loading-spinner loading-lg"></span>
+          <p className="mt-4 text-base-content/70">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!session) {
+    return null;
+  }
+
+  const userRole = (session.user as any)?.role;
+  if (userRole !== 'staff' && userRole !== 'admin') {
+    return null;
+  }
+
+  const searchClients = async (query: string) => {
+    if (query.length < 2) {
+      setSearchResults([]);
+      return;
+    }
+
+    setIsSearching(true);
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+      const response = await fetch(`${apiUrl}/api/personal/search?q=${encodeURIComponent(query)}`);
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Search failed');
+      }
+
+      setSearchResults(result.data || []);
+    } catch (err) {
+      console.error('Search error:', err);
+      setSearchResults([]);
+    } finally {
+      setIsSearching(false);
+    }
   };
 
   const addSpouseToFamily = async (spouseId: string) => {
