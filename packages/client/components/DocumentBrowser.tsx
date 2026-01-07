@@ -57,6 +57,7 @@ export default function DocumentBrowser({ useGoogleDrive = false, documentCatego
       setBankName('');
       setShowNewBankInput(false);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientCode, documentCategory, isCorporate]);
 
   const fetchExistingBanks = async () => {

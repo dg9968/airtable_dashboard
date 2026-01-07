@@ -85,11 +85,15 @@ export default function CorporateClientSearch({
 
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
       const response = await fetch(`${apiUrl}/api/companies`);
-      if (!response.ok) throw new Error('Failed to load corporate clients');
 
       const data = await response.json();
 
-      if (data.success && data.data) {
+      // Check if the response indicates success (even with 200 status but success: false)
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to load corporate clients');
+      }
+
+      if (data.data) {
         const clientsList: CorporateClient[] = data.data
           .map((company: any) => ({
             id: company.id,
@@ -108,10 +112,18 @@ export default function CorporateClientSearch({
 
         setClients(clientsList);
         setFilteredClients(clientsList);
+      } else {
+        // Handle empty data
+        setClients([]);
+        setFilteredClients([]);
       }
     } catch (err) {
-      setError('Failed to load corporate clients');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load corporate clients';
+      setError(errorMessage);
       console.error('Error loading clients:', err);
+      // Set empty arrays so UI doesn't break
+      setClients([]);
+      setFilteredClients([]);
     } finally {
       setLoading(false);
     }

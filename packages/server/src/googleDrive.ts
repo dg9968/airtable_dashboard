@@ -300,35 +300,63 @@ export async function listClientBanks(clientCode: string): Promise<string[]> {
       includeItemsFromAllDrives: true,
     });
 
+    console.log(`[listClientBanks] Found ${corporateSearchResponse.data.files?.length || 0} Corporate folder(s)`);
+    if (corporateSearchResponse.data.files && corporateSearchResponse.data.files.length > 1) {
+      console.log(`[listClientBanks] WARNING: Multiple Corporate folders found:`, corporateSearchResponse.data.files.map(f => ({ id: f.id, name: f.name })));
+    }
+
     if (!corporateSearchResponse.data.files || corporateSearchResponse.data.files.length === 0) {
       console.log(`[listClientBanks] Corporate folder not found`);
       return [];
     }
     const corporateFolderId = corporateSearchResponse.data.files[0].id!;
-    console.log(`[listClientBanks] Corporate folder ID: ${corporateFolderId}`);
+    console.log(`[listClientBanks] Using Corporate folder ID: ${corporateFolderId}`);
 
-    // Find client folder
+    // Find client folder - with proper pagination handling
     const clientFolderName = `Client ${clientCode}`;
-    const clientSearchResponse = await drive.files.list({
-      q: `name='${clientFolderName}' and parents in '${corporateFolderId}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
-      fields: 'files(id, name)',
-      supportsAllDrives: true,
-      includeItemsFromAllDrives: true,
-    });
 
-    if (!clientSearchResponse.data.files || clientSearchResponse.data.files.length === 0) {
-      console.log(`[listClientBanks] Client folder '${clientFolderName}' not found`);
+    // Fetch ALL folders with pagination
+    let allFolders: any[] = [];
+    let pageToken: string | null | undefined = undefined;
+
+    do {
+      const response = await drive.files.list({
+        q: `'${corporateFolderId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+        fields: 'nextPageToken, files(id, name)',
+        pageSize: 1000,
+        pageToken: pageToken || undefined,
+        supportsAllDrives: true,
+        includeItemsFromAllDrives: true,
+        corpora: 'allDrives',
+      });
+
+      if (response.data.files) {
+        allFolders = allFolders.concat(response.data.files);
+      }
+
+      pageToken = response.data.nextPageToken;
+      console.log(`[listClientBanks] Fetched ${response.data.files?.length || 0} folders, total so far: ${allFolders.length}, hasMore: ${!!pageToken}`);
+    } while (pageToken);
+
+    console.log(`[listClientBanks] Total folders in Corporate after pagination:`, allFolders.length);
+    console.log(`[listClientBanks] Looking for: '${clientFolderName}'`);
+
+    const matchingFolder = allFolders.find(f => f.name === clientFolderName);
+    if (!matchingFolder) {
+      console.log(`[listClientBanks] No matching folder found. All folders:`, allFolders.map(f => f.name).sort());
       return [];
     }
-    const clientFolderId = clientSearchResponse.data.files[0].id!;
-    console.log(`[listClientBanks] Client folder ID: ${clientFolderId}`);
+
+    console.log(`[listClientBanks] Found matching folder:`, matchingFolder.name, matchingFolder.id);
+    const clientFolderId = matchingFolder.id;
 
     // Find Financial Statements folder
     const statementsSearchResponse = await drive.files.list({
-      q: `name='Financial Statements' and parents in '${clientFolderId}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+      q: `name='Financial Statements' and '${clientFolderId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
       fields: 'files(id, name)',
       supportsAllDrives: true,
       includeItemsFromAllDrives: true,
+      corpora: 'allDrives',
     });
 
     if (!statementsSearchResponse.data.files || statementsSearchResponse.data.files.length === 0) {
@@ -338,22 +366,32 @@ export async function listClientBanks(clientCode: string): Promise<string[]> {
     const statementsFolderId = statementsSearchResponse.data.files[0].id!;
     console.log(`[listClientBanks] Financial Statements folder ID: ${statementsFolderId}`);
 
-    // List all bank folders
-    const banksSearchResponse = await drive.files.list({
-      q: `parents in '${statementsFolderId}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
-      fields: 'files(id, name)',
-      orderBy: 'name',
-      supportsAllDrives: true,
-      includeItemsFromAllDrives: true,
-    });
+    // List all bank folders with pagination
+    let allBanks: any[] = [];
+    let bankPageToken: string | null | undefined = undefined;
 
-    if (!banksSearchResponse.data.files) {
-      console.log(`[listClientBanks] No bank folders found`);
-      return [];
-    }
+    do {
+      const banksSearchResponse = await drive.files.list({
+        q: `'${statementsFolderId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+        fields: 'nextPageToken, files(id, name)',
+        pageSize: 1000,
+        pageToken: bankPageToken || undefined,
+        orderBy: 'name',
+        supportsAllDrives: true,
+        includeItemsFromAllDrives: true,
+        corpora: 'allDrives',
+      });
 
-    const banks = banksSearchResponse.data.files.map(file => file.name!);
-    console.log(`[listClientBanks] Found ${banks.length} banks:`, banks);
+      if (banksSearchResponse.data.files) {
+        allBanks = allBanks.concat(banksSearchResponse.data.files);
+      }
+
+      bankPageToken = banksSearchResponse.data.nextPageToken;
+      console.log(`[listClientBanks] Fetched ${banksSearchResponse.data.files?.length || 0} banks, total so far: ${allBanks.length}, hasMore: ${!!bankPageToken}`);
+    } while (bankPageToken);
+
+    const banks = allBanks.map(file => file.name!);
+    console.log(`[listClientBanks] Total banks found after pagination: ${banks.length}:`, banks);
     return banks;
   } catch (error) {
     console.error('[listClientBanks] Error listing client banks:', error);
