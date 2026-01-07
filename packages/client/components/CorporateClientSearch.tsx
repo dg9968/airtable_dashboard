@@ -35,6 +35,7 @@ export default function CorporateClientSearch({
   const [error, setError] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Handle clicks outside dropdown to close it
   useEffect(() => {
@@ -48,6 +49,15 @@ export default function CorporateClientSearch({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Cleanup debounce timer on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, []);
+
   // Update search term when selected client changes
   useEffect(() => {
     if (selectedClient) {
@@ -59,7 +69,7 @@ export default function CorporateClientSearch({
   }, [selectedClient]);
 
   const searchCorporateClients = async (query: string) => {
-    if (query.length < 2) {
+    if (query.length < 1) {
       setSearchResults([]);
       setIsDropdownOpen(false);
       return;
@@ -123,8 +133,27 @@ export default function CorporateClientSearch({
       onClientSelect(null);
     }
 
-    // Search as user types
-    searchCorporateClients(value);
+    // Clear existing debounce timer
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+
+    // Don't search if empty
+    if (value.length < 1) {
+      setSearchResults([]);
+      setIsDropdownOpen(false);
+      setIsSearching(false);
+      return;
+    }
+
+    // Show dropdown immediately when typing (but don't disable input)
+    setIsDropdownOpen(true);
+
+    // Debounce: wait 500ms after user stops typing before searching
+    debounceTimerRef.current = setTimeout(() => {
+      searchCorporateClients(value);
+    }, 500);
   };
 
   const handleInputFocus = () => {
@@ -164,7 +193,6 @@ export default function CorporateClientSearch({
             value={searchTerm}
             onChange={handleInputChange}
             onFocus={handleInputFocus}
-            disabled={isSearching}
           />
 
           {isSearching && (

@@ -29,6 +29,7 @@ export default function ClientSearch({ onClientSelect, initialClientCode }: Clie
   const [showSearchResults, setShowSearchResults] = useState(false);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const searchRef = useRef<HTMLDivElement>(null);
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Close search results when clicking outside
   useEffect(() => {
@@ -41,6 +42,15 @@ export default function ClientSearch({ onClientSelect, initialClientCode }: Clie
     document.addEventListener('mousedown', handleClickOutside);
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  // Cleanup debounce timer on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
     };
   }, []);
 
@@ -73,7 +83,27 @@ export default function ClientSearch({ onClientSelect, initialClientCode }: Clie
 
   const handleSearchChange = (value: string) => {
     setSearchTerm(value);
-    searchClients(value);
+
+    // Clear existing timer
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
+    // Don't search if less than 2 characters
+    if (value.length < 2) {
+      setSearchResults([]);
+      setShowSearchResults(false);
+      return;
+    }
+
+    // Set loading state immediately for better UX
+    setIsSearching(true);
+    setShowSearchResults(true);
+
+    // Debounce the search - wait 500ms after user stops typing
+    debounceTimerRef.current = setTimeout(() => {
+      searchClients(value);
+    }, 500);
   };
 
   const selectClient = (client: Client) => {

@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 
 interface CorporateClient {
   id: string;
+  clientCode?: string;
   name: string;
   ein: string;
   entityNumber: string;
@@ -27,19 +28,14 @@ export default function CorporateClientSearch({
   placeholder = "Search corporate clients...",
   className = ""
 }: CorporateClientSearchProps) {
-  const [clients, setClients] = useState<CorporateClient[]>([]);
-  const [filteredClients, setFilteredClients] = useState<CorporateClient[]>([]);
+  const [searchResults, setSearchResults] = useState<CorporateClient[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-
-  // Load clients on component mount
-  useEffect(() => {
-    loadCorporateClients();
-  }, []);
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Handle clicks outside dropdown to close it
   useEffect(() => {
@@ -53,19 +49,14 @@ export default function CorporateClientSearch({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Filter clients based on search term
+  // Cleanup debounce timer on unmount
   useEffect(() => {
-    if (!searchTerm.trim()) {
-      setFilteredClients(clients);
-    } else {
-      const filtered = clients.filter(client =>
-        client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        client.ein.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        client.entityNumber.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-      setFilteredClients(filtered);
-    }
-  }, [searchTerm, clients]);
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, []);
 
   // Update search term when selected client changes
   useEffect(() => {
@@ -77,40 +68,54 @@ export default function CorporateClientSearch({
     }
   }, [selectedClient]);
 
-  const loadCorporateClients = async () => {
+  const searchCorporateClients = async (query: string) => {
+    if (query.length < 1) {
+      setSearchResults([]);
+      setIsDropdownOpen(false);
+      return;
+    }
+
+    setIsSearching(true);
     try {
-      setLoading(true);
       setError(null);
 
-      const response = await fetch('/api/view?table=Corporations');
-      if (!response.ok) throw new Error('Failed to load corporate clients');
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+      const response = await fetch(`${apiUrl}/api/companies/search?q=${encodeURIComponent(query)}`);
 
       const data = await response.json();
 
-      if (data.success && data.data?.records) {
-        const clientsList: CorporateClient[] = data.data.records
-          .map((record: any) => ({
-            id: record.id,
-            name: (record.fields['Company'] || '').toString().trim(),
-            ein: (record.fields['EIN'] || '').toString().trim(),
-            entityNumber: (record.fields['Entity Number'] || record.fields['Business Partner Number'] || '').toString().trim(),
-            address: (record.fields['ADDRESS'] || '').toString().trim(),
-            city: (record.fields['CITY'] || '').toString().trim(),
-            state: (record.fields['STATE'] || '').toString().trim(),
-            zipCode: (record.fields['ZIP CODE'] || '').toString().trim(),
-            phone: (record.fields['Phone'] || '').toString().trim()
-          }))
-          .filter((client: CorporateClient) => client.name) // Only include clients with names
-          .sort((a: CorporateClient, b: CorporateClient) => a.name.localeCompare(b.name));
+      if (!data.success) {
+        throw new Error(data.error || 'Search failed');
+      }
 
-        setClients(clientsList);
-        setFilteredClients(clientsList);
+      if (data.data) {
+        const clientsList: CorporateClient[] = data.data
+          .map((company: any) => ({
+            id: company.id,
+            clientCode: (company.clientCode || '').toString().trim(),
+            name: (company.name || '').toString().trim(),
+            ein: (company.taxId || '').toString().trim(),
+            entityNumber: (company.entityNumber || '').toString().trim(),
+            address: (company.address || '').toString().trim(),
+            city: (company.city || '').toString().trim(),
+            state: (company.state || '').toString().trim(),
+            zipCode: (company.zipCode || '').toString().trim(),
+            phone: (company.phone || '').toString().trim()
+          }))
+          .filter((client: CorporateClient) => client.name);
+
+        setSearchResults(clientsList);
+        setIsDropdownOpen(true);
+      } else {
+        setSearchResults([]);
       }
     } catch (err) {
-      setError('Failed to load corporate clients');
-      console.error('Error loading clients:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Search failed';
+      setError(errorMessage);
+      console.error('Error searching clients:', err);
+      setSearchResults([]);
     } finally {
-      setLoading(false);
+      setIsSearching(false);
     }
   };
 
@@ -122,16 +127,39 @@ export default function CorporateClientSearch({
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setSearchTerm(value);
-    setIsDropdownOpen(true);
 
     // Clear selection if user starts typing
     if (selectedClient && value !== selectedClient.name) {
       onClientSelect(null);
     }
+
+    // Clear existing debounce timer
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+
+    // Don't search if empty
+    if (value.length < 1) {
+      setSearchResults([]);
+      setIsDropdownOpen(false);
+      setIsSearching(false);
+      return;
+    }
+
+    // Show dropdown immediately when typing (but don't disable input)
+    setIsDropdownOpen(true);
+
+    // Debounce: wait 500ms after user stops typing before searching
+    debounceTimerRef.current = setTimeout(() => {
+      searchCorporateClients(value);
+    }, 500);
   };
 
   const handleInputFocus = () => {
-    setIsDropdownOpen(true);
+    if (searchTerm.length >= 2) {
+      setIsDropdownOpen(true);
+    }
   };
 
   const clearSelection = () => {
@@ -165,10 +193,9 @@ export default function CorporateClientSearch({
             value={searchTerm}
             onChange={handleInputChange}
             onFocus={handleInputFocus}
-            disabled={loading}
           />
 
-          {loading && (
+          {isSearching && (
             <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
               <span className="loading loading-spinner loading-xs"></span>
             </div>
@@ -188,6 +215,11 @@ export default function CorporateClientSearch({
           <div className="mt-2 p-3 bg-success/10 border border-success/20 rounded-lg">
             <div className="text-sm">
               <div className="font-medium text-success">{selectedClient.name}</div>
+              {selectedClient.clientCode && (
+                <div className="text-base-content/70">
+                  <span className="font-medium">Client Code:</span> <span className="font-mono">{selectedClient.clientCode}</span>
+                </div>
+              )}
               {selectedClient.ein && (
                 <div className="text-base-content/70">
                   <span className="font-medium">EIN:</span> {selectedClient.ein}
@@ -219,18 +251,18 @@ export default function CorporateClientSearch({
       {/* Dropdown */}
       {isDropdownOpen && !selectedClient && (
         <div className="absolute z-50 w-full mt-1 bg-base-100 border border-base-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-          {loading ? (
+          {isSearching ? (
             <div className="p-4 text-center">
               <span className="loading loading-spinner loading-sm"></span>
-              <div className="text-sm text-base-content/60 mt-2">Loading clients...</div>
+              <div className="text-sm text-base-content/60 mt-2">Searching...</div>
             </div>
-          ) : filteredClients.length === 0 ? (
+          ) : searchResults.length === 0 ? (
             <div className="p-4 text-center text-base-content/60">
-              {searchTerm ? 'No clients found matching your search' : 'No corporate clients available'}
+              {searchTerm ? 'No clients found matching your search' : 'Type to search corporate clients'}
             </div>
           ) : (
             <div className="py-1">
-              {filteredClients.map((client) => (
+              {searchResults.map((client) => (
                 <button
                   key={client.id}
                   className="w-full px-4 py-3 text-left hover:bg-base-200 border-b border-base-200 last:border-b-0 transition-colors"
@@ -238,6 +270,9 @@ export default function CorporateClientSearch({
                 >
                   <div className="font-medium text-base-content">{client.name}</div>
                   <div className="text-sm text-base-content/70 space-y-1">
+                    {client.clientCode && (
+                      <div><span className="font-medium">Client Code:</span> <span className="font-mono">{client.clientCode}</span></div>
+                    )}
                     {client.ein && (
                       <div><span className="font-medium">EIN:</span> {client.ein}</div>
                     )}

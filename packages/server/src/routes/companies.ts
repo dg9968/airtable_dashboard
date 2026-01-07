@@ -100,74 +100,77 @@ app.get("/search", async (c) => {
   try {
     const query = c.req.query("q");
 
-    if (!query || query.trim().length < 2) {
+    if (!query || query.trim().length < 1) {
       return c.json({
         success: true,
         data: [],
-        message: "Query must be at least 2 characters"
+        message: "Query must be at least 1 character"
       });
     }
 
-    const searchTerm = query.trim().toLowerCase();
+    const searchTerm = query.trim();
 
-    // Fetch all records and filter in memory
-    // For better performance with large datasets, consider using Airtable filterByFormula
-    const records = await fetchRecords(COMPANIES_TABLE, { view: "Grid view" });
+    // Use Airtable filterByFormula for server-side filtering (much faster!)
+    // Using only fields that exist, with error handling for optional fields
+    const filterFormula = `OR(
+      FIND(LOWER("${searchTerm}"), LOWER({Company})),
+      FIND(LOWER("${searchTerm}"), LOWER(CONCATENATE({EIN}))),
+      FIND(LOWER("${searchTerm}"), LOWER(CONCATENATE({Entity Number}))),
+      FIND(LOWER("${searchTerm}"), LOWER(CONCATENATE({Client Code})))
+    )`;
 
-    const filteredCompanies = records
-      .map((record) => {
-        // Extract registered agent
-        let registeredAgent = record.fields["Registered Agent"];
-        if (registeredAgent && typeof registeredAgent === "object") {
-          registeredAgent =
-            registeredAgent.value ||
-            registeredAgent.name ||
-            JSON.stringify(registeredAgent);
-        }
+    const records = await fetchRecords(COMPANIES_TABLE, {
+      view: "Grid view",
+      filterByFormula: filterFormula,
+      maxRecords: 50, // Limit results for performance
+    });
 
-        const name =
-          record.fields["Company"] ||
-          record.fields["Company Name"] ||
-          record.fields["Name"] ||
-          record.fields["Business Name"] ||
-          record.fields["Legal Name"] ||
-          "Unnamed Company";
+    console.log(`[Companies Search] Found ${records.length} results for query: "${searchTerm}"`);
 
-        const clientCode = record.fields["Client Code"] || "";
-        const ein = record.fields["EIN"] || record.fields["Tax ID"] || "";
-        const entityNumber =
-          record.fields["Entity Number"] ||
-          record.fields["Business Partner Number"] ||
-          record.fields["Sunbiz Document Number"] ||
-          "";
+    const filteredCompanies = records.map((record) => {
+      // Extract registered agent
+      let registeredAgent = record.fields["Registered Agent"];
+      if (registeredAgent && typeof registeredAgent === "object") {
+        registeredAgent =
+          registeredAgent.value ||
+          registeredAgent.name ||
+          JSON.stringify(registeredAgent);
+      }
 
-        return {
-          id: record.id,
-          clientCode,
-          name,
-          email: record.fields["🤷‍♂️Email"] || record.fields["Email"],
-          phone: record.fields["Phone"],
-          registeredAgent:
-            typeof registeredAgent === "string" ? registeredAgent : undefined,
-          taxId: ein,
-          ein,
-          status: record.fields["Status"] || "Active",
-          entityNumber,
-          address: record.fields["ADDRESS"] || record.fields["Address"],
-          city: record.fields["CITY"] || record.fields["City"],
-          state: record.fields["STATE"] || record.fields["State"],
-          zipCode: record.fields["ZIP CODE"] || record.fields["Zip Code"] || record.fields["ZIP"],
-        };
-      })
-      .filter((company) => {
-        // Search in name, EIN, entity number, and client code
-        return (
-          company.name.toLowerCase().includes(searchTerm) ||
-          company.ein.toLowerCase().includes(searchTerm) ||
-          company.entityNumber.toLowerCase().includes(searchTerm) ||
-          company.clientCode.toLowerCase().includes(searchTerm)
-        );
-      });
+      const name =
+        record.fields["Company"] ||
+        record.fields["Company Name"] ||
+        record.fields["Name"] ||
+        record.fields["Business Name"] ||
+        record.fields["Legal Name"] ||
+        "Unnamed Company";
+
+      const clientCode = record.fields["Client Code"] || "";
+      const ein = record.fields["EIN"] || record.fields["Tax ID"] || "";
+      const entityNumber =
+        record.fields["Entity Number"] ||
+        record.fields["Business Partner Number"] ||
+        record.fields["Sunbiz Document Number"] ||
+        "";
+
+      return {
+        id: record.id,
+        clientCode,
+        name,
+        email: record.fields["🤷‍♂️Email"] || record.fields["Email"],
+        phone: record.fields["Phone"],
+        registeredAgent:
+          typeof registeredAgent === "string" ? registeredAgent : undefined,
+        taxId: ein,
+        ein,
+        status: record.fields["Status"] || "Active",
+        entityNumber,
+        address: record.fields["ADDRESS"] || record.fields["Address"],
+        city: record.fields["CITY"] || record.fields["City"],
+        state: record.fields["STATE"] || record.fields["State"],
+        zipCode: record.fields["ZIP CODE"] || record.fields["Zip Code"] || record.fields["ZIP"],
+      };
+    });
 
     return c.json({
       success: true,
