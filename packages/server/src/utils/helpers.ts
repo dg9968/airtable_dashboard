@@ -47,7 +47,11 @@ export function isAllowedFileType(mimeType: string): boolean {
     'application/docx',
     'text/csv',
     'application/csv',
-    'application/vnd.ms-excel'
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/x-qbo',
+    'application/qbo',
+    'application/octet-stream' // Fallback for .qbo and other binary files
   ];
 
   return allowedTypes.includes(mimeType);
@@ -57,7 +61,7 @@ export function isAllowedFileType(mimeType: string): boolean {
  * Validate file extension
  */
 export function isAllowedFileExtension(filename: string): boolean {
-  const allowedExtensions = ['.pdf', '.doc', '.docx', '.txt', '.jpg', '.jpeg', '.png', '.gif', '.csv'];
+  const allowedExtensions = ['.pdf', '.doc', '.docx', '.txt', '.jpg', '.jpeg', '.png', '.gif', '.csv', '.xls', '.xlsx', '.qbo'];
   const ext = filename.toLowerCase().substring(filename.lastIndexOf('.'));
   return allowedExtensions.includes(ext);
 }

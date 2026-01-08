@@ -110,7 +110,7 @@ app.post('/', async (c) => {
     if (!isAllowedFileType(file.type) && !isAllowedFileExtension(file.name)) {
       return c.json({
         error: 'File type not allowed',
-        details: `File type "${file.type}" or extension not supported. Allowed: PDF, DOC, DOCX, TXT, JPG, PNG, GIF`
+        details: `File type "${file.type}" or extension not supported. Allowed: PDF, DOC, DOCX, TXT, JPG, PNG, GIF, CSV, XLS, XLSX, QBO`
       }, 400);
     }
 
