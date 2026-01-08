@@ -170,7 +170,7 @@ function DocumentManagementContent() {
                   <li>• <strong>Step 3:</strong> Select the relevant tax filing year (2022-2025)</li>
                   <li>• <strong>Step 4:</strong> Upload documents or search existing documents</li>
                   <li>• <strong>Step 5:</strong> View documents in browser or download them</li>
-                  <li>• Supported file types: PDF, Word docs, images, text files, CSV, Excel (max 20MB)</li>
+                  <li>• Supported file types: PDF, Word docs, images, text files, CSV, Excel, QuickBooks (max 20MB)</li>
                 </ul>
               </div>
             </div>
