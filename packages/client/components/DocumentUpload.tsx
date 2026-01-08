@@ -388,13 +388,13 @@ export default function DocumentUpload({ onUploadComplete, useGoogleDrive = fals
             type="file"
             multiple
             className="file-input file-input-bordered w-full"
-            accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png,.gif,.csv"
+            accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png,.gif,.csv,.xls,.xlsx,.qbo"
             onChange={handleFileUpload}
             disabled={isUploading || !clientCode.trim() || !/^\d{4}$/.test(clientCode.trim()) || (!taxYear && !(isCorporate && (documentCategory === 'business-credentials' || documentCategory === 'notices-letters'))) || (isCorporate && !documentCategory) || (isCorporate && documentCategory === 'statements' && !bankName.trim())}
           />
           <label className="label">
             <span className="label-text-alt">
-              Allowed: PDF, Word, Text, Images, CSV (max 20MB each). You can select multiple files.
+              Allowed: PDF, Word, Text, Images, CSV, Excel, QuickBooks (max 20MB each). You can select multiple files.
             </span>
           </label>
         </div>

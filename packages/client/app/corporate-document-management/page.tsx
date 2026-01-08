@@ -301,7 +301,7 @@ export default function CorporateDocumentManagementPage() {
                   <li>• <strong>Step 4:</strong> Browse and download documents organized by client and category</li>
                   <li>• Client search includes EIN and entity number for accurate identification</li>
                   <li>• Documents are automatically organized by client and category for easier retrieval</li>
-                  <li>• Supported file types: PDF, Word docs, Excel sheets, images (max 10MB)</li>
+                  <li>• Supported file types: PDF, Word docs, Excel sheets, images, CSV, QuickBooks (max 20MB)</li>
                   <li>• Google Drive integration provides secure backup and sharing capabilities</li>
                 </ul>
               </div>
