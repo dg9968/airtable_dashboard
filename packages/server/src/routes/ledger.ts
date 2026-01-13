@@ -12,15 +12,17 @@ const app = new Hono();
 
 /**
  * POST /api/ledger
- * Create a new ledger entry when a file return is completed
+ * Create a new ledger entry when a file return is completed or corporate service is rendered
  *
  * Expected body:
  * {
- *   subscriptionId: string,  // Airtable record ID from Subscriptions Personal table
- *   clientName: string,      // Full name of the client
- *   amountCharged: number,   // Amount charged for the service
- *   receiptDate: string,     // ISO date string for when the service was rendered
- *   paymentMethod: string    // Payment method used (Credit Card, Cash, Zelle, TPG Bank Product, Other)
+ *   subscriptionId: string,         // Airtable record ID from Subscriptions Personal or Subscriptions Corporate table
+ *   subscriptionType: "personal" | "corporate",  // Type of subscription
+ *   clientName: string,             // Full name of the client or company name
+ *   serviceType: string,            // Service type (e.g., "Personal Tax Return", "Reconciling Banks for Tax Prep", "Payroll", etc.)
+ *   amountCharged: number,          // Amount charged for the service
+ *   receiptDate: string,            // ISO date string for when the service was rendered
+ *   paymentMethod: string           // Payment method used (Credit Card, Cash, Zelle, Check, ACH, Other)
  * }
  */
 app.post('/', async (c) => {
@@ -36,8 +38,9 @@ app.post('/', async (c) => {
       );
     }
 
-    const { subscriptionId, clientName, amountCharged, receiptDate, paymentMethod } = await c.req.json();
+    const { subscriptionId, subscriptionType, clientName, serviceType, amountCharged, receiptDate, paymentMethod } = await c.req.json();
 
+    // Validate required fields
     if (!subscriptionId || !clientName || !amountCharged || !receiptDate || !paymentMethod) {
       return c.json(
         {
@@ -48,33 +51,38 @@ app.post('/', async (c) => {
       );
     }
 
-    console.log('Creating Ledger entry:', { subscriptionId, clientName, amountCharged, receiptDate, paymentMethod });
+    // Default to personal if subscriptionType not provided (backwards compatibility)
+    const type = subscriptionType || 'personal';
+    const service = serviceType || 'Personal Tax Return';
+
+    console.log('Creating Ledger entry:', { subscriptionId, subscriptionType: type, clientName, serviceType: service, amountCharged, receiptDate, paymentMethod });
 
     const baseId = process.env.AIRTABLE_BASE_ID || '';
 
-    // First, get the subscription record to extract necessary information
-    const subscriptions = await fetchAllRecords(baseId, 'Subscriptions Personal');
+    // Get the subscription record to verify it exists
+    const tableName = type === 'corporate' ? 'Subscriptions Corporate' : 'Subscriptions Personal';
+    const subscriptions = await fetchAllRecords(baseId, tableName);
     const subscription = subscriptions.find((s: any) => s.id === subscriptionId);
 
     if (!subscription) {
       return c.json(
         {
           success: false,
-          error: 'Subscription not found',
+          error: `Subscription not found in ${tableName}`,
         },
         404
       );
     }
 
     // Create the ledger record
-    // Field names: "Service Rendered" (text), "Receipt Date" (date), "Amount Charged" (currency), "Name of Client" (text), "Payment Method" (single select), "Subscription" (link to Subscriptions Personal)
+    // Field names: "Service Rendered" (text), "Receipt Date" (date), "Amount Charged" (currency), "Name of Client" (text), "Payment Method" (single select), "Subscription" (link to Subscriptions Personal/Corporate)
     const recordData: any = {
-      'Service Rendered': 'Personal Tax Return',
+      'Service Rendered': service,
       'Receipt Date': receiptDate,
       'Amount Charged': amountCharged,
       'Name of Client': clientName,
       'Payment Method': paymentMethod,
-      'Subscription': [subscriptionId], // Link to Subscriptions Personal table
+      'Subscription': [subscriptionId], // Link to subscription table (works for both Personal and Corporate)
     };
 
     const records = await createRecords(baseId, 'Ledger', [

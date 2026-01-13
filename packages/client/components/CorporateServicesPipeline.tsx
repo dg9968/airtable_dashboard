@@ -13,6 +13,9 @@ interface PipelineCompany {
   processor?: string[];
   serviceName?: string;
   addedAt: string;
+  status?: string;
+  priority?: number;
+  notes?: string;
 }
 
 interface Processor {
@@ -25,19 +28,27 @@ export default function CorporateServicesPipeline() {
   const [pipelineCompanies, setPipelineCompanies] = useState<PipelineCompany[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [sortBy, setSortBy] = useState<"name" | "date">("name");
+  const [sortBy, setSortBy] = useState<"name" | "date" | "priority">("name");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [updating, setUpdating] = useState<string | null>(null);
   const [processorFilter, setProcessorFilter] = useState<string>("");
   const [serviceFilter, setServiceFilter] = useState<string>("");
   const [processors, setProcessors] = useState<Processor[]>([]);
+  const [statusFilter, setStatusFilter] = useState<string>("");
+  const [showAmountModal, setShowAmountModal] = useState(false);
+  const [selectedCompanyForCompletion, setSelectedCompanyForCompletion] = useState<string | null>(null);
+  const [amountCharged, setAmountCharged] = useState<string>("");
+  const [paymentMethod, setPaymentMethod] = useState<string>("");
 
   // Available services - these match the view names in Airtable
   const services = [
     { name: "Reconciling Banks for Tax Prep", view: "Reconciling Banks for Tax Prep" },
+    { name: "Tax Returns", view: "Tax Returns" },
     { name: "Payroll", view: "Payroll" },
-    { name: "Bookkeeping", view: "Bookkeeping" },
-    { name: "Annual Report", view: "Annual Report" }
+    { name: "Annual Report", view: "Annual Report" },
+    { name: "Sales Tax Monthly", view: "Monthly Sales Tax" },
+    { name: "Sales Tax Quarterly", view: "Quarterly Sales Tax" },
+    { name: "Registered Agent", view: "Registered Agent" }
   ];
 
   // Fetch processors from Teams table
@@ -70,20 +81,33 @@ export default function CorporateServicesPipeline() {
         const response = await fetch(url);
         const data = await response.json();
 
-        if (data.success) {
-          const pipeline = data.data.map((record: any) => {
+        if (data.success && data.data && data.data.length > 0) {
+          const pipeline = data.data.map((record: any, index: number) => {
             // Company name has TWO spaces: "Company  (from Customer)"
             const companyName = record.fields["Company  (from Customer)"] || "";
             const companyNameStr = Array.isArray(companyName)
               ? companyName[0]
               : companyName || "Unknown Company";
 
+            // Debug: Log all available fields for the first record
+            if (index === 0) {
+              console.log("Available fields in Subscriptions Corporate:", Object.keys(record.fields));
+              console.log("Sample record fields:", record.fields);
+            }
+
             // Get EIN - could be a lookup field
-            const ein = record.fields["EIN (from Customer)"] || record.fields["EIN"] || "";
+            const ein = record.fields["EIN (from Customer)"] ||
+                       record.fields["EIN"] ||
+                       record.fields["EIN (from Corporations)"] ||
+                       record.fields["🔢 EIN (from Customer)"] ||
+                       "";
             const einStr = Array.isArray(ein) ? ein[0] : ein;
 
             // Get phone - could be a lookup field
-            const phone = record.fields["Phone (from Customer)"] || record.fields["Phone"] || "";
+            const phone = record.fields["Phone (from Customer)"] ||
+                         record.fields["Phone"] ||
+                         record.fields["📞 Phone (from Customer)"] ||
+                         "";
             const phoneStr = Array.isArray(phone) ? phone[0] : phone;
 
             // Get email - could be a lookup field
@@ -96,18 +120,35 @@ export default function CorporateServicesPipeline() {
             const emailStr = Array.isArray(email) ? email[0] : email;
 
             // Get the Corporate ID from the "Customer" link field
-            const corporateId = record.fields["Customer"];
+            const corporateId = record.fields["Customer"] || record.fields["Corporations"];
             const corporateIdStr = Array.isArray(corporateId)
               ? corporateId[0]
               : corporateId;
 
-            // Get Service Name from lookup field
+            // Get Service Name from lookup field - try multiple possible field names
             const serviceName = record.fields["Service Name (from Services)"] ||
-                               record.fields["Services (from Services)"] || "";
+                               record.fields["Services (from Services)"] ||
+                               record.fields["Service Name"] ||
+                               record.fields["Service Name (from Services Corporate)"] ||
+                               record.fields["Name (from Services)"] ||
+                               "";
             const serviceNameStr = Array.isArray(serviceName) ? serviceName[0] : serviceName;
 
             // Get Processor (multiple select field or link field)
             const processor = record.fields["Processor"] || [];
+
+            // Get Status field
+            const status = record.fields["Status"] || "Active";
+
+            // Get Notes field
+            const notes = record.fields["Notes"] || "";
+
+            // Calculate priority (days in pipeline)
+            const addedDate = new Date(record.createdTime);
+            const today = new Date();
+            const daysInPipeline = Math.floor(
+              (today.getTime() - addedDate.getTime()) / (1000 * 60 * 60 * 24)
+            );
 
             return {
               id: record.id,
@@ -121,12 +162,26 @@ export default function CorporateServicesPipeline() {
                 ? processor
                 : [processor],
               addedAt: record.createdTime,
+              status,
+              priority: daysInPipeline,
+              notes,
             };
           });
-          setPipelineCompanies(pipeline);
+
+          // Filter out completed services from active view
+          const activePipeline = pipeline.filter((company: PipelineCompany) =>
+            company.status !== "Complete Service" && company.status !== "Completed"
+          );
+
+          setPipelineCompanies(activePipeline);
+        } else {
+          console.log("No data returned from API or empty dataset");
+          console.log("API Response:", data);
+          setPipelineCompanies([]);
         }
       } catch (error) {
         console.error("Failed to fetch pipeline data:", error);
+        setPipelineCompanies([]);
       } finally {
         setLoading(false);
       }
@@ -135,7 +190,7 @@ export default function CorporateServicesPipeline() {
     fetchPipeline();
   }, [serviceFilter]);
 
-  // Filter companies by search term and processor (service filter is handled by view in fetch)
+  // Filter companies by search term, processor, and status (service filter is handled by view in fetch)
   const filteredCompanies = pipelineCompanies.filter((company) => {
     const searchLower = searchTerm.toLowerCase();
     const matchesSearch =
@@ -151,7 +206,9 @@ export default function CorporateServicesPipeline() {
       matchesProcessor = Boolean(company.processor && company.processor.includes(processorFilter));
     }
 
-    return matchesSearch && matchesProcessor;
+    const matchesStatus = !statusFilter || company.status === statusFilter;
+
+    return matchesSearch && matchesProcessor && matchesStatus;
   });
 
   // Sort companies
@@ -162,6 +219,10 @@ export default function CorporateServicesPipeline() {
       return sortOrder === "asc"
         ? nameA.localeCompare(nameB)
         : nameB.localeCompare(nameA);
+    } else if (sortBy === "priority") {
+      const priorityA = a.priority || 0;
+      const priorityB = b.priority || 0;
+      return sortOrder === "asc" ? priorityA - priorityB : priorityB - priorityA;
     } else {
       const dateA = new Date(a.addedAt).getTime();
       const dateB = new Date(b.addedAt).getTime();
@@ -179,12 +240,12 @@ export default function CorporateServicesPipeline() {
     });
   };
 
-  const toggleSort = (field: "name" | "date") => {
+  const toggleSort = (field: "name" | "date" | "priority") => {
     if (sortBy === field) {
       setSortOrder(sortOrder === "asc" ? "desc" : "asc");
     } else {
       setSortBy(field);
-      setSortOrder("asc");
+      setSortOrder(field === "priority" ? "desc" : "asc"); // Default to descending for priority (highest priority first)
     }
   };
 
@@ -192,15 +253,26 @@ export default function CorporateServicesPipeline() {
     try {
       setUpdating(companyId);
 
+      // Build fields object
+      const fields: any = {};
+
+      // Processor field: send string value (Single Select field, not linked record)
+      if (newProcessorId && newProcessorId !== "") {
+        fields["Processor"] = newProcessorId;
+      } else {
+        // Send empty string or null to clear the field
+        fields["Processor"] = null;
+      }
+
+      console.log("Updating processor:", { companyId, newProcessorId, fields });
+
       const response = await fetch(`/api/subscriptions-corporate/${companyId}`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          fields: {
-            "Processor": newProcessorId ? [newProcessorId] : [],
-          },
+          fields,
         }),
       });
 
@@ -208,6 +280,7 @@ export default function CorporateServicesPipeline() {
 
       if (!response.ok) {
         console.error("Server error response:", data);
+        console.error("Request was:", { companyId, fields });
         const errorMsg = data.error || "Failed to update processor";
         throw new Error(errorMsg);
       }
@@ -226,6 +299,217 @@ export default function CorporateServicesPipeline() {
       alert(errorMessage);
     } finally {
       setUpdating(null);
+    }
+  };
+
+  const updateStatus = async (companyId: string, newStatus: string) => {
+    try {
+      setUpdating(companyId);
+
+      const response = await fetch(`/api/subscriptions-corporate/${companyId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          fields: {
+            "Status": newStatus,
+          },
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        console.error("Server error response:", data);
+        const errorMsg = data.error || "Failed to update status";
+        throw new Error(errorMsg);
+      }
+
+      // Update local state
+      setPipelineCompanies((prevCompanies) =>
+        prevCompanies.map((company) =>
+          company.id === companyId
+            ? { ...company, status: newStatus }
+            : company
+        )
+      );
+    } catch (error) {
+      console.error("Error updating status:", error);
+      const errorMessage = error instanceof Error ? error.message : "Failed to update status. Please try again.";
+      alert(errorMessage);
+    } finally {
+      setUpdating(null);
+    }
+  };
+
+  const getPriorityBadge = (priority: number) => {
+    if (priority >= 30) {
+      return (
+        <div className="flex items-center gap-2">
+          <span className="w-3 h-3 rounded-full bg-error"></span>
+          <span className="text-xs whitespace-nowrap">High ({priority}d)</span>
+        </div>
+      );
+    } else if (priority >= 14) {
+      return (
+        <div className="flex items-center gap-2">
+          <span className="w-3 h-3 rounded-full bg-warning"></span>
+          <span className="text-xs whitespace-nowrap">Medium ({priority}d)</span>
+        </div>
+      );
+    } else {
+      return (
+        <div className="flex items-center gap-2">
+          <span className="w-3 h-3 rounded-full bg-success"></span>
+          <span className="text-xs whitespace-nowrap">Normal ({priority}d)</span>
+        </div>
+      );
+    }
+  };
+
+  const getStatusBadge = (status?: string) => {
+    switch (status) {
+      case "Hold for Customer":
+        return (
+          <div className="flex items-center gap-2">
+            <span className="w-3 h-3 rounded-full bg-warning"></span>
+            <span className="text-xs whitespace-nowrap">On Hold</span>
+          </div>
+        );
+      case "Escalate to Manager":
+        return (
+          <div className="flex items-center gap-2">
+            <span className="w-3 h-3 rounded-full bg-error"></span>
+            <span className="text-xs whitespace-nowrap">Escalated</span>
+          </div>
+        );
+      case "Complete Service":
+        return (
+          <div className="flex items-center gap-2">
+            <span className="w-3 h-3 rounded-full bg-success"></span>
+            <span className="text-xs whitespace-nowrap">Completed</span>
+          </div>
+        );
+      default:
+        return (
+          <div className="flex items-center gap-2">
+            <span className="w-3 h-3 rounded-full bg-info"></span>
+            <span className="text-xs whitespace-nowrap">Active</span>
+          </div>
+        );
+    }
+  };
+
+  const updateNotes = async (companyId: string, newNotes: string) => {
+    try {
+      const response = await fetch(`/api/subscriptions-corporate/${companyId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          fields: {
+            "Notes": newNotes,
+          },
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        console.error("Server error response:", data);
+        const errorMsg = data.error || "Failed to update notes";
+        throw new Error(errorMsg);
+      }
+
+      // Update local state
+      setPipelineCompanies((prevCompanies) =>
+        prevCompanies.map((company) =>
+          company.id === companyId
+            ? { ...company, notes: newNotes }
+            : company
+        )
+      );
+    } catch (error) {
+      console.error("Error updating notes:", error);
+      const errorMessage = error instanceof Error ? error.message : "Failed to update notes. Please try again.";
+      alert(errorMessage);
+    }
+  };
+
+  const handleCompleteService = async () => {
+    if (!selectedCompanyForCompletion || !amountCharged || !paymentMethod) {
+      alert("Please enter the amount charged and payment method");
+      return;
+    }
+
+    try {
+      setUpdating(selectedCompanyForCompletion);
+
+      // Find the company to get their name and service type
+      const company = pipelineCompanies.find((c) => c.id === selectedCompanyForCompletion);
+      if (!company) {
+        throw new Error("Company not found");
+      }
+
+      const companyName = company.companyName;
+      const serviceType = company.serviceName || "Corporate Service";
+
+      // Create ledger entry
+      const ledgerResponse = await fetch(`/api/ledger`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          subscriptionId: selectedCompanyForCompletion,
+          subscriptionType: "corporate",
+          clientName: companyName,
+          serviceType: serviceType,
+          amountCharged: parseFloat(amountCharged),
+          receiptDate: new Date().toISOString(),
+          paymentMethod: paymentMethod,
+        }),
+      });
+
+      const ledgerData = await ledgerResponse.json();
+
+      if (!ledgerResponse.ok) {
+        throw new Error(ledgerData.error || "Failed to create ledger entry");
+      }
+
+      // Update status to Completed
+      await updateStatus(selectedCompanyForCompletion, "Completed");
+
+      // Remove from local state (will be filtered out from pipeline view)
+      setPipelineCompanies((prevCompanies) =>
+        prevCompanies.filter((company) => company.id !== selectedCompanyForCompletion)
+      );
+
+      // Close modal and reset
+      setShowAmountModal(false);
+      setSelectedCompanyForCompletion(null);
+      setAmountCharged("");
+      setPaymentMethod("");
+
+      alert("✅ Service completed! Ledger entry created.");
+    } catch (error) {
+      console.error("Error completing service:", error);
+      alert(error instanceof Error ? error.message : "Failed to complete service");
+    } finally {
+      setUpdating(null);
+    }
+  };
+
+  const handleStatusChange = (companyId: string, newStatus: string) => {
+    if (newStatus === "Complete Service") {
+      // Show modal to get amount charged
+      setSelectedCompanyForCompletion(companyId);
+      setShowAmountModal(true);
+    } else {
+      // Update status directly
+      updateStatus(companyId, newStatus);
     }
   };
 
@@ -307,7 +591,7 @@ export default function CorporateServicesPipeline() {
               </div>
 
               {/* Processor Filter */}
-              <div className="form-control w-full md:w-64">
+              <div className="form-control w-full md:w-48">
                 <select
                   className="select select-bordered w-full"
                   value={processorFilter}
@@ -323,8 +607,31 @@ export default function CorporateServicesPipeline() {
                 </select>
               </div>
 
+              {/* Status Filter */}
+              <div className="form-control w-full md:w-48">
+                <select
+                  className="select select-bordered w-full"
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                >
+                  <option value="">All Statuses</option>
+                  <option value="Active">Active</option>
+                  <option value="Hold for Customer">Hold for Customer</option>
+                  <option value="Escalate to Manager">Escalate to Manager</option>
+                  <option value="Complete Service">Complete Service</option>
+                </select>
+              </div>
+
               {/* Sort Options */}
               <div className="flex gap-2">
+                <button
+                  onClick={() => toggleSort("priority")}
+                  className={`btn ${
+                    sortBy === "priority" ? "btn-primary" : "btn-outline"
+                  }`}
+                >
+                  Priority {sortBy === "priority" && (sortOrder === "asc" ? "↑" : "↓")}
+                </button>
                 <button
                   onClick={() => toggleSort("name")}
                   className={`btn ${
@@ -364,21 +671,21 @@ export default function CorporateServicesPipeline() {
                     <tr>
                       <th>#</th>
                       <th
-                        className="cursor-pointer hover:bg-base-200"
-                        onClick={() => toggleSort("date")}
+                        className="cursor-pointer hover:bg-base-200 w-15"
+                        onClick={() => toggleSort("priority")}
                       >
-                        Added to Pipeline {sortBy === "date" && (sortOrder === "asc" ? "↑" : "↓")}
+                        Priority {sortBy === "priority" && (sortOrder === "asc" ? "↑" : "↓")}
                       </th>
+                      <th>Status</th>
                       <th
-                        className="cursor-pointer hover:bg-base-200"
+                        className="cursor-pointer hover:bg-base-200 max-w-[100px]"
                         onClick={() => toggleSort("name")}
                       >
                         Company Name {sortBy === "name" && (sortOrder === "asc" ? "↑" : "↓")}
                       </th>
-                      <th>EIN</th>
-                      <th>Phone</th>
-                      <th>Email</th>
+                      <th className="max-w-[120px]">Service</th>
                       <th>Processor</th>
+                      <th>Notes</th>
                       <th>Actions</th>
                     </tr>
                   </thead>
@@ -386,19 +693,31 @@ export default function CorporateServicesPipeline() {
                     {sortedCompanies.map((company, index) => (
                       <tr key={company.id}>
                         <td>{index + 1}</td>
+                        <td>{getPriorityBadge(company.priority || 0)}</td>
                         <td>
-                          <div className="text-sm">
-                            {formatDate(company.addedAt)}
+                          <div className="flex flex-col gap-1">
+                            {getStatusBadge(company.status)}
+                            <div className="dropdown dropdown-bottom">
+                              <label tabIndex={0} className="btn btn-xs btn-ghost">
+                                Change
+                              </label>
+                              <ul tabIndex={0} className="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-56">
+                                <li><button onClick={() => handleStatusChange(company.id, "Active")}>▶️ Set Active</button></li>
+                                <li><button onClick={() => handleStatusChange(company.id, "Hold for Customer")}>⏸️ Hold for Customer</button></li>
+                                <li><button onClick={() => handleStatusChange(company.id, "Escalate to Manager")}>⬆️ Escalate to Manager</button></li>
+                                <li><button onClick={() => handleStatusChange(company.id, "Complete Service")} className="text-success font-semibold">✅ Complete Service</button></li>
+                              </ul>
+                            </div>
                           </div>
                         </td>
-                        <td>
-                          <div className="font-semibold">
+                        <td className="max-w-[100px]">
+                          <div className="font-semibold truncate">
                             {company.companyName}
                           </div>
                         </td>
-                        <td>{company.ein || "N/A"}</td>
-                        <td>{company.phone || "N/A"}</td>
-                        <td>{company.email || "N/A"}</td>
+                        <td className="max-w-[120px]">
+                          <span className="badge badge-sm truncate max-w-full">{company.serviceName || "N/A"}</span>
+                        </td>
                         <td>
                           <select
                             className="select select-bordered select-sm w-full max-w-xs"
@@ -417,15 +736,42 @@ export default function CorporateServicesPipeline() {
                           </select>
                         </td>
                         <td>
+                          <textarea
+                            className="textarea textarea-bordered textarea-xs w-full min-w-[200px]"
+                            placeholder="Add notes..."
+                            value={company.notes || ""}
+                            onChange={(e) => {
+                              // Update local state immediately for smooth UX
+                              const newNotes = e.target.value;
+                              setPipelineCompanies((prevCompanies) =>
+                                prevCompanies.map((c) =>
+                                  c.id === company.id ? { ...c, notes: newNotes } : c
+                                )
+                              );
+                            }}
+                            onBlur={(e) => updateNotes(company.id, e.target.value)}
+                            rows={1}
+                          />
+                        </td>
+                        <td>
                           <div className="flex gap-2">
                             {company.corporateId && (
-                              <Link
-                                href={`/corporate-client-intake?id=${company.corporateId}`}
-                                className="btn btn-sm btn-ghost"
-                                title="View company details"
-                              >
-                                🏢 View
-                              </Link>
+                              <>
+                                <Link
+                                  href={`/corporate-client-intake?id=${company.corporateId}`}
+                                  className="btn btn-sm btn-ghost"
+                                  title="View company details"
+                                >
+                                  🏢 View
+                                </Link>
+                                <Link
+                                  href={`/corporate-document-management?companyId=${company.corporateId}`}
+                                  className="btn btn-sm btn-info"
+                                  title="View documents"
+                                >
+                                  📄 Docs
+                                </Link>
+                              </>
                             )}
                           </div>
                         </td>
@@ -547,6 +893,68 @@ export default function CorporateServicesPipeline() {
           </div>
         </div>
       </main>
+
+      {/* Complete Service Modal */}
+      {showAmountModal && (
+        <div className="modal modal-open">
+          <div className="modal-box">
+            <h3 className="font-bold text-lg mb-4">Complete Service - Enter Amount Charged</h3>
+            <p className="text-sm text-base-content/70 mb-4">
+              This will create a ledger entry for the service with the company name, service type, today's date, amount charged, and payment method.
+            </p>
+            <div className="form-control mb-4">
+              <label className="label">
+                <span className="label-text">Amount Charged ($)</span>
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="0.00"
+                className="input input-bordered"
+                value={amountCharged}
+                onChange={(e) => setAmountCharged(e.target.value)}
+                autoFocus
+              />
+            </div>
+            <div className="form-control">
+              <label className="label">
+                <span className="label-text">Payment Method</span>
+              </label>
+              <select
+                className="select select-bordered"
+                value={paymentMethod}
+                onChange={(e) => setPaymentMethod(e.target.value)}
+              >
+                <option value="">Select payment method...</option>
+                <option value="Credit Card">Credit Card</option>
+                <option value="Cash">Cash</option>
+                <option value="Zelle">Zelle</option>
+                <option value="Check">Check</option>
+                <option value="ACH">ACH</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+            <div className="modal-action">
+              <button className="btn btn-ghost" onClick={() => {
+                setShowAmountModal(false);
+                setSelectedCompanyForCompletion(null);
+                setAmountCharged("");
+                setPaymentMethod("");
+              }}>
+                Cancel
+              </button>
+              <button
+                className="btn btn-success"
+                onClick={handleCompleteService}
+                disabled={!amountCharged || parseFloat(amountCharged) <= 0 || !paymentMethod}
+              >
+                ✅ Complete Service
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

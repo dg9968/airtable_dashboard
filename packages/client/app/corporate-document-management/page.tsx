@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useRequireRole } from '@/hooks/useAuth';
 import DocumentUpload from '../../components/DocumentUpload';
 import DocumentBrowser from '../../components/DocumentBrowser';
@@ -21,17 +22,52 @@ interface CorporateClient {
 
 export default function CorporateDocumentManagementPage() {
   const { session, status } = useRequireRole(['staff', 'admin']);
+  const searchParams = useSearchParams();
   const [refreshKey, setRefreshKey] = useState(0);
   const [useGoogleDrive, setUseGoogleDrive] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState('');
   const [selectedClient, setSelectedClient] = useState<CorporateClient | null>(null);
+  const [isLoadingClient, setIsLoadingClient] = useState(false);
 
-  if (status === 'loading') {
+  // Auto-load client if companyId is provided in URL
+  useEffect(() => {
+    const companyId = searchParams.get('companyId');
+    if (companyId && !selectedClient && session) {
+      setIsLoadingClient(true);
+      fetch(`/api/view/Corporations/${companyId}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.success && data.data) {
+            const company = data.data;
+            setSelectedClient({
+              id: company.id,
+              clientCode: company.fields?.['Client Code'],
+              name: company.fields?.['Company Name'] || '',
+              ein: company.fields?.['EIN'] || '',
+              entityNumber: company.fields?.['Entity Number'] || '',
+              address: company.fields?.['Address'],
+              city: company.fields?.['City'],
+              state: company.fields?.['State'],
+              zipCode: company.fields?.['Zip Code'],
+              phone: company.fields?.['Phone']
+            });
+          }
+        })
+        .catch((error) => {
+          console.error('Error loading client:', error);
+        })
+        .finally(() => {
+          setIsLoadingClient(false);
+        });
+    }
+  }, [searchParams, selectedClient, session]);
+
+  if (status === 'loading' || isLoadingClient) {
     return (
       <div className="min-h-screen bg-base-200 flex items-center justify-center">
         <div className="text-center">
           <span className="loading loading-spinner loading-lg"></span>
-          <p className="mt-4 text-base-content/70">Loading...</p>
+          <p className="mt-4 text-base-content/70">{isLoadingClient ? 'Loading client...' : 'Loading...'}</p>
         </div>
       </div>
     );
