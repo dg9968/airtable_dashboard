@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useRequireRole } from '@/hooks/useAuth';
 import DocumentUpload from '../../components/DocumentUpload';
@@ -20,7 +20,7 @@ interface CorporateClient {
   phone?: string;
 }
 
-export default function CorporateDocumentManagementPage() {
+function CorporateDocumentManagementContent() {
   const { session, status } = useRequireRole(['staff', 'admin']);
   const searchParams = useSearchParams();
   const [refreshKey, setRefreshKey] = useState(0);
@@ -346,5 +346,20 @@ export default function CorporateDocumentManagementPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function CorporateDocumentManagementPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-base-200 flex items-center justify-center">
+        <div className="text-center">
+          <span className="loading loading-spinner loading-lg"></span>
+          <p className="mt-4 text-base-content/70">Loading...</p>
+        </div>
+      </div>
+    }>
+      <CorporateDocumentManagementContent />
+    </Suspense>
   );
 }
