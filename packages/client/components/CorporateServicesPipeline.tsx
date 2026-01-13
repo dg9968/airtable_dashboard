@@ -39,6 +39,8 @@ export default function CorporateServicesPipeline() {
   const [selectedCompanyForCompletion, setSelectedCompanyForCompletion] = useState<string | null>(null);
   const [amountCharged, setAmountCharged] = useState<string>("");
   const [paymentMethod, setPaymentMethod] = useState<string>("");
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [selectedCompanyForStatus, setSelectedCompanyForStatus] = useState<string | null>(null);
 
   // Available services - these match the view names in Airtable
   const services = [
@@ -654,8 +656,8 @@ export default function CorporateServicesPipeline() {
         </div>
 
         {/* Pipeline Table */}
-        <div className="card bg-base-100 shadow-xl">
-          <div className="card-body">
+        <div className="card bg-base-100 shadow-xl overflow-visible">
+          <div className="card-body overflow-visible">
             <h2 className="card-title mb-4">
               Pipeline Companies ({sortedCompanies.length})
             </h2>
@@ -665,7 +667,7 @@ export default function CorporateServicesPipeline() {
                 <span className="loading loading-spinner loading-lg"></span>
               </div>
             ) : sortedCompanies.length > 0 ? (
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto overflow-y-visible">
                 <table className="table table-zebra">
                   <thead>
                     <tr>
@@ -697,17 +699,15 @@ export default function CorporateServicesPipeline() {
                         <td>
                           <div className="flex flex-col gap-1">
                             {getStatusBadge(company.status)}
-                            <div className="dropdown dropdown-bottom">
-                              <label tabIndex={0} className="btn btn-xs btn-ghost">
-                                Change
-                              </label>
-                              <ul tabIndex={0} className="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-56">
-                                <li><button onClick={() => handleStatusChange(company.id, "Active")}>▶️ Set Active</button></li>
-                                <li><button onClick={() => handleStatusChange(company.id, "Hold for Customer")}>⏸️ Hold for Customer</button></li>
-                                <li><button onClick={() => handleStatusChange(company.id, "Escalate to Manager")}>⬆️ Escalate to Manager</button></li>
-                                <li><button onClick={() => handleStatusChange(company.id, "Complete Service")} className="text-success font-semibold">✅ Complete Service</button></li>
-                              </ul>
-                            </div>
+                            <button
+                              className="btn btn-xs btn-ghost"
+                              onClick={() => {
+                                setSelectedCompanyForStatus(company.id);
+                                setShowStatusModal(true);
+                              }}
+                            >
+                              Change
+                            </button>
                           </div>
                         </td>
                         <td className="max-w-[100px]">
@@ -893,6 +893,71 @@ export default function CorporateServicesPipeline() {
           </div>
         </div>
       </main>
+
+      {/* Status Change Modal */}
+      {showStatusModal && selectedCompanyForStatus && (
+        <div className="modal modal-open">
+          <div className="modal-box">
+            <h3 className="font-bold text-lg mb-4">Change Status</h3>
+            <p className="text-sm text-base-content/70 mb-4">
+              Select the new status for this company:
+            </p>
+            <div className="flex flex-col gap-2">
+              <button
+                className="btn btn-outline btn-block justify-start"
+                onClick={() => {
+                  handleStatusChange(selectedCompanyForStatus, "Active");
+                  setShowStatusModal(false);
+                  setSelectedCompanyForStatus(null);
+                }}
+              >
+                ▶️ Set Active
+              </button>
+              <button
+                className="btn btn-outline btn-block justify-start"
+                onClick={() => {
+                  handleStatusChange(selectedCompanyForStatus, "Hold for Customer");
+                  setShowStatusModal(false);
+                  setSelectedCompanyForStatus(null);
+                }}
+              >
+                ⏸️ Hold for Customer
+              </button>
+              <button
+                className="btn btn-outline btn-block justify-start"
+                onClick={() => {
+                  handleStatusChange(selectedCompanyForStatus, "Escalate to Manager");
+                  setShowStatusModal(false);
+                  setSelectedCompanyForStatus(null);
+                }}
+              >
+                ⬆️ Escalate to Manager
+              </button>
+              <button
+                className="btn btn-success btn-block justify-start font-semibold"
+                onClick={() => {
+                  handleStatusChange(selectedCompanyForStatus, "Complete Service");
+                  setShowStatusModal(false);
+                  setSelectedCompanyForStatus(null);
+                }}
+              >
+                ✅ Complete Service
+              </button>
+            </div>
+            <div className="modal-action">
+              <button
+                className="btn btn-ghost"
+                onClick={() => {
+                  setShowStatusModal(false);
+                  setSelectedCompanyForStatus(null);
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Complete Service Modal */}
       {showAmountModal && (

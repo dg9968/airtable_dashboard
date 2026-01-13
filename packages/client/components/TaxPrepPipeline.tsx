@@ -38,6 +38,8 @@ export default function TaxPrepPipeline() {
   const [selectedClientForReturn, setSelectedClientForReturn] = useState<string | null>(null);
   const [amountCharged, setAmountCharged] = useState<string>("");
   const [paymentMethod, setPaymentMethod] = useState<string>("");
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [selectedClientForStatus, setSelectedClientForStatus] = useState<string | null>(null);
 
   // Fetch tax preparers from Teams table
   useEffect(() => {
@@ -663,36 +665,15 @@ export default function TaxPrepPipeline() {
                         <td>
                           <div className="flex flex-col gap-1">
                             {getStatusBadge(client.status)}
-                            <div className="dropdown dropdown-bottom">
-                              <label tabIndex={0} className="btn btn-xs btn-ghost">
-                                Change
-                              </label>
-                              <ul
-                                tabIndex={0}
-                                className="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-56"
-                              >
-                                <li>
-                                  <button onClick={() => handleStatusChange(client.id, "Active")}>
-                                    ▶️ Set Active
-                                  </button>
-                                </li>
-                                <li>
-                                  <button onClick={() => handleStatusChange(client.id, "Hold for Customer")}>
-                                    ⏸️ Hold for Customer
-                                  </button>
-                                </li>
-                                <li>
-                                  <button onClick={() => handleStatusChange(client.id, "Escalate to Manager")}>
-                                    ⬆️ Escalate to Manager
-                                  </button>
-                                </li>
-                                <li>
-                                  <button onClick={() => handleStatusChange(client.id, "File Return")} className="text-success font-semibold">
-                                    ✅ File Return
-                                  </button>
-                                </li>
-                              </ul>
-                            </div>
+                            <button
+                              className="btn btn-xs btn-ghost"
+                              onClick={() => {
+                                setSelectedClientForStatus(client.id);
+                                setShowStatusModal(true);
+                              }}
+                            >
+                              Change
+                            </button>
                           </div>
                         </td>
                         <td>
@@ -862,6 +843,71 @@ export default function TaxPrepPipeline() {
           </div>
         </div>
       </main>
+
+      {/* Status Change Modal */}
+      {showStatusModal && selectedClientForStatus && (
+        <div className="modal modal-open">
+          <div className="modal-box">
+            <h3 className="font-bold text-lg mb-4">Change Status</h3>
+            <p className="text-sm text-base-content/70 mb-4">
+              Select the new status for this client:
+            </p>
+            <div className="flex flex-col gap-2">
+              <button
+                className="btn btn-outline btn-block justify-start"
+                onClick={() => {
+                  handleStatusChange(selectedClientForStatus, "Active");
+                  setShowStatusModal(false);
+                  setSelectedClientForStatus(null);
+                }}
+              >
+                ▶️ Set Active
+              </button>
+              <button
+                className="btn btn-outline btn-block justify-start"
+                onClick={() => {
+                  handleStatusChange(selectedClientForStatus, "Hold for Customer");
+                  setShowStatusModal(false);
+                  setSelectedClientForStatus(null);
+                }}
+              >
+                ⏸️ Hold for Customer
+              </button>
+              <button
+                className="btn btn-outline btn-block justify-start"
+                onClick={() => {
+                  handleStatusChange(selectedClientForStatus, "Escalate to Manager");
+                  setShowStatusModal(false);
+                  setSelectedClientForStatus(null);
+                }}
+              >
+                ⬆️ Escalate to Manager
+              </button>
+              <button
+                className="btn btn-success btn-block justify-start font-semibold"
+                onClick={() => {
+                  handleStatusChange(selectedClientForStatus, "File Return");
+                  setShowStatusModal(false);
+                  setSelectedClientForStatus(null);
+                }}
+              >
+                ✅ File Return
+              </button>
+            </div>
+            <div className="modal-action">
+              <button
+                className="btn btn-ghost"
+                onClick={() => {
+                  setShowStatusModal(false);
+                  setSelectedClientForStatus(null);
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Amount Charged Modal */}
       {showAmountModal && (
