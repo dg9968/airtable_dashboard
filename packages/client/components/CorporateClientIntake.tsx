@@ -86,7 +86,8 @@ export default function CorporateClientIntake() {
     "Reconciling Banks for Tax Prep",
     "Payroll",
     "Bookkeeping",
-    "Annual Report"
+    "Annual Report",
+    "1099 Filing"
   ];
 
   // Form data
