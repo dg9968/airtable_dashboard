@@ -259,12 +259,12 @@ export default function CorporateServicesPipeline() {
       // Build fields object
       const fields: any = {};
 
-      // Processor field: send string value (Single Select field, not linked record)
+      // Processor field: send array value (linked record field)
       if (newProcessorId && newProcessorId !== "") {
-        fields["Processor"] = newProcessorId;
+        fields["Processor"] = [newProcessorId];
       } else {
-        // Send empty string or null to clear the field
-        fields["Processor"] = null;
+        // Send empty array to clear the field
+        fields["Processor"] = [];
       }
 
       console.log("Updating processor:", { companyId, newProcessorId, fields });
