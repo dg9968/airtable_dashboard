@@ -26,18 +26,18 @@ app.get('/', async (c) => {
     }
 
     const tableName = 'Subscriptions Corporate';
-    const viewName = 'Services by Client';
 
-    console.log(`Fetching view "${viewName}" from table "${tableName}"`);
+    // Fetch all records from Subscriptions Corporate table
+    // This shows all corporate subscriptions regardless of view filters
+    console.log(`Fetching all records from table "${tableName}"`);
 
-    const records = await fetchRecords(tableName, { view: viewName });
-
+    const records = await fetchRecords(tableName, {});
     console.log(`Total records fetched: ${records.length}`);
 
     const stats = {
       totalRecords: records.length,
       tableName,
-      viewName,
+      viewName: 'All Records',
       lastUpdated: new Date().toISOString()
     };
 

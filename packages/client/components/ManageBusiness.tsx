@@ -10,7 +10,8 @@ interface BusinessStats {
   personalClients: number;
   monthlyRevenue: number;
   activeProcessors: number;
-  pendingDocuments: number;
+  tasksCompletedThisMonth: number;
+  monthlyTaskRevenue: number;
 }
 
 interface QuickAction {
@@ -31,7 +32,8 @@ export default function ManageBusiness() {
     personalClients: 0,
     monthlyRevenue: 0,
     activeProcessors: 0,
-    pendingDocuments: 0
+    tasksCompletedThisMonth: 0,
+    monthlyTaskRevenue: 0
   });
   const [loading, setLoading] = useState(true);
 
@@ -42,19 +44,28 @@ export default function ManageBusiness() {
   const loadBusinessData = async () => {
     try {
       setLoading(true);
-      // TODO: Replace with actual API calls to Airtable
-      await new Promise(resolve => setTimeout(resolve, 1000));
 
-      setStats({
-        totalClients: 156,
-        corporateClients: 48,
-        personalClients: 108,
-        monthlyRevenue: 89250,
-        activeProcessors: 8,
-        pendingDocuments: 23
-      });
+      // Fetch real business stats from Airtable
+      const response = await fetch('/api/business-stats');
+      const result = await response.json();
+
+      if (result.success && result.data) {
+        setStats({
+          totalClients: result.data.totalClients || 0,
+          corporateClients: result.data.corporateClients || 0,
+          personalClients: result.data.personalClients || 0,
+          monthlyRevenue: result.data.monthlyRevenue || 0,
+          activeProcessors: result.data.activeProcessors || 0,
+          tasksCompletedThisMonth: result.data.tasksCompletedThisMonth || 0,
+          monthlyTaskRevenue: result.data.monthlyTaskRevenue || 0
+        });
+      } else {
+        console.error('Failed to load business stats:', result.error);
+        // Keep stats at 0 if fetch fails
+      }
     } catch (error) {
       console.error('Error loading business data:', error);
+      // Keep stats at 0 if fetch fails
     } finally {
       setLoading(false);
     }
@@ -95,7 +106,7 @@ export default function ManageBusiness() {
       icon: '📄',
       color: 'text-indigo-600',
       bgColor: 'bg-indigo-50 hover:bg-indigo-100 border-indigo-200',
-      stats: `${stats.pendingDocuments} pending`
+      stats: `${stats.tasksCompletedThisMonth} completed`
     },
     {
       title: 'Personal Client Intake',
@@ -216,14 +227,14 @@ export default function ManageBusiness() {
 
           <div className="stats shadow bg-base-100">
             <div className="stat">
-              <div className="stat-figure text-warning">
+              <div className="stat-figure text-success">
                 <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>
-              <div className="stat-title">Pending Documents</div>
-              <div className="stat-value text-warning">{stats.pendingDocuments}</div>
-              <div className="stat-desc">Awaiting processing</div>
+              <div className="stat-title">Tasks Completed</div>
+              <div className="stat-value text-success">{stats.tasksCompletedThisMonth}</div>
+              <div className="stat-desc">{formatCurrency(stats.monthlyTaskRevenue)} this month</div>
             </div>
           </div>
         </div>

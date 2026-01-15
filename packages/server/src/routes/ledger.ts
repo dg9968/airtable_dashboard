@@ -75,15 +75,22 @@ app.post('/', async (c) => {
     }
 
     // Create the ledger record
-    // Field names: "Service Rendered" (text), "Receipt Date" (date), "Amount Charged" (currency), "Name of Client" (text), "Payment Method" (single select), "Subscription" (link to Subscriptions Personal/Corporate)
+    // Field names: "Service Rendered" (text), "Receipt Date" (date), "Amount Charged" (currency), "Name of Client" (text), "Payment Method" (single select)
+    // For subscriptions: "Subscription" (link to Subscriptions Personal) OR "Related Corporate Subscriptions" (link to Subscriptions Corporate)
     const recordData: any = {
       'Service Rendered': service,
       'Receipt Date': receiptDate,
       'Amount Charged': amountCharged,
       'Name of Client': clientName,
       'Payment Method': paymentMethod,
-      'Subscription': [subscriptionId], // Link to subscription table (works for both Personal and Corporate)
     };
+
+    // Link to the appropriate subscription table
+    if (type === 'corporate') {
+      recordData['Related Corporate Subscriptions'] = [subscriptionId];
+    } else {
+      recordData['Subscription'] = [subscriptionId];
+    }
 
     const records = await createRecords(baseId, 'Ledger', [
       { fields: recordData },

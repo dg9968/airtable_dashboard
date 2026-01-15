@@ -96,7 +96,7 @@ export default function ProcessorBilling() {
     {
       key: 'service-by-client',
       label: 'Service by Client',
-      description: 'View all services grouped by client and assigned processor',
+      description: 'View all clients with their subscribed services',
       endpoint: '/api/service-by-client',
       icon: '📋'
     }
@@ -141,7 +141,10 @@ export default function ProcessorBilling() {
       const result: ApiResponse = await response.json();
       
       if (result.success && result.data) {
-        const processedData = processRecordsIntoProcessors(result.data.records);
+        // Use different processing based on view type
+        const processedData = activeView === 'service-by-client'
+          ? processRecordsIntoClients(result.data.records)
+          : processRecordsIntoProcessors(result.data.records);
         setProcessors(processedData.processors);
         setStats({
           ...processedData.stats,
@@ -149,7 +152,7 @@ export default function ProcessorBilling() {
           viewName: result.data.stats.viewName,
           lastUpdated: result.data.stats.lastUpdated
         });
-        
+
         console.log(`✅ Loaded ${processedData.processors.length} processors with ${processedData.stats.totalClients} clients from ${currentView.label}`);
       } else {
         throw new Error(result.error || 'Failed to fetch data');
@@ -165,6 +168,101 @@ export default function ProcessorBilling() {
   };
 
   // ===== DATA PROCESSING =====
+
+  // Process records grouped by CLIENT (for service-by-client view)
+  const processRecordsIntoClients = (records: AirtableRecord[]) => {
+    const clientMap = new Map<string, ProcessorData>();
+    let totalServices = 0;
+    let grandTotalBilling = 0;
+
+    records.forEach(record => {
+      const fields = record.fields;
+
+      // Client Name: try different field names
+      // Note: "Company  (from Customer)" has double space in Airtable field name
+      let clientNameRaw = fields['Company  (from Customer)'] || fields['Corporate Name'] || fields['Name'] || fields['Client Name'] || 'Unknown Client';
+      const clientName = Array.isArray(clientNameRaw) ? clientNameRaw[0] : clientNameRaw;
+
+      // Processor is a linked record, use the lookup field "Name (from Processor)" instead
+      // Handle array case (Airtable lookup fields can return arrays)
+      let processorNameRaw = fields['Name (from Processor)'] || fields['Processor'] || 'Unassigned';
+      let processorName = Array.isArray(processorNameRaw) ? processorNameRaw[0] : processorNameRaw;
+      // Ensure it's a string for Map key consistency
+      processorName = typeof processorName === 'string' ? processorName : String(processorName || 'Unassigned');
+
+      // Billing Amount
+      const billingAmount = parseFloat(fields['Billing Amount'] || '0');
+
+      // Service Name: try different field names (Services Corporate Name from Subscriptions Corporate)
+      let servicesNameRaw = fields['Services Corporate Name'] || fields['Service Name'] || fields['Services Name'] || fields['Service'] || 'No Service';
+      const servicesName = Array.isArray(servicesNameRaw) ? servicesNameRaw[0] : servicesNameRaw;
+
+      const status = fields['Status'] || 'Active';
+
+      // Use client name as the map key
+      if (!clientMap.has(clientName)) {
+        clientMap.set(clientName, {
+          processor: clientName, // Using "processor" field to store client name for compatibility
+          clients: [], // This will store services instead of clients
+          totalBilling: 0,
+          clientCount: 0,
+          averageBilling: 0
+        });
+      }
+
+      const client = clientMap.get(clientName)!;
+
+      // Check if service already exists for this client
+      let existingService = client.clients.find(s => s.name === servicesName);
+
+      if (!existingService) {
+        existingService = {
+          name: servicesName,
+          billing: 0,
+          services: [processorName], // Store processor name in services array
+          status: status
+        };
+        client.clients.push(existingService);
+        totalServices++;
+      } else {
+        // Add processor if not already listed (in case multiple processors handle same service)
+        if (!existingService.services.includes(processorName)) {
+          existingService.services.push(processorName);
+        }
+      }
+
+      existingService.billing += billingAmount;
+      client.totalBilling += billingAmount;
+      grandTotalBilling += billingAmount;
+    });
+
+    // Calculate averages and sort alphabetically
+    const clientsArray = Array.from(clientMap.values()).map(client => {
+      client.clientCount = client.clients.length; // Number of services
+      client.averageBilling = client.clientCount > 0 ? client.totalBilling / client.clientCount : 0;
+      // Sort services alphabetically by name
+      client.clients.sort((a, b) => a.name.localeCompare(b.name));
+      return client;
+    });
+
+    // Sort clients alphabetically by name (processor field contains client name)
+    clientsArray.sort((a, b) => a.processor.localeCompare(b.processor));
+
+    return {
+      processors: clientsArray, // Using "processors" for compatibility with existing UI
+      stats: {
+        totalClients: clientsArray.length,
+        totalProcessors: clientsArray.length,
+        grandTotalBilling,
+        averageBillingPerClient: clientsArray.length > 0 ? grandTotalBilling / clientsArray.length : 0,
+        lastUpdated: new Date().toISOString(),
+        tableName: '',
+        viewName: ''
+      }
+    };
+  };
+
+  // Process records grouped by PROCESSOR (for bookkeeping view)
   const processRecordsIntoProcessors = (records: AirtableRecord[]) => {
     const processorMap = new Map<string, ProcessorData>();
     let totalClients = 0;
@@ -172,10 +270,26 @@ export default function ProcessorBilling() {
 
     records.forEach(record => {
       const fields = record.fields;
-      const processorName = fields['Processor'] || 'Unassigned';
-      const clientName = fields['Name'] || fields['Client Name'] || 'Unknown Client';
+
+      // Processor is a linked record, use the lookup field "Name (from Processor)" instead
+      // Handle array case (Airtable lookup fields can return arrays)
+      let processorNameRaw = fields['Name (from Processor)'] || fields['Processor'] || 'Unassigned';
+      let processorName = Array.isArray(processorNameRaw) ? processorNameRaw[0] : processorNameRaw;
+      // Ensure it's a string for Map key consistency
+      processorName = typeof processorName === 'string' ? processorName : String(processorName || 'Unassigned');
+
+      // Client Name: try different field names
+      // Note: "Company  (from Customer)" has double space in Airtable field name
+      let clientNameRaw = fields['Company  (from Customer)'] || fields['Corporate Name'] || fields['Name'] || fields['Client Name'] || 'Unknown Client';
+      const clientName = Array.isArray(clientNameRaw) ? clientNameRaw[0] : clientNameRaw;
+
+      // Billing Amount
       const billingAmount = parseFloat(fields['Billing Amount'] || '0');
-      const servicesName = fields['Services Name'] || fields['Service'] || 'No Service';
+
+      // Service Name: try different field names (Services Corporate Name from Subscriptions Corporate)
+      let servicesNameRaw = fields['Services Corporate Name'] || fields['Service Name'] || fields['Services Name'] || fields['Service'] || 'No Service';
+      const servicesName = Array.isArray(servicesNameRaw) ? servicesNameRaw[0] : servicesNameRaw;
+
       const status = fields['Status'] || 'Active';
 
       if (!processorMap.has(processorName)) {
@@ -247,10 +361,10 @@ export default function ProcessorBilling() {
     }).format(amount);
   };
 
-  const getProcessorInitial = (processorName: string): string => {
-    return processorName && processorName.length > 0 
-      ? processorName.charAt(0).toUpperCase() 
-      : '?';
+  const getProcessorInitial = (processorName: any): string => {
+    if (!processorName) return '?';
+    const nameStr = typeof processorName === 'string' ? processorName : String(processorName);
+    return nameStr.length > 0 ? nameStr.charAt(0).toUpperCase() : '?';
   };
 
   const getProcessorColor = (index: number): string => {
@@ -449,7 +563,7 @@ export default function ProcessorBilling() {
             const processorColorClass = getProcessorColor(index);
 
             return (
-              <div key={processor.processor} className="border border-gray-700 rounded-lg overflow-hidden hover:border-gray-600 transition-colors">
+              <div key={`processor-${index}`} className="border border-gray-700 rounded-lg overflow-hidden hover:border-gray-600 transition-colors">
                 {/* Processor Header */}
                 <div 
                   className="p-4 cursor-pointer hover:bg-gray-700 transition-colors"
@@ -507,7 +621,7 @@ export default function ProcessorBilling() {
                       </h4>
                       <div className="space-y-2">
                         {processor.clients.map((client, clientIndex) => (
-                          <div key={clientIndex} className="flex items-center justify-between p-3 bg-gray-700 rounded-lg">
+                          <div key={`${processor.processor}-${client.name}-${clientIndex}`} className="flex items-center justify-between p-3 bg-gray-700 rounded-lg">
                             <div className="flex-1">
                               <div className="flex items-center space-x-3">
                                 <div className="w-8 h-8 bg-gray-600 rounded-full flex items-center justify-center">
