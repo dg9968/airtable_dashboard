@@ -3,14 +3,15 @@ import { getApiHeaders, getHonoApiUrl } from '@/lib/api-client';
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const url = getHonoApiUrl(`/api/services-rendered/${params.id}/bill`);
+  const { id } = await params;
+  const url = getHonoApiUrl(`/api/services-rendered/${id}/bill`);
 
   try {
     const body = await request.json();
     console.log('[Next.js Proxy] POST /api/services-rendered/:id/bill');
-    console.log('[Next.js Proxy] Service ID:', params.id);
+    console.log('[Next.js Proxy] Service ID:', id);
     console.log('[Next.js Proxy] Request body:', body);
     console.log('[Next.js Proxy] Proxying to:', url);
 

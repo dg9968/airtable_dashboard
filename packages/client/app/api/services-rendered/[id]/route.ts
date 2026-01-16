@@ -3,9 +3,10 @@ import { getApiHeaders, getHonoApiUrl } from '@/lib/api-client';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const url = getHonoApiUrl(`/api/services-rendered/${params.id}`);
+  const { id } = await params;
+  const url = getHonoApiUrl(`/api/services-rendered/${id}`);
 
   try {
     const response = await fetch(url, {
@@ -26,9 +27,10 @@ export async function GET(
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const url = getHonoApiUrl(`/api/services-rendered/${params.id}`);
+  const { id } = await params;
+  const url = getHonoApiUrl(`/api/services-rendered/${id}`);
 
   try {
     const body = await request.json();
