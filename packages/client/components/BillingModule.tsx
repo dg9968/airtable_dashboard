@@ -286,10 +286,20 @@ export default function BillingModule() {
     <div className="min-h-screen bg-base-200 p-6">
       {/* Header */}
       <div className="mb-6">
-        <button onClick={() => router.push('/dashboard')} className="btn btn-ghost btn-sm mb-4">
-          ← Back to Dashboard
-        </button>
-        <h1 className="text-3xl font-bold mb-4">Billing Module</h1>
+        <div className="flex justify-between items-start mb-4">
+          <div>
+            <button onClick={() => router.push('/dashboard')} className="btn btn-ghost btn-sm mb-4">
+              ← Back to Dashboard
+            </button>
+            <h1 className="text-3xl font-bold">Billing Module</h1>
+          </div>
+          <button
+            onClick={() => router.push('/ledger')}
+            className="btn btn-primary btn-sm"
+          >
+            View Revenue Ledger →
+          </button>
+        </div>
 
         {/* Statistics */}
         <div className="stats shadow">

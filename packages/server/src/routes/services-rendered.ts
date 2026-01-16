@@ -471,12 +471,19 @@ app.post('/:id/bill', async (c) => {
 
     // Create Ledger entry if requested and status is "Billed - Paid"
     if (createLedger && billingStatus === 'Billed - Paid') {
+      console.log('[Services Rendered API] Creating Ledger entry for service:', recordId);
+      console.log('[Services Rendered API] Service record fields:', serviceRecord.fields);
+
       // Extract necessary information from direct fields
       const clientNameRaw = serviceRecord.fields['Client Name'];
       const clientName = Array.isArray(clientNameRaw) ? clientNameRaw[0] : clientNameRaw;
 
       const serviceTypeRaw = serviceRecord.fields['Service Type'];
       const serviceType = Array.isArray(serviceTypeRaw) ? serviceTypeRaw[0] : serviceTypeRaw;
+
+      console.log('[Services Rendered API] Extracted client name:', clientName);
+      console.log('[Services Rendered API] Extracted service type:', serviceType);
+      console.log('[Services Rendered API] Payment method from request:', paymentMethod);
 
       // Determine subscription type and ID (may be null if subscription was deleted)
       const subscriptionCorporate = serviceRecord.fields['Subscription Corporate'];
@@ -487,6 +494,9 @@ app.post('/:id/bill', async (c) => {
         ? (Array.isArray(subscriptionCorporate) ? subscriptionCorporate[0] : subscriptionCorporate)
         : (Array.isArray(subscriptionPersonal) ? subscriptionPersonal[0] : subscriptionPersonal);
 
+      console.log('[Services Rendered API] Subscription type:', subscriptionType);
+      console.log('[Services Rendered API] Subscription ID:', subscriptionId);
+
       // Create Ledger record
       const ledgerData: any = {
         'Service Rendered': serviceType || 'Service',
@@ -495,6 +505,8 @@ app.post('/:id/bill', async (c) => {
         'Name of Client': clientName || 'Unknown Client',
         'Payment Method': paymentMethod,
       };
+
+      console.log('[Services Rendered API] Ledger data to be created:', ledgerData);
 
       // Only link to subscription if it still exists (not deleted)
       if (subscriptionId) {
