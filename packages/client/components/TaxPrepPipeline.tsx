@@ -34,10 +34,6 @@ export default function TaxPrepPipeline() {
   const [taxPreparerFilter, setTaxPreparerFilter] = useState<string>("");
   const [taxPreparers, setTaxPreparers] = useState<TaxPreparer[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>("");
-  const [showAmountModal, setShowAmountModal] = useState(false);
-  const [selectedClientForReturn, setSelectedClientForReturn] = useState<string | null>(null);
-  const [amountCharged, setAmountCharged] = useState<string>("");
-  const [paymentMethod, setPaymentMethod] = useState<string>("");
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [selectedClientForStatus, setSelectedClientForStatus] = useState<string | null>(null);
 
@@ -433,60 +429,54 @@ export default function TaxPrepPipeline() {
     }
   };
 
-  const handleFileReturn = async () => {
-    if (!selectedClientForReturn || !amountCharged || !paymentMethod) {
-      alert("Please enter the amount charged and payment method");
-      return;
-    }
-
+  const handleFileReturn = async (clientId: string) => {
     try {
-      setUpdating(selectedClientForReturn);
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+      setUpdating(clientId);
 
-      // Find the client to get their name
-      const client = pipelineClients.find((c) => c.id === selectedClientForReturn);
+      // Find the client to get their details
+      const client = pipelineClients.find((c) => c.id === clientId);
       if (!client) {
         throw new Error("Client not found");
       }
 
-      const clientName = `${client.firstName} ${client.lastName}`;
-
-      // Create ledger entry
-      const ledgerResponse = await fetch(`${apiUrl}/api/ledger`, {
+      // Create Services Rendered entry (unbilled)
+      const servicesRenderedResponse = await fetch(`/api/services-rendered`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          subscriptionId: selectedClientForReturn,
-          clientName: clientName,
-          amountCharged: parseFloat(amountCharged),
-          receiptDate: new Date().toISOString(),
-          paymentMethod: paymentMethod,
+          subscriptionId: clientId,
+          subscriptionType: "personal",
+          serviceDate: new Date().toISOString(),
         }),
       });
 
-      const ledgerData = await ledgerResponse.json();
+      const servicesRenderedData = await servicesRenderedResponse.json();
 
-      if (!ledgerResponse.ok) {
-        throw new Error(ledgerData.error || "Failed to create ledger entry");
+      if (!servicesRenderedResponse.ok) {
+        throw new Error(servicesRenderedData.error || "Failed to create service record");
       }
 
-      // Update status to File Return (keeps record but marks as filed)
-      await updateStatus(selectedClientForReturn, "File Return");
+      // Delete the subscription record (service is now tracked in Services Rendered)
+      const deleteResponse = await fetch(`/api/subscriptions-personal/${clientId}`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
 
-      // Remove from local state (will be filtered out from pipeline view)
+      if (!deleteResponse.ok) {
+        const deleteData = await deleteResponse.json();
+        throw new Error(deleteData.error || "Failed to delete subscription");
+      }
+
+      // Remove from local state
       setPipelineClients((prevClients) =>
-        prevClients.filter((client) => client.id !== selectedClientForReturn)
+        prevClients.filter((c) => c.id !== clientId)
       );
 
-      // Close modal and reset
-      setShowAmountModal(false);
-      setSelectedClientForReturn(null);
-      setAmountCharged("");
-      setPaymentMethod("");
-
-      alert("✅ File Return completed! Ledger entry created.");
+      alert("✅ Return filed and moved to billing queue!");
     } catch (error) {
       console.error("Error handling file return:", error);
       alert(error instanceof Error ? error.message : "Failed to process file return");
@@ -497,9 +487,8 @@ export default function TaxPrepPipeline() {
 
   const handleStatusChange = (clientId: string, newStatus: string) => {
     if (newStatus === "File Return") {
-      // Show modal to get amount charged
-      setSelectedClientForReturn(clientId);
-      setShowAmountModal(true);
+      // File return directly without payment modal
+      handleFileReturn(clientId);
     } else {
       // Update status directly
       updateStatus(clientId, newStatus);
@@ -903,70 +892,6 @@ export default function TaxPrepPipeline() {
                 }}
               >
                 Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Amount Charged Modal */}
-      {showAmountModal && (
-        <div className="modal modal-open">
-          <div className="modal-box">
-            <h3 className="font-bold text-lg mb-4">File Return - Enter Amount Charged</h3>
-            <p className="text-sm text-base-content/70 mb-4">
-              This will create a permanent ledger entry for "Personal Tax Return" with the client's name, today's date, amount charged, and payment method.
-            </p>
-            <div className="form-control mb-4">
-              <label className="label">
-                <span className="label-text">Amount Charged ($)</span>
-              </label>
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                placeholder="0.00"
-                className="input input-bordered"
-                value={amountCharged}
-                onChange={(e) => setAmountCharged(e.target.value)}
-                autoFocus
-              />
-            </div>
-            <div className="form-control">
-              <label className="label">
-                <span className="label-text">Payment Method</span>
-              </label>
-              <select
-                className="select select-bordered"
-                value={paymentMethod}
-                onChange={(e) => setPaymentMethod(e.target.value)}
-              >
-                <option value="">Select payment method...</option>
-                <option value="Credit Card">Credit Card</option>
-                <option value="Cash">Cash</option>
-                <option value="Zelle">Zelle</option>
-                <option value="TPG Bank Product">TPG Bank Product</option>
-                <option value="Other">Other</option>
-              </select>
-            </div>
-            <div className="modal-action">
-              <button
-                className="btn btn-ghost"
-                onClick={() => {
-                  setShowAmountModal(false);
-                  setSelectedClientForReturn(null);
-                  setAmountCharged("");
-                  setPaymentMethod("");
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                className="btn btn-success"
-                onClick={handleFileReturn}
-                disabled={!amountCharged || parseFloat(amountCharged) <= 0 || !paymentMethod}
-              >
-                ✅ Complete File Return
               </button>
             </div>
           </div>

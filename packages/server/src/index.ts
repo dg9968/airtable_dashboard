@@ -27,6 +27,7 @@ import subscriptionsCorporateRoutes from './routes/subscriptions-corporate';
 import teamsRoutes from './routes/teams';
 import ledgerRoutes from './routes/ledger';
 import businessStatsRoutes from './routes/business-stats';
+import servicesRenderedRoutes from './routes/services-rendered';
 
 const app = new Hono();
 
@@ -82,6 +83,7 @@ app.route('/api/subscriptions-corporate', subscriptionsCorporateRoutes);
 app.route('/api/teams', teamsRoutes);
 app.route('/api/ledger', ledgerRoutes);
 app.route('/api/business-stats', businessStatsRoutes);
+app.route('/api/services-rendered', servicesRenderedRoutes);
 
 // 404 handler
 app.notFound((c) => {

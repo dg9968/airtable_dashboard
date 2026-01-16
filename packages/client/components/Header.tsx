@@ -58,6 +58,9 @@ export default function Header() {
                         Statement to QBO
                       </Link>
                     </li>
+                    <li>
+                      <Link href="/billing">Billing</Link>
+                    </li>
                   </>
                 )}
                 {(session.user as any).role === "admin" && (
@@ -115,6 +118,11 @@ export default function Header() {
                       className="btn btn-ghost"
                     >
                       Statement to QBO
+                    </Link>
+                  </li>
+                  <li>
+                    <Link href="/billing" className="btn btn-ghost">
+                      Billing
                     </Link>
                   </li>
                 </>

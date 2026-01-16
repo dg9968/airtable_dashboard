@@ -16,6 +16,7 @@ interface PipelineCompany {
   status?: string;
   priority?: number;
   notes?: string;
+  billingAmount?: number;
 }
 
 interface Processor {
@@ -35,10 +36,6 @@ export default function CorporateServicesPipeline() {
   const [serviceFilter, setServiceFilter] = useState<string>("");
   const [processors, setProcessors] = useState<Processor[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>("");
-  const [showAmountModal, setShowAmountModal] = useState(false);
-  const [selectedCompanyForCompletion, setSelectedCompanyForCompletion] = useState<string | null>(null);
-  const [amountCharged, setAmountCharged] = useState<string>("");
-  const [paymentMethod, setPaymentMethod] = useState<string>("");
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [selectedCompanyForStatus, setSelectedCompanyForStatus] = useState<string | null>(null);
 
@@ -146,6 +143,9 @@ export default function CorporateServicesPipeline() {
             // Get Notes field
             const notes = record.fields["Notes"] || "";
 
+            // Get Billing Amount field
+            const billingAmount = record.fields["Billing Amount"] || null;
+
             // Calculate priority (days in pipeline)
             const addedDate = new Date(record.createdTime);
             const today = new Date();
@@ -168,6 +168,7 @@ export default function CorporateServicesPipeline() {
               status,
               priority: daysInPipeline,
               notes,
+              billingAmount: billingAmount ? parseFloat(billingAmount.toString()) : undefined,
             };
           });
 
@@ -441,64 +442,81 @@ export default function CorporateServicesPipeline() {
     }
   };
 
-  const handleCompleteService = async () => {
-    if (!selectedCompanyForCompletion || !amountCharged || !paymentMethod) {
-      alert("Please enter the amount charged and payment method");
-      return;
-    }
-
+  const handleCompleteService = async (companyId: string) => {
     try {
-      setUpdating(selectedCompanyForCompletion);
+      setUpdating(companyId);
+      console.log('[CorporateServicesPipeline] Starting handleCompleteService for:', companyId);
 
-      // Find the company to get their name and service type
-      const company = pipelineCompanies.find((c) => c.id === selectedCompanyForCompletion);
+      // Find the company to get their details
+      const company = pipelineCompanies.find((c) => c.id === companyId);
       if (!company) {
         throw new Error("Company not found");
       }
 
-      const companyName = company.companyName;
-      const serviceType = company.serviceName || "Corporate Service";
+      console.log('[CorporateServicesPipeline] Found company:', company.companyName);
 
-      // Create ledger entry
-      const ledgerResponse = await fetch(`/api/ledger`, {
+      // Get billing amount from subscription if available
+      const billingAmount = company.billingAmount || null;
+      console.log('[CorporateServicesPipeline] Billing amount:', billingAmount);
+
+      const requestBody = {
+        subscriptionId: companyId,
+        subscriptionType: "corporate",
+        serviceDate: new Date().toISOString(),
+        amountCharged: billingAmount,
+      };
+
+      console.log('[CorporateServicesPipeline] Sending POST request to /api/services-rendered');
+      console.log('[CorporateServicesPipeline] Request body:', requestBody);
+
+      // Create Services Rendered entry (unbilled)
+      const servicesRenderedResponse = await fetch(`/api/services-rendered`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          subscriptionId: selectedCompanyForCompletion,
-          subscriptionType: "corporate",
-          clientName: companyName,
-          serviceType: serviceType,
-          amountCharged: parseFloat(amountCharged),
-          receiptDate: new Date().toISOString(),
-          paymentMethod: paymentMethod,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
-      const ledgerData = await ledgerResponse.json();
+      console.log('[CorporateServicesPipeline] Response status:', servicesRenderedResponse.status);
+      console.log('[CorporateServicesPipeline] Response ok:', servicesRenderedResponse.ok);
 
-      if (!ledgerResponse.ok) {
-        throw new Error(ledgerData.error || "Failed to create ledger entry");
+      const servicesRenderedData = await servicesRenderedResponse.json();
+      console.log('[CorporateServicesPipeline] Response data:', servicesRenderedData);
+
+      if (!servicesRenderedResponse.ok) {
+        console.error('[CorporateServicesPipeline] Failed to create service record:', servicesRenderedData);
+        throw new Error(servicesRenderedData.error || "Failed to create service record");
       }
 
-      // Update status to Completed
-      await updateStatus(selectedCompanyForCompletion, "Completed");
+      console.log('[CorporateServicesPipeline] Service record created successfully:', servicesRenderedData.data?.id);
 
-      // Remove from local state (will be filtered out from pipeline view)
+      // Delete the subscription record (service is now tracked in Services Rendered)
+      console.log('[CorporateServicesPipeline] Deleting subscription record');
+      const deleteResponse = await fetch(`/api/subscriptions-corporate/${companyId}`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!deleteResponse.ok) {
+        const deleteData = await deleteResponse.json();
+        console.error('[CorporateServicesPipeline] Failed to delete subscription:', deleteData);
+        throw new Error(deleteData.error || "Failed to delete subscription");
+      }
+
+      console.log('[CorporateServicesPipeline] Subscription deleted successfully');
+
+      // Remove from local state
       setPipelineCompanies((prevCompanies) =>
-        prevCompanies.filter((company) => company.id !== selectedCompanyForCompletion)
+        prevCompanies.filter((c) => c.id !== companyId)
       );
 
-      // Close modal and reset
-      setShowAmountModal(false);
-      setSelectedCompanyForCompletion(null);
-      setAmountCharged("");
-      setPaymentMethod("");
-
-      alert("✅ Service completed! Ledger entry created.");
+      console.log('[CorporateServicesPipeline] Service completion successful');
+      alert("✅ Service completed and moved to billing queue!");
     } catch (error) {
-      console.error("Error completing service:", error);
+      console.error("[CorporateServicesPipeline] Error completing service:", error);
       alert(error instanceof Error ? error.message : "Failed to complete service");
     } finally {
       setUpdating(null);
@@ -507,9 +525,8 @@ export default function CorporateServicesPipeline() {
 
   const handleStatusChange = (companyId: string, newStatus: string) => {
     if (newStatus === "Complete Service") {
-      // Show modal to get amount charged
-      setSelectedCompanyForCompletion(companyId);
-      setShowAmountModal(true);
+      // Complete service directly without payment modal
+      handleCompleteService(companyId);
     } else {
       // Update status directly
       updateStatus(companyId, newStatus);
@@ -954,68 +971,6 @@ export default function CorporateServicesPipeline() {
                 }}
               >
                 Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Complete Service Modal */}
-      {showAmountModal && (
-        <div className="modal modal-open">
-          <div className="modal-box">
-            <h3 className="font-bold text-lg mb-4">Complete Service - Enter Amount Charged</h3>
-            <p className="text-sm text-base-content/70 mb-4">
-              This will create a ledger entry for the service with the company name, service type, today's date, amount charged, and payment method.
-            </p>
-            <div className="form-control mb-4">
-              <label className="label">
-                <span className="label-text">Amount Charged ($)</span>
-              </label>
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                placeholder="0.00"
-                className="input input-bordered"
-                value={amountCharged}
-                onChange={(e) => setAmountCharged(e.target.value)}
-                autoFocus
-              />
-            </div>
-            <div className="form-control">
-              <label className="label">
-                <span className="label-text">Payment Method</span>
-              </label>
-              <select
-                className="select select-bordered"
-                value={paymentMethod}
-                onChange={(e) => setPaymentMethod(e.target.value)}
-              >
-                <option value="">Select payment method...</option>
-                <option value="Credit Card">Credit Card</option>
-                <option value="Cash">Cash</option>
-                <option value="Zelle">Zelle</option>
-                <option value="Check">Check</option>
-                <option value="ACH">ACH</option>
-                <option value="Other">Other</option>
-              </select>
-            </div>
-            <div className="modal-action">
-              <button className="btn btn-ghost" onClick={() => {
-                setShowAmountModal(false);
-                setSelectedCompanyForCompletion(null);
-                setAmountCharged("");
-                setPaymentMethod("");
-              }}>
-                Cancel
-              </button>
-              <button
-                className="btn btn-success"
-                onClick={handleCompleteService}
-                disabled={!amountCharged || parseFloat(amountCharged) <= 0 || !paymentMethod}
-              >
-                ✅ Complete Service
               </button>
             </div>
           </div>
