@@ -132,6 +132,17 @@ export default function CorporateClientIntake() {
     }
   }, [searchParams]);
 
+  // Save selected company to localStorage for cross-page context
+  useEffect(() => {
+    if (selectedCompany?.id) {
+      localStorage.setItem("lastSelectedCompany", JSON.stringify({
+        id: selectedCompany.id,
+        name: selectedCompany.fields["Company"] || selectedCompany.fields["Company Name"] || "",
+        ein: selectedCompany.fields["EIN"] || ""
+      }));
+    }
+  }, [selectedCompany]);
+
   // Fetch pipeline data to check if company is already in pipeline
   useEffect(() => {
     const fetchPipeline = async () => {
@@ -726,14 +737,24 @@ export default function CorporateClientIntake() {
                 )}
 
                 {selectedCompany && (
-                  <div className="alert alert-info mt-4">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" className="stroke-current shrink-0 w-6 h-6">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                    </svg>
-                    <span className="text-xs">
-                      Editing: {selectedCompany.fields["Company"] || selectedCompany.fields["Company Name"]}
-                    </span>
-                  </div>
+                  <>
+                    <div className="alert alert-info mt-4">
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" className="stroke-current shrink-0 w-6 h-6">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                      </svg>
+                      <span className="text-xs">
+                        Editing: {selectedCompany.fields["Company"] || selectedCompany.fields["Company Name"]}
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => {
+                        router.push(`/corporate-document-management?companyId=${selectedCompany.id}`);
+                      }}
+                      className="btn btn-primary btn-sm w-full mt-2"
+                    >
+                      📄 Go to Documents
+                    </button>
+                  </>
                 )}
 
                 {/* Section Navigation */}

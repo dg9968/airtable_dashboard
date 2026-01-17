@@ -1,7 +1,6 @@
 // app/layout.tsx - FIXED VERSION
 import { Providers } from './providers'
-import Header from '@/components/Header'
-import Footer from '@/components/Footer'
+import ClientLayoutWrapper from '@/components/ClientLayoutWrapper'
 import ClientThemeWrapper from '@/components/ClientThemeWrapper'
 import './globals.css'
 import type { Metadata } from 'next'
@@ -21,13 +20,9 @@ export default function RootLayout({
       <body className="min-h-screen">
         <ClientThemeWrapper>
           <Providers>
-            <div className="min-h-screen flex flex-col">
-              <Header />
-              <main className="flex-1">
-                {children}
-              </main>
-              <Footer />
-            </div>
+            <ClientLayoutWrapper>
+              {children}
+            </ClientLayoutWrapper>
           </Providers>
         </ClientThemeWrapper>
       </body>

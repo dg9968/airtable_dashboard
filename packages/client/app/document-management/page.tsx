@@ -1,7 +1,7 @@
 // app/document-management/page.tsx
 'use client';
 
-import { Suspense, useState } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useRequireRole } from '@/hooks/useAuth';
 import ClientSearch from '../../components/ClientSearch';
@@ -15,6 +15,24 @@ function DocumentManagementContent() {
   const [useGoogleDrive, setUseGoogleDrive] = useState(true); // Default to Google Drive
   const [selectedClientCode, setSelectedClientCode] = useState(searchParams.get('clientCode') || '');
   const [selectedPersonalId, setSelectedPersonalId] = useState(searchParams.get('personalId') || '');
+
+  // Auto-load from localStorage if no URL params provided
+  useEffect(() => {
+    if (!selectedClientCode && !selectedPersonalId && typeof window !== 'undefined') {
+      const lastClient = localStorage.getItem('lastSelectedClient');
+      if (lastClient) {
+        try {
+          const clientData = JSON.parse(lastClient);
+          if (clientData.clientCode && clientData.id) {
+            setSelectedClientCode(clientData.clientCode);
+            setSelectedPersonalId(clientData.id);
+          }
+        } catch (e) {
+          console.error('Failed to parse last selected client:', e);
+        }
+      }
+    }
+  }, []);
 
   if (status === 'loading') {
     return (

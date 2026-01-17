@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 interface ServiceRendered {
   id: string;
@@ -24,6 +24,7 @@ interface GroupedServices {
 
 export default function BillingModule() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [services, setServices] = useState<ServiceRendered[]>([]);
   const [groupedServices, setGroupedServices] = useState<GroupedServices[]>([]);
   const [loading, setLoading] = useState(true);
@@ -37,6 +38,7 @@ export default function BillingModule() {
   const [endDate, setEndDate] = useState('');
   const [processorFilter, setProcessorFilter] = useState('');
   const [groupBy, setGroupBy] = useState<'client' | 'processor' | 'date'>('client');
+  const [clientType, setClientType] = useState<'all' | 'personal' | 'corporate'>('all');
 
   // Modals
   const [showBatchModal, setShowBatchModal] = useState(false);
@@ -57,9 +59,17 @@ export default function BillingModule() {
 
   const paymentMethods = ['Credit Card', 'Cash', 'Zelle', 'Check', 'ACH', 'TPG Bank Product', 'Other', 'Not Paid Yet'];
 
+  // Detect client type from query parameter
+  useEffect(() => {
+    const type = searchParams.get('type');
+    if (type === 'personal' || type === 'corporate') {
+      setClientType(type);
+    }
+  }, [searchParams]);
+
   useEffect(() => {
     fetchServices();
-  }, [statusFilter, startDate, endDate, processorFilter]);
+  }, [statusFilter, startDate, endDate, processorFilter, clientType]);
 
   useEffect(() => {
     groupServices();
@@ -73,6 +83,7 @@ export default function BillingModule() {
       if (startDate) params.append('startDate', startDate);
       if (endDate) params.append('endDate', endDate);
       if (processorFilter) params.append('processor', processorFilter);
+      if (clientType !== 'all') params.append('clientType', clientType);
 
       const response = await fetch(`/api/services-rendered?${params.toString()}`);
       const data = await response.json();
@@ -322,7 +333,7 @@ export default function BillingModule() {
       <div className="card bg-base-100 shadow-xl mb-6">
         <div className="card-body">
           <h2 className="card-title mb-4">Filters</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
             {/* Status Filter */}
             <div className="form-control">
               <label className="label">
@@ -339,6 +350,33 @@ export default function BillingModule() {
                 <option value="Waived">Waived</option>
                 <option value="All">All</option>
               </select>
+            </div>
+
+            {/* Client Type Filter */}
+            <div className="form-control">
+              <label className="label">
+                <span className="label-text">Client Type</span>
+              </label>
+              <div className="btn-group w-full">
+                <button
+                  className={`btn btn-sm flex-1 ${clientType === 'all' ? 'btn-active' : ''}`}
+                  onClick={() => setClientType('all')}
+                >
+                  All
+                </button>
+                <button
+                  className={`btn btn-sm flex-1 ${clientType === 'personal' ? 'btn-active' : ''}`}
+                  onClick={() => setClientType('personal')}
+                >
+                  Personal
+                </button>
+                <button
+                  className={`btn btn-sm flex-1 ${clientType === 'corporate' ? 'btn-active' : ''}`}
+                  onClick={() => setClientType('corporate')}
+                >
+                  Corporate
+                </button>
+              </div>
             </div>
 
             {/* Client Search */}

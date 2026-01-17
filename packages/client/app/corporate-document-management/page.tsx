@@ -29,9 +29,11 @@ function CorporateDocumentManagementContent() {
   const [selectedClient, setSelectedClient] = useState<CorporateClient | null>(null);
   const [isLoadingClient, setIsLoadingClient] = useState(false);
 
-  // Auto-load client if companyId is provided in URL
+  // Auto-load client if companyId is provided in URL or localStorage
   useEffect(() => {
     const companyId = searchParams.get('companyId');
+
+    // Try URL param first
     if (companyId && !selectedClient && session) {
       setIsLoadingClient(true);
       fetch(`/api/view/Corporations/${companyId}`)
@@ -59,6 +61,46 @@ function CorporateDocumentManagementContent() {
         .finally(() => {
           setIsLoadingClient(false);
         });
+    }
+    // Fallback to localStorage if no URL param
+    else if (!companyId && !selectedClient && session && typeof window !== 'undefined') {
+      const lastCompany = localStorage.getItem('lastSelectedCompany');
+      if (lastCompany) {
+        try {
+          const companyData = JSON.parse(lastCompany);
+          if (companyData.id) {
+            // Load the full company data using the stored ID
+            setIsLoadingClient(true);
+            fetch(`/api/view/Corporations/${companyData.id}`)
+              .then((res) => res.json())
+              .then((data) => {
+                if (data.success && data.data) {
+                  const company = data.data;
+                  setSelectedClient({
+                    id: company.id,
+                    clientCode: company.fields?.['Client Code'],
+                    name: company.fields?.['Company Name'] || '',
+                    ein: company.fields?.['EIN'] || '',
+                    entityNumber: company.fields?.['Entity Number'] || '',
+                    address: company.fields?.['Address'],
+                    city: company.fields?.['City'],
+                    state: company.fields?.['State'],
+                    zipCode: company.fields?.['Zip Code'],
+                    phone: company.fields?.['Phone']
+                  });
+                }
+              })
+              .catch((error) => {
+                console.error('Error loading client from localStorage:', error);
+              })
+              .finally(() => {
+                setIsLoadingClient(false);
+              });
+          }
+        } catch (e) {
+          console.error('Failed to parse last selected company:', e);
+        }
+      }
     }
   }, [searchParams, selectedClient, session]);
 

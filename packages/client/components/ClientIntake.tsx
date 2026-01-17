@@ -185,6 +185,21 @@ export default function ClientIntake() {
     }
   }, [searchParams, status]);
 
+  // Save selected client to localStorage for cross-page context
+  useEffect(() => {
+    if (selectedClient?.id) {
+      const ssn = selectedClient.fields.SSN || "";
+      const clientCode = ssn.replace(/-/g, "").slice(-4);
+      if (clientCode) {
+        localStorage.setItem("lastSelectedClient", JSON.stringify({
+          id: selectedClient.id,
+          clientCode: clientCode,
+          name: selectedClient.fields["Full Name"] || `${selectedClient.fields["First Name"] || ""} ${selectedClient.fields["Last Name"] || ""}`.trim()
+        }));
+      }
+    }
+  }, [selectedClient]);
+
   // Fetch pipeline from Airtable on mount
   useEffect(() => {
     const fetchPipeline = async () => {
@@ -658,12 +673,29 @@ export default function ClientIntake() {
             </div>
             <div className="flex gap-2">
               {!isNewClient && selectedClient?.id && (
-                <Link
-                  href={`/tax-family-dashboard?id=${selectedClient.id}`}
-                  className="btn btn-outline btn-primary btn-sm"
-                >
-                  👨‍👩‍👧‍👦 Tax Family
-                </Link>
+                <>
+                  <Link
+                    href={`/tax-family-dashboard?id=${selectedClient.id}`}
+                    className="btn btn-outline btn-primary btn-sm"
+                  >
+                    👨‍👩‍👧‍👦 Tax Family
+                  </Link>
+                  <button
+                    onClick={async () => {
+                      const ssn = selectedClient.fields.SSN || "";
+                      const clientCode = ssn.replace(/-/g, "").slice(-4);
+                      if (clientCode) {
+                        router.push(`/document-management?clientCode=${clientCode}&personalId=${selectedClient.id}`);
+                      } else {
+                        setError("Client code not available");
+                        setTimeout(() => setError(null), 3000);
+                      }
+                    }}
+                    className="btn btn-outline btn-sm"
+                  >
+                    📄 Documents
+                  </button>
+                </>
               )}
               <Link
                 href="/tax-prep-pipeline"
@@ -1968,14 +2000,43 @@ export default function ClientIntake() {
                             {new Date(client.addedAt).toLocaleDateString()}
                           </td>
                           <td>
-                            <button
-                              className="btn btn-error btn-xs"
-                              onClick={async () => {
-                                try {
-                                  const response = await fetch(
-                                    `/api/subscriptions-personal/${client.id}`,
-                                    { method: "DELETE" }
-                                  );
+                            <div className="flex gap-2">
+                              <button
+                                className="btn btn-primary btn-xs"
+                                onClick={async () => {
+                                  // Navigate to document management with client pre-selected
+                                  if (client.personalId) {
+                                    try {
+                                      const response = await fetch(`/api/personal/${client.personalId}`);
+                                      const data = await response.json();
+
+                                      if (data.success) {
+                                        const ssn = data.data.fields.SSN || "";
+                                        const clientCode = ssn.replace(/-/g, "").slice(-4);
+
+                                        if (clientCode) {
+                                          router.push(`/document-management?clientCode=${clientCode}&personalId=${client.personalId}`);
+                                        } else {
+                                          setError("Client code not available");
+                                          setTimeout(() => setError(null), 3000);
+                                        }
+                                      }
+                                    } catch (err) {
+                                      console.error("Failed to load client:", err);
+                                    }
+                                  }
+                                }}
+                              >
+                                📄 Docs
+                              </button>
+                              <button
+                                className="btn btn-error btn-xs"
+                                onClick={async () => {
+                                  try {
+                                    const response = await fetch(
+                                      `/api/subscriptions-personal/${client.id}`,
+                                      { method: "DELETE" }
+                                    );
 
                                   if (response.ok) {
                                     // Refresh pipeline from Airtable
@@ -2038,6 +2099,7 @@ export default function ClientIntake() {
                             >
                               Remove
                             </button>
+                            </div>
                           </td>
                         </tr>
                       ))}

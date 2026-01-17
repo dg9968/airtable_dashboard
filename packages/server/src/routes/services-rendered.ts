@@ -218,6 +218,7 @@ app.get('/', async (c) => {
     const endDate = c.req.query('endDate');
     const processor = c.req.query('processor');
     const groupBy = c.req.query('groupBy') || 'client';
+    const clientType = c.req.query('clientType'); // 'personal', 'corporate', or 'all'
 
     // Build filter formula
     const filters: string[] = [];
@@ -285,6 +286,23 @@ app.get('/', async (c) => {
       filteredRecords = filteredRecords.filter(r =>
         r.processor.toLowerCase().includes(lowerProcessor)
       );
+    }
+
+    // Apply client type filter if provided
+    if (clientType && clientType !== 'all') {
+      filteredRecords = filteredRecords.filter(r => {
+        const hasPersonal = r.fields['Subscription Personal'];
+        const hasCorporate = r.fields['Subscription Corporate'];
+
+        if (clientType === 'personal') {
+          // Include if has Personal subscription (not empty)
+          return hasPersonal && (!Array.isArray(hasPersonal) || hasPersonal.length > 0);
+        } else if (clientType === 'corporate') {
+          // Include if has Corporate subscription (not empty)
+          return hasCorporate && (!Array.isArray(hasCorporate) || hasCorporate.length > 0);
+        }
+        return true;
+      });
     }
 
     // Calculate summary statistics
