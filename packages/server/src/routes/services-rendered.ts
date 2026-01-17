@@ -6,7 +6,7 @@
 
 import { Hono } from 'hono';
 import { testConnection } from '../airtable';
-import { fetchAllRecords, createRecords, updateRecords, getRecord } from '../lib/airtable-helpers';
+import { fetchAllRecords, createRecords, updateRecords, getRecord, deleteRecords } from '../lib/airtable-helpers';
 
 const app = new Hono();
 
@@ -525,6 +525,19 @@ app.post('/:id/bill', async (c) => {
 
       // Link the ledger entry back to the service record
       updateFields['Ledger Entry'] = [ledgerEntry.id];
+
+      // Delete the subscription record now that it's billed and in the ledger
+      if (subscriptionId) {
+        try {
+          const tableName = subscriptionType === 'corporate' ? 'Subscriptions Corporate' : 'Subscriptions Personal';
+          console.log(`[Services Rendered API] Deleting subscription ${subscriptionId} from ${tableName}`);
+          await deleteRecords(baseId, tableName, [subscriptionId]);
+          console.log('[Services Rendered API] Subscription deleted successfully');
+        } catch (error) {
+          console.error('[Services Rendered API] Failed to delete subscription:', error);
+          // Don't fail the whole operation if deletion fails - subscription might already be deleted
+        }
+      }
     }
 
     // Update the service record
@@ -660,6 +673,46 @@ app.post('/batch-bill', async (c) => {
       ]);
 
       ledgerEntry = ledgerRecords[0];
+
+      // Delete subscription records for all billed services
+      // Collect all unique subscription IDs from the service records
+      const subscriptionsToDelete: { [key: string]: string[] } = {
+        'Subscriptions Corporate': [],
+        'Subscriptions Personal': [],
+      };
+
+      serviceRecords.forEach(record => {
+        const subscriptionCorporate = record.fields['Subscription Corporate'];
+        const subscriptionPersonal = record.fields['Subscription Personal'];
+
+        if (subscriptionCorporate) {
+          const id = Array.isArray(subscriptionCorporate) ? subscriptionCorporate[0] : subscriptionCorporate;
+          if (id && !subscriptionsToDelete['Subscriptions Corporate'].includes(id)) {
+            subscriptionsToDelete['Subscriptions Corporate'].push(id);
+          }
+        }
+
+        if (subscriptionPersonal) {
+          const id = Array.isArray(subscriptionPersonal) ? subscriptionPersonal[0] : subscriptionPersonal;
+          if (id && !subscriptionsToDelete['Subscriptions Personal'].includes(id)) {
+            subscriptionsToDelete['Subscriptions Personal'].push(id);
+          }
+        }
+      });
+
+      // Delete subscriptions from both tables
+      for (const [tableName, ids] of Object.entries(subscriptionsToDelete)) {
+        if (ids.length > 0) {
+          try {
+            console.log(`[Services Rendered API] Deleting ${ids.length} subscriptions from ${tableName}`);
+            await deleteRecords(baseId, tableName, ids);
+            console.log(`[Services Rendered API] Successfully deleted subscriptions from ${tableName}`);
+          } catch (error) {
+            console.error(`[Services Rendered API] Failed to delete subscriptions from ${tableName}:`, error);
+            // Don't fail the whole operation if deletion fails
+          }
+        }
+      }
     }
 
     // Update all service records

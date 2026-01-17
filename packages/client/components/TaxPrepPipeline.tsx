@@ -36,6 +36,9 @@ export default function TaxPrepPipeline() {
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [selectedClientForStatus, setSelectedClientForStatus] = useState<string | null>(null);
+  const [showAmountModal, setShowAmountModal] = useState(false);
+  const [selectedClientForFiling, setSelectedClientForFiling] = useState<string | null>(null);
+  const [quotedAmount, setQuotedAmount] = useState<string>("");
 
   // Fetch tax preparers from Teams table
   useEffect(() => {
@@ -429,7 +432,7 @@ export default function TaxPrepPipeline() {
     }
   };
 
-  const handleFileReturn = async (clientId: string) => {
+  const handleFileReturn = async (clientId: string, amount?: number) => {
     try {
       setUpdating(clientId);
 
@@ -449,6 +452,7 @@ export default function TaxPrepPipeline() {
           subscriptionId: clientId,
           subscriptionType: "personal",
           serviceDate: new Date().toISOString(),
+          amountCharged: amount,
         }),
       });
 
@@ -458,19 +462,7 @@ export default function TaxPrepPipeline() {
         throw new Error(servicesRenderedData.error || "Failed to create service record");
       }
 
-      // Delete the subscription record (service is now tracked in Services Rendered)
-      const deleteResponse = await fetch(`/api/subscriptions-personal/${clientId}`, {
-        method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
-
-      if (!deleteResponse.ok) {
-        const deleteData = await deleteResponse.json();
-        throw new Error(deleteData.error || "Failed to delete subscription");
-      }
-
+      // Subscription will be deleted when the service is billed and recorded in ledger
       // Remove from local state
       setPipelineClients((prevClients) =>
         prevClients.filter((c) => c.id !== clientId)
@@ -487,11 +479,23 @@ export default function TaxPrepPipeline() {
 
   const handleStatusChange = (clientId: string, newStatus: string) => {
     if (newStatus === "File Return") {
-      // File return directly without payment modal
-      handleFileReturn(clientId);
+      // Show modal to capture quoted amount
+      setSelectedClientForFiling(clientId);
+      setQuotedAmount("");
+      setShowAmountModal(true);
     } else {
       // Update status directly
       updateStatus(clientId, newStatus);
+    }
+  };
+
+  const handleAmountModalSubmit = () => {
+    if (selectedClientForFiling) {
+      const amount = quotedAmount ? parseFloat(quotedAmount) : undefined;
+      handleFileReturn(selectedClientForFiling, amount);
+      setShowAmountModal(false);
+      setSelectedClientForFiling(null);
+      setQuotedAmount("");
     }
   };
 
@@ -892,6 +896,61 @@ export default function TaxPrepPipeline() {
                 }}
               >
                 Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Amount Modal */}
+      {showAmountModal && selectedClientForFiling && (
+        <div className="modal modal-open">
+          <div className="modal-box">
+            <h3 className="font-bold text-lg mb-4">Enter Quoted Amount</h3>
+            <p className="text-sm opacity-70 mb-4">
+              How much was quoted to{" "}
+              {pipelineClients.find((c) => c.id === selectedClientForFiling)?.fullName}?
+            </p>
+            <div className="form-control">
+              <label className="label">
+                <span className="label-text">Amount ($)</span>
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                className="input input-bordered"
+                placeholder="0.00"
+                value={quotedAmount}
+                onChange={(e) => setQuotedAmount(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    handleAmountModalSubmit();
+                  }
+                }}
+                autoFocus
+              />
+              <label className="label">
+                <span className="label-text-alt opacity-60">
+                  Leave blank if no amount was quoted
+                </span>
+              </label>
+            </div>
+            <div className="modal-action">
+              <button
+                className="btn btn-ghost"
+                onClick={() => {
+                  setShowAmountModal(false);
+                  setSelectedClientForFiling(null);
+                  setQuotedAmount("");
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn btn-primary"
+                onClick={handleAmountModalSubmit}
+              >
+                File Return
               </button>
             </div>
           </div>

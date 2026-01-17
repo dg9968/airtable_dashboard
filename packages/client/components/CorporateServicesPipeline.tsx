@@ -38,6 +38,9 @@ export default function CorporateServicesPipeline() {
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [selectedCompanyForStatus, setSelectedCompanyForStatus] = useState<string | null>(null);
+  const [showAmountModal, setShowAmountModal] = useState(false);
+  const [selectedCompanyForCompletion, setSelectedCompanyForCompletion] = useState<string | null>(null);
+  const [quotedAmount, setQuotedAmount] = useState<string>("");
 
   // Available services - these match the view names in Airtable
   const services = [
@@ -442,7 +445,7 @@ export default function CorporateServicesPipeline() {
     }
   };
 
-  const handleCompleteService = async (companyId: string) => {
+  const handleCompleteService = async (companyId: string, amount?: number) => {
     try {
       setUpdating(companyId);
       console.log('[CorporateServicesPipeline] Starting handleCompleteService for:', companyId);
@@ -455,8 +458,8 @@ export default function CorporateServicesPipeline() {
 
       console.log('[CorporateServicesPipeline] Found company:', company.companyName);
 
-      // Get billing amount from subscription if available
-      const billingAmount = company.billingAmount || null;
+      // Use provided amount, or fall back to billing amount from subscription
+      const billingAmount = amount !== undefined ? amount : (company.billingAmount || null);
       console.log('[CorporateServicesPipeline] Billing amount:', billingAmount);
 
       const requestBody = {
@@ -491,23 +494,7 @@ export default function CorporateServicesPipeline() {
 
       console.log('[CorporateServicesPipeline] Service record created successfully:', servicesRenderedData.data?.id);
 
-      // Delete the subscription record (service is now tracked in Services Rendered)
-      console.log('[CorporateServicesPipeline] Deleting subscription record');
-      const deleteResponse = await fetch(`/api/subscriptions-corporate/${companyId}`, {
-        method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
-
-      if (!deleteResponse.ok) {
-        const deleteData = await deleteResponse.json();
-        console.error('[CorporateServicesPipeline] Failed to delete subscription:', deleteData);
-        throw new Error(deleteData.error || "Failed to delete subscription");
-      }
-
-      console.log('[CorporateServicesPipeline] Subscription deleted successfully');
-
+      // Subscription will be deleted when the service is billed and recorded in ledger
       // Remove from local state
       setPipelineCompanies((prevCompanies) =>
         prevCompanies.filter((c) => c.id !== companyId)
@@ -525,11 +512,25 @@ export default function CorporateServicesPipeline() {
 
   const handleStatusChange = (companyId: string, newStatus: string) => {
     if (newStatus === "Complete Service") {
-      // Complete service directly without payment modal
-      handleCompleteService(companyId);
+      // Show modal to capture quoted amount
+      setSelectedCompanyForCompletion(companyId);
+      const company = pipelineCompanies.find((c) => c.id === companyId);
+      // Pre-fill with billing amount if available
+      setQuotedAmount(company?.billingAmount?.toString() || "");
+      setShowAmountModal(true);
     } else {
       // Update status directly
       updateStatus(companyId, newStatus);
+    }
+  };
+
+  const handleAmountModalSubmit = () => {
+    if (selectedCompanyForCompletion) {
+      const amount = quotedAmount ? parseFloat(quotedAmount) : undefined;
+      handleCompleteService(selectedCompanyForCompletion, amount);
+      setShowAmountModal(false);
+      setSelectedCompanyForCompletion(null);
+      setQuotedAmount("");
     }
   };
 
@@ -971,6 +972,61 @@ export default function CorporateServicesPipeline() {
                 }}
               >
                 Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Amount Modal */}
+      {showAmountModal && selectedCompanyForCompletion && (
+        <div className="modal modal-open">
+          <div className="modal-box">
+            <h3 className="font-bold text-lg mb-4">Enter Quoted Amount</h3>
+            <p className="text-sm opacity-70 mb-4">
+              How much was quoted to{" "}
+              {pipelineCompanies.find((c) => c.id === selectedCompanyForCompletion)?.companyName}?
+            </p>
+            <div className="form-control">
+              <label className="label">
+                <span className="label-text">Amount ($)</span>
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                className="input input-bordered"
+                placeholder="0.00"
+                value={quotedAmount}
+                onChange={(e) => setQuotedAmount(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    handleAmountModalSubmit();
+                  }
+                }}
+                autoFocus
+              />
+              <label className="label">
+                <span className="label-text-alt opacity-60">
+                  Leave blank if no amount was quoted
+                </span>
+              </label>
+            </div>
+            <div className="modal-action">
+              <button
+                className="btn btn-ghost"
+                onClick={() => {
+                  setShowAmountModal(false);
+                  setSelectedCompanyForCompletion(null);
+                  setQuotedAmount("");
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn btn-primary"
+                onClick={handleAmountModalSubmit}
+              >
+                Complete Service
               </button>
             </div>
           </div>
