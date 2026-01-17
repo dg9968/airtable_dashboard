@@ -909,7 +909,10 @@ export default function TaxPrepPipeline() {
             <h3 className="font-bold text-lg mb-4">Enter Quoted Amount</h3>
             <p className="text-sm opacity-70 mb-4">
               How much was quoted to{" "}
-              {pipelineClients.find((c) => c.id === selectedClientForFiling)?.fullName}?
+              {(() => {
+                const client = pipelineClients.find((c) => c.id === selectedClientForFiling);
+                return client ? `${client.firstName} ${client.lastName}` : '';
+              })()}?
             </p>
             <div className="form-control">
               <label className="label">
