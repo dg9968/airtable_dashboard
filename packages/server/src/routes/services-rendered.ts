@@ -111,7 +111,12 @@ app.post('/', async (c) => {
                             subscriptionRecord.fields['Name (from Services)'];
       serviceType = Array.isArray(serviceNameRaw) ? serviceNameRaw[0] : serviceNameRaw || 'Unknown Service';
 
-      const processorRaw = subscriptionRecord.fields['Processor'] ||
+      // Try to get processor name from lookup field first, then fall back to direct field
+      const processorRaw = subscriptionRecord.fields['Processor Name'] ||
+                          subscriptionRecord.fields['Processor Name (from Processor)'] ||
+                          subscriptionRecord.fields['Assigned To Name'] ||
+                          subscriptionRecord.fields['Assigned To Name (from Assigned To)'] ||
+                          subscriptionRecord.fields['Processor'] ||
                           subscriptionRecord.fields['Assigned To'];
       processor = Array.isArray(processorRaw) ? processorRaw[0] : processorRaw || 'Unassigned';
     } else {
@@ -127,7 +132,14 @@ app.post('/', async (c) => {
                             subscriptionRecord.fields['Name (from Services)'];
       serviceType = Array.isArray(serviceNameRaw) ? serviceNameRaw[0] : serviceNameRaw || 'Unknown Service';
 
-      const preparerRaw = subscriptionRecord.fields['Preparer'] ||
+      // Try to get processor name from lookup field first, then fall back to direct field
+      const preparerRaw = subscriptionRecord.fields['Preparer Name'] ||
+                         subscriptionRecord.fields['Preparer Name (from Preparer)'] ||
+                         subscriptionRecord.fields['Processor Name'] ||
+                         subscriptionRecord.fields['Processor Name (from Processor)'] ||
+                         subscriptionRecord.fields['Assigned To Name'] ||
+                         subscriptionRecord.fields['Assigned To Name (from Assigned To)'] ||
+                         subscriptionRecord.fields['Preparer'] ||
                          subscriptionRecord.fields['Processor'] ||
                          subscriptionRecord.fields['Assigned To'];
       processor = Array.isArray(preparerRaw) ? preparerRaw[0] : preparerRaw || 'Unassigned';
@@ -254,8 +266,11 @@ app.get('/', async (c) => {
       const serviceTypeRaw = record.fields['Service Type'];
       const serviceTypeStr = Array.isArray(serviceTypeRaw) ? serviceTypeRaw[0] : serviceTypeRaw;
 
-      const processorRaw = record.fields['Processor'];
-      const processorStr = Array.isArray(processorRaw) ? processorRaw[0] : processorRaw;
+      // Try to get processor name from lookup field first, then fall back to direct field
+      const processorNameRaw = record.fields['Processor Name'] ||
+                               record.fields['Processor Name (from Processor)'] ||
+                               record.fields['Processor'];
+      const processorStr = Array.isArray(processorNameRaw) ? processorNameRaw[0] : processorNameRaw;
 
       return {
         id: record.id,
