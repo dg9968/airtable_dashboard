@@ -87,7 +87,8 @@ export default function CorporateClientIntake() {
     "Payroll",
     "Bookkeeping",
     "Annual Report",
-    "1099 Filing"
+    "1099 Filing",
+    "Corporate Cases"
   ];
 
   // Form data

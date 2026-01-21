@@ -52,7 +52,8 @@ export default function CorporateServicesPipeline() {
     { name: "Sales Tax Monthly", view: "Monthly Sales Tax" },
     { name: "Sales Tax Quarterly", view: "Quarterly Sales Tax" },
     { name: "Registered Agent", view: "Registered Agent" },
-    { name: "1099 Filing", view: "1099 Filing" }
+    { name: "1099 Filing", view: "1099 Filing" },
+    { name: "Corporate Cases", view: "Corporate Cases" }
   ];
 
   // Fetch processors from Teams table
