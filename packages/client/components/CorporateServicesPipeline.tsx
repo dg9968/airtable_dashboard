@@ -41,6 +41,7 @@ export default function CorporateServicesPipeline() {
   const [showAmountModal, setShowAmountModal] = useState(false);
   const [selectedCompanyForCompletion, setSelectedCompanyForCompletion] = useState<string | null>(null);
   const [quotedAmount, setQuotedAmount] = useState<string>("");
+  const [billingNote, setBillingNote] = useState<string>("");
 
   // Available services - these match the view names in Airtable
   const services = [
@@ -445,7 +446,7 @@ export default function CorporateServicesPipeline() {
     }
   };
 
-  const handleCompleteService = async (companyId: string, amount?: number) => {
+  const handleCompleteService = async (companyId: string, amount?: number, note?: string) => {
     try {
       setUpdating(companyId);
       console.log('[CorporateServicesPipeline] Starting handleCompleteService for:', companyId);
@@ -467,6 +468,7 @@ export default function CorporateServicesPipeline() {
         subscriptionType: "corporate",
         serviceDate: new Date().toISOString(),
         amountCharged: billingAmount,
+        notes: note || undefined,
       };
 
       console.log('[CorporateServicesPipeline] Sending POST request to /api/services-rendered');
@@ -512,11 +514,12 @@ export default function CorporateServicesPipeline() {
 
   const handleStatusChange = (companyId: string, newStatus: string) => {
     if (newStatus === "Complete Service") {
-      // Show modal to capture quoted amount
+      // Show modal to capture quoted amount and billing note
       setSelectedCompanyForCompletion(companyId);
       const company = pipelineCompanies.find((c) => c.id === companyId);
       // Pre-fill with billing amount if available
       setQuotedAmount(company?.billingAmount?.toString() || "");
+      setBillingNote("");
       setShowAmountModal(true);
     } else {
       // Update status directly
@@ -527,10 +530,12 @@ export default function CorporateServicesPipeline() {
   const handleAmountModalSubmit = () => {
     if (selectedCompanyForCompletion) {
       const amount = quotedAmount ? parseFloat(quotedAmount) : undefined;
-      handleCompleteService(selectedCompanyForCompletion, amount);
+      const note = billingNote.trim() || undefined;
+      handleCompleteService(selectedCompanyForCompletion, amount, note);
       setShowAmountModal(false);
       setSelectedCompanyForCompletion(null);
       setQuotedAmount("");
+      setBillingNote("");
     }
   };
 
@@ -982,14 +987,14 @@ export default function CorporateServicesPipeline() {
       {showAmountModal && selectedCompanyForCompletion && (
         <div className="modal modal-open">
           <div className="modal-box">
-            <h3 className="font-bold text-lg mb-4">Enter Quoted Amount</h3>
+            <h3 className="font-bold text-lg mb-4">Complete Service Details</h3>
             <p className="text-sm opacity-70 mb-4">
               How much was quoted to{" "}
               {pipelineCompanies.find((c) => c.id === selectedCompanyForCompletion)?.companyName}?
             </p>
-            <div className="form-control">
+            <div className="form-control mb-4">
               <label className="label">
-                <span className="label-text">Amount ($)</span>
+                <span className="label-text">Quoted Amount ($)</span>
               </label>
               <input
                 type="number"
@@ -998,11 +1003,6 @@ export default function CorporateServicesPipeline() {
                 placeholder="0.00"
                 value={quotedAmount}
                 onChange={(e) => setQuotedAmount(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    handleAmountModalSubmit();
-                  }
-                }}
                 autoFocus
               />
               <label className="label">
@@ -1011,6 +1011,23 @@ export default function CorporateServicesPipeline() {
                 </span>
               </label>
             </div>
+            <div className="form-control">
+              <label className="label">
+                <span className="label-text">Billing Note (Optional)</span>
+              </label>
+              <textarea
+                className="textarea textarea-bordered"
+                rows={3}
+                placeholder="Add any notes for the billing department..."
+                value={billingNote}
+                onChange={(e) => setBillingNote(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && e.ctrlKey) {
+                    handleAmountModalSubmit();
+                  }
+                }}
+              />
+            </div>
             <div className="modal-action">
               <button
                 className="btn btn-ghost"
@@ -1018,6 +1035,7 @@ export default function CorporateServicesPipeline() {
                   setShowAmountModal(false);
                   setSelectedCompanyForCompletion(null);
                   setQuotedAmount("");
+                  setBillingNote("");
                 }}
               >
                 Cancel

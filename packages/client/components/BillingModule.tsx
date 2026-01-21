@@ -510,6 +510,7 @@ export default function BillingModule() {
                             <th>Processor</th>
                             <th>Service Date</th>
                             <th>Amount</th>
+                            <th>Notes</th>
                             <th>Status</th>
                             <th>Actions</th>
                           </tr>
@@ -546,6 +547,17 @@ export default function BillingModule() {
                                   </div>
                                 ) : (
                                   `$${service.amount?.toLocaleString() || '0'}`
+                                )}
+                              </td>
+                              <td>
+                                {service.notes ? (
+                                  <div className="tooltip tooltip-left" data-tip={service.notes}>
+                                    <span className="text-sm text-base-content/70 line-clamp-2 max-w-xs cursor-help">
+                                      {service.notes}
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <span className="text-sm text-base-content/40 italic">No notes</span>
                                 )}
                               </td>
                               <td>

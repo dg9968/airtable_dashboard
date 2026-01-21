@@ -39,6 +39,7 @@ export default function TaxPrepPipeline() {
   const [showAmountModal, setShowAmountModal] = useState(false);
   const [selectedClientForFiling, setSelectedClientForFiling] = useState<string | null>(null);
   const [quotedAmount, setQuotedAmount] = useState<string>("");
+  const [billingNote, setBillingNote] = useState<string>("");
 
   // Fetch tax preparers from Teams table
   useEffect(() => {
@@ -432,7 +433,7 @@ export default function TaxPrepPipeline() {
     }
   };
 
-  const handleFileReturn = async (clientId: string, amount?: number) => {
+  const handleFileReturn = async (clientId: string, amount?: number, note?: string) => {
     try {
       setUpdating(clientId);
 
@@ -453,6 +454,7 @@ export default function TaxPrepPipeline() {
           subscriptionType: "personal",
           serviceDate: new Date().toISOString(),
           amountCharged: amount,
+          notes: note || undefined,
         }),
       });
 
@@ -479,9 +481,10 @@ export default function TaxPrepPipeline() {
 
   const handleStatusChange = (clientId: string, newStatus: string) => {
     if (newStatus === "File Return") {
-      // Show modal to capture quoted amount
+      // Show modal to capture quoted amount and billing note
       setSelectedClientForFiling(clientId);
       setQuotedAmount("");
+      setBillingNote("");
       setShowAmountModal(true);
     } else {
       // Update status directly
@@ -492,10 +495,12 @@ export default function TaxPrepPipeline() {
   const handleAmountModalSubmit = () => {
     if (selectedClientForFiling) {
       const amount = quotedAmount ? parseFloat(quotedAmount) : undefined;
-      handleFileReturn(selectedClientForFiling, amount);
+      const note = billingNote.trim() || undefined;
+      handleFileReturn(selectedClientForFiling, amount, note);
       setShowAmountModal(false);
       setSelectedClientForFiling(null);
       setQuotedAmount("");
+      setBillingNote("");
     }
   };
 
@@ -906,7 +911,7 @@ export default function TaxPrepPipeline() {
       {showAmountModal && selectedClientForFiling && (
         <div className="modal modal-open">
           <div className="modal-box">
-            <h3 className="font-bold text-lg mb-4">Enter Quoted Amount</h3>
+            <h3 className="font-bold text-lg mb-4">Complete Service Details</h3>
             <p className="text-sm opacity-70 mb-4">
               How much was quoted to{" "}
               {(() => {
@@ -914,9 +919,9 @@ export default function TaxPrepPipeline() {
                 return client ? `${client.firstName} ${client.lastName}` : '';
               })()}?
             </p>
-            <div className="form-control">
+            <div className="form-control mb-4">
               <label className="label">
-                <span className="label-text">Amount ($)</span>
+                <span className="label-text">Quoted Amount ($)</span>
               </label>
               <input
                 type="number"
@@ -925,11 +930,6 @@ export default function TaxPrepPipeline() {
                 placeholder="0.00"
                 value={quotedAmount}
                 onChange={(e) => setQuotedAmount(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    handleAmountModalSubmit();
-                  }
-                }}
                 autoFocus
               />
               <label className="label">
@@ -938,6 +938,23 @@ export default function TaxPrepPipeline() {
                 </span>
               </label>
             </div>
+            <div className="form-control">
+              <label className="label">
+                <span className="label-text">Billing Note (Optional)</span>
+              </label>
+              <textarea
+                className="textarea textarea-bordered"
+                rows={3}
+                placeholder="Add any notes for the billing department..."
+                value={billingNote}
+                onChange={(e) => setBillingNote(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && e.ctrlKey) {
+                    handleAmountModalSubmit();
+                  }
+                }}
+              />
+            </div>
             <div className="modal-action">
               <button
                 className="btn btn-ghost"
@@ -945,6 +962,7 @@ export default function TaxPrepPipeline() {
                   setShowAmountModal(false);
                   setSelectedClientForFiling(null);
                   setQuotedAmount("");
+                  setBillingNote("");
                 }}
               >
                 Cancel
