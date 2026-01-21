@@ -28,6 +28,9 @@ import teamsRoutes from './routes/teams';
 import ledgerRoutes from './routes/ledger';
 import businessStatsRoutes from './routes/business-stats';
 import servicesRenderedRoutes from './routes/services-rendered';
+import messagesRoutes from './routes/messages';
+import communicationsCorporateRoutes from './routes/communications-corporate';
+import communicationsWebhookRoutes from './routes/communications-webhook';
 
 const app = new Hono();
 
@@ -84,6 +87,9 @@ app.route('/api/teams', teamsRoutes);
 app.route('/api/ledger', ledgerRoutes);
 app.route('/api/business-stats', businessStatsRoutes);
 app.route('/api/services-rendered', servicesRenderedRoutes);
+app.route('/api/messages', messagesRoutes);
+app.route('/api/communications-corporate', communicationsCorporateRoutes);
+app.route('/api/communications-webhook', communicationsWebhookRoutes);
 
 // 404 handler
 app.notFound((c) => {

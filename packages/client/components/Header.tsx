@@ -64,6 +64,9 @@ export default function Header() {
                     <li>
                       <Link href="/ledger">Ledger</Link>
                     </li>
+                    <li>
+                      <Link href="/communications">Communications</Link>
+                    </li>
                   </>
                 )}
                 {(session.user as any).role === "admin" && (
@@ -131,6 +134,11 @@ export default function Header() {
                   <li>
                     <Link href="/ledger" className="btn btn-ghost">
                       Ledger
+                    </Link>
+                  </li>
+                  <li>
+                    <Link href="/communications" className="btn btn-ghost">
+                      Communications
                     </Link>
                   </li>
                 </>
