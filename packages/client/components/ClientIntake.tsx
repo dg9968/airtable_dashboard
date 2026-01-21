@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import DocumentChecklist from "./DocumentChecklist";
 
 // Types
 interface PersonalRecord {
@@ -12,9 +11,9 @@ interface PersonalRecord {
   fields: {
     "First Name"?: string;
     "Last Name"?: string;
-    "Full Name"?: string; // Read-only computed field
-    "Last modified time"?: string; // Read-only computed field
-    "last name first name"?: string; // Read-only computed field
+    "Full Name"?: string;
+    "Last modified time"?: string;
+    "last name first name"?: string;
     SSN?: string;
     "Date of Birth"?: string;
     Occupation?: string;
@@ -45,76 +44,21 @@ interface PersonalRecord {
   createdTime: string;
 }
 
-interface DocumentChecklistItem {
-  category: string;
-  items: {
-    label: string;
-    field: string;
-    type: "checkbox" | "number";
-  }[];
-}
-
 export default function ClientIntake() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
+
   const [searchTerm, setSearchTerm] = useState("");
   const [searchResults, setSearchResults] = useState<PersonalRecord[]>([]);
-  const [selectedClient, setSelectedClient] = useState<PersonalRecord | null>(
-    null
-  );
+  const [selectedClient, setSelectedClient] = useState<PersonalRecord | null>(null);
   const [isNewClient, setIsNewClient] = useState(true);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [activeSection, setActiveSection] = useState("primary-taxpayer");
-
-  // Check authentication and authorization
-  useEffect(() => {
-    if (status === "loading") return; // Still loading
-
-    if (!session) {
-      router.push("/auth/signin");
-      return;
-    }
-
-    // Check if user has staff or admin role
-    const userRole = (session.user as any)?.role;
-    if (userRole !== "staff" && userRole !== "admin") {
-      router.push("/"); // Redirect to home if not authorized
-      return;
-    }
-  }, [session, status, router]);
-
-  // Form navigation sections
-  const formSections = [
-    { id: "tax-info", label: "Tax Information", icon: "📋" },
-    { id: "primary-taxpayer", label: "Primary Taxpayer", icon: "👤" },
-    { id: "spouse-info", label: "Spouse Information", icon: "💑" },
-    { id: "contact-info", label: "Contact Information", icon: "📞" },
-    { id: "bank-info", label: "Bank Information", icon: "🏦" },
-    { id: "prior-year", label: "Prior Year Info", icon: "📅" },
-    { id: "document-checklist", label: "Document Checklist", icon: "📄" },
-    { id: "tax-prep-pipeline", label: "Tax Prep Pipeline", icon: "📊" },
-  ];
-
-  // Smooth scroll to section
-  const scrollToSection = (sectionId: string) => {
-    const element = document.getElementById(sectionId);
-    if (element) {
-      const headerOffset = 100;
-      const elementPosition = element.getBoundingClientRect().top;
-      const offsetPosition =
-        elementPosition + window.pageYOffset - headerOffset;
-
-      window.scrollTo({
-        top: offsetPosition,
-        behavior: "smooth",
-      });
-      setActiveSection(sectionId);
-    }
-  };
+  const [activeSection, setActiveSection] = useState("tax-info");
+  const [addingToPipeline, setAddingToPipeline] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState<PersonalRecord["fields"]>({
@@ -124,22 +68,31 @@ export default function ClientIntake() {
     "Account Type": "Checking",
   });
 
-  // Document checklist state
-  const [documentChecklist, setDocumentChecklist] = useState<
-    Record<string, boolean | number>
-  >({});
+  // Form navigation sections
+  const formSections = [
+    { id: "tax-info", label: "Tax Information", icon: "📋" },
+    { id: "primary-taxpayer", label: "Primary Taxpayer", icon: "👤" },
+    { id: "spouse-info", label: "Spouse Information", icon: "💑" },
+    { id: "contact-info", label: "Contact Information", icon: "📞" },
+    { id: "bank-info", label: "Bank Information", icon: "🏦" },
+    { id: "prior-year", label: "Prior Year Info", icon: "📅" },
+  ];
 
-  // Tax prep pipeline state - fetched from Airtable
-  const [pipelineClients, setPipelineClients] = useState<
-    Array<{
-      id: string;
-      personalId?: string;
-      firstName: string;
-      lastName: string;
-      phone: string;
-      addedAt: string;
-    }>
-  >([]);
+  // Check authentication and authorization
+  useEffect(() => {
+    if (status === "loading") return;
+
+    if (!session) {
+      router.push("/auth/signin");
+      return;
+    }
+
+    const userRole = (session.user as any)?.role;
+    if (userRole !== "staff" && userRole !== "admin") {
+      router.push("/");
+      return;
+    }
+  }, [session, status, router]);
 
   // Load client data if 'id' query parameter is present
   useEffect(() => {
@@ -160,21 +113,9 @@ export default function ClientIntake() {
             setSelectedClient(client);
             setFormData(client.fields);
             setIsNewClient(false);
-            const fullName =
-              client.fields["Full Name"] ||
-              `${client.fields["First Name"] || ""} ${
-                client.fields["Last Name"] || ""
-              }`.trim();
-            setSuccessMessage(`Loaded client: ${fullName}`);
-            setTimeout(() => setSuccessMessage(null), 3000);
-          } else {
-            setError(data.error || "Failed to load client");
-            setTimeout(() => setError(null), 3000);
           }
         } catch (err) {
-          setError(
-            err instanceof Error ? err.message : "Failed to load client"
-          );
+          setError(err instanceof Error ? err.message : "Failed to load client");
           setTimeout(() => setError(null), 3000);
         } finally {
           setLoading(false);
@@ -200,56 +141,6 @@ export default function ClientIntake() {
     }
   }, [selectedClient]);
 
-  // Fetch pipeline from Airtable on mount
-  useEffect(() => {
-    const fetchPipeline = async () => {
-      try {
-        const response = await fetch("/api/subscriptions-personal");
-        const data = await response.json();
-
-        if (data.success) {
-          // Transform Airtable records to pipeline format
-          const pipeline = data.data.map((record: any) => {
-            // Full Name is a lookup field in Subscriptions Personal
-            const fullName = record.fields["Full Name"];
-            const fullNameStr = Array.isArray(fullName)
-              ? fullName[0]
-              : fullName || "";
-
-            // Split Full Name into First Name and Last Name
-            const nameParts = fullNameStr.split(" ");
-            const firstName = nameParts[0] || "";
-            const lastName = nameParts.slice(1).join(" ") || "";
-
-            // Get phone - it's a lookup field with emoji
-            const phone = record.fields["📞Phone number"] || "";
-            const phoneStr = Array.isArray(phone) ? phone[0] : phone;
-
-            // Get the Personal ID from the "Last Name" link field (which links to Personal table)
-            const personalId = record.fields["Last Name"];
-            const personalIdStr = Array.isArray(personalId)
-              ? personalId[0]
-              : personalId;
-
-            return {
-              id: record.id,
-              personalId: personalIdStr,
-              firstName,
-              lastName,
-              phone: phoneStr,
-              addedAt: record.createdTime,
-            };
-          });
-          setPipelineClients(pipeline);
-        }
-      } catch (error) {
-        console.error("Failed to fetch pipeline data:", error);
-      }
-    };
-
-    fetchPipeline();
-  }, []);
-
   // Search for existing clients
   const handleSearch = async () => {
     if (searchTerm.length < 2) {
@@ -259,18 +150,18 @@ export default function ClientIntake() {
 
     try {
       setLoading(true);
-      const response = await fetch(
-        `/api/personal/search?q=${encodeURIComponent(searchTerm)}`
-      );
+      const response = await fetch(`/api/personal/search?q=${encodeURIComponent(searchTerm)}`);
       const data = await response.json();
 
       if (data.success) {
         setSearchResults(data.data);
       } else {
         setError(data.error || "Failed to search clients");
+        setTimeout(() => setError(null), 3000);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to search clients");
+      setTimeout(() => setError(null), 3000);
     } finally {
       setLoading(false);
     }
@@ -283,13 +174,6 @@ export default function ClientIntake() {
     setIsNewClient(false);
     setSearchResults([]);
     setSearchTerm("");
-    const fullName =
-      client.fields["Full Name"] ||
-      `${client.fields["First Name"] || ""} ${
-        client.fields["Last Name"] || ""
-      }`.trim();
-    setSuccessMessage(`Loaded client: ${fullName}`);
-    setTimeout(() => setSuccessMessage(null), 3000);
   };
 
   // Reset to new client
@@ -351,20 +235,88 @@ export default function ClientIntake() {
         setTimeout(() => setSuccessMessage(null), 3000);
       } else {
         setError(data.error || "Failed to save client");
+        setTimeout(() => setError(null), 3000);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save client");
+      setTimeout(() => setError(null), 3000);
     } finally {
       setSaving(false);
     }
   };
 
+  // Add client to tax prep pipeline
+  const handleAddToPipeline = async () => {
+    if (!selectedClient) {
+      setError("Please save the client first before adding to pipeline");
+      setTimeout(() => setError(null), 3000);
+      return;
+    }
+
+    try {
+      setAddingToPipeline(true);
+
+      // Fetch all personal services to find "Tax Prep Pipeline" service ID
+      const servicesResponse = await fetch("/api/services-personal");
+      const servicesData = await servicesResponse.json();
+
+      if (!servicesData.success) {
+        throw new Error("Failed to fetch personal services");
+      }
+
+      // Find the Tax Prep Pipeline service
+      const taxPrepService = servicesData.services?.find(
+        (service: any) => service.name === "Tax Prep Pipeline"
+      );
+
+      if (!taxPrepService) {
+        setError(
+          "Tax Prep Pipeline service not found in Personal Services table. Please create it first."
+        );
+        setTimeout(() => setError(null), 5000);
+        setAddingToPipeline(false);
+        return;
+      }
+
+      // Create the junction record in Subscriptions Personal
+      const subscriptionResponse = await fetch("/api/subscriptions-personal", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          personalId: selectedClient.id,
+          serviceId: taxPrepService.id,
+        }),
+      });
+
+      const subscriptionData = await subscriptionResponse.json();
+
+      if (!subscriptionData.success) {
+        throw new Error(
+          subscriptionData.error || "Failed to create subscription"
+        );
+      }
+
+      const fullName = `${formData["First Name"] || ""} ${formData["Last Name"] || ""}`.trim();
+      setSuccessMessage(
+        `✅ ${fullName} added to Tax Prep Pipeline!`
+      );
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to add to pipeline"
+      );
+      setTimeout(() => setError(null), 5000);
+    } finally {
+      setAddingToPipeline(false);
+    }
+  };
+
   // Format phone number as (XXX) XXX-XXXX
   const formatPhoneNumber = (value: string) => {
-    // Remove all non-numeric characters
     const phoneNumber = value.replace(/\D/g, "");
 
-    // Format based on length
     if (phoneNumber.length === 0) {
       return "";
     } else if (phoneNumber.length <= 3) {
@@ -372,19 +324,14 @@ export default function ClientIntake() {
     } else if (phoneNumber.length <= 6) {
       return `(${phoneNumber.slice(0, 3)}) ${phoneNumber.slice(3)}`;
     } else {
-      return `(${phoneNumber.slice(0, 3)}) ${phoneNumber.slice(
-        3,
-        6
-      )}-${phoneNumber.slice(6, 10)}`;
+      return `(${phoneNumber.slice(0, 3)}) ${phoneNumber.slice(3, 6)}-${phoneNumber.slice(6, 10)}`;
     }
   };
 
   // Format SSN as XXX-XX-XXXX
   const formatSSN = (value: string) => {
-    // Remove all non-numeric characters
     const ssn = value.replace(/\D/g, "");
 
-    // Format based on length
     if (ssn.length === 0) {
       return "";
     } else if (ssn.length <= 3) {
@@ -404,8 +351,7 @@ export default function ClientIntake() {
     }));
   };
 
-  // Show loading while checking authentication
-  if (status === "loading") {
+  if (status === "loading" || loading) {
     return (
       <div className="min-h-screen bg-base-200 flex items-center justify-center">
         <div className="text-center">
@@ -416,1702 +362,694 @@ export default function ClientIntake() {
     );
   }
 
-  // Don't render if not authenticated (will redirect)
-  if (!session) {
-    return null;
-  }
-
-  // Don't render if not authorized (will redirect)
-  const userRole = (session.user as any)?.role;
-  if (userRole !== "staff" && userRole !== "admin") {
-    return null;
-  }
-
-  // Add client to tax prep pipeline
-  const handleAddToPipeline = async () => {
-    const firstName = formData["First Name"];
-    const lastName = formData["Last Name"];
-    const phone = formData["📞Phone number"];
-
-    if (!firstName || !phone) {
-      setError(
-        "Please enter both First Name and Phone Number before adding to pipeline"
-      );
-      setTimeout(() => setError(null), 3000);
-      return;
-    }
-
-    // TypeScript assertion - we've already checked these exist above
-    const validFirstName = firstName as string;
-    const validLastName = lastName || "";
-    const validPhone = phone as string;
-
-    // If it's a new client, save it first
-    if (isNewClient || !selectedClient?.id) {
-      try {
-        setSaving(true);
-        setError(null);
-
-        const url = "/api/personal";
-
-        // Filter out computed fields that Airtable doesn't accept
-        const {
-          "Full Name": _fullName,
-          "Last modified time": _lastModified,
-          "last name first name": _lastNameFirstName,
-          ...fieldsToSave
-        } = formData;
-
-        const response = await fetch(url, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ fields: fieldsToSave }),
-        });
-
-        const data = await response.json();
-
-        if (!data.success) {
-          setError(data.error || "Failed to save client");
-          setSaving(false);
-          return;
-        }
-
-        // Update the selected client with the new record
-        const newClient = {
-          id: data.data.id,
-          fields: data.data.fields,
-          createdTime: new Date().toISOString(),
-        };
-        setSelectedClient(newClient);
-        setIsNewClient(false);
-        setSuccessMessage("Client created successfully!");
-        setTimeout(() => setSuccessMessage(null), 3000);
-
-        // Continue with the pipeline addition using the new client ID
-        await addToPipelineWithId(
-          newClient.id,
-          validFirstName,
-          validLastName,
-          validPhone
-        );
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to save client");
-        setSaving(false);
-      }
-      return;
-    }
-
-    // Client already exists, add to pipeline
-    await addToPipelineWithId(
-      selectedClient.id,
-      validFirstName,
-      validLastName,
-      validPhone
-    );
-  };
-
-  // Helper function to add client to pipeline with a given ID
-  const addToPipelineWithId = async (
-    clientId: string,
-    firstName: string,
-    lastName: string,
-    phone: string
-  ) => {
-    // Check if already in pipeline by client ID or phone number
-    const existingClient = pipelineClients.find((client) => {
-      const matchById = client.personalId && client.personalId === clientId;
-      const matchByPhone = client.phone && phone && client.phone === phone;
-      return matchById || matchByPhone;
-    });
-
-    if (existingClient) {
-      const addedDate = existingClient.addedAt
-        ? new Date(existingClient.addedAt).toLocaleString("en-US", {
-            year: "numeric",
-            month: "long",
-            day: "numeric",
-            hour: "2-digit",
-            minute: "2-digit",
-          })
-        : "Unknown date";
-
-      setError(
-        `⚠️ Client "${firstName} ${lastName}" is already in the Tax Prep Pipeline. Originally added on: ${addedDate}`
-      );
-      setTimeout(() => setError(null), 6000);
-      setSaving(false);
-      return;
-    }
-
-    try {
-      setSaving(true);
-
-      // First, fetch all personal services to find "Tax Prep Pipeline" service ID
-      const servicesResponse = await fetch("/api/services-personal");
-      const servicesData = await servicesResponse.json();
-
-      if (!servicesData.success) {
-        throw new Error("Failed to fetch personal services");
-      }
-
-      // Find the Tax Prep Pipeline service
-      const taxPrepService = servicesData.services?.find(
-        (service: any) => service.name === "Tax Prep Pipeline"
-      );
-
-      if (!taxPrepService) {
-        setError(
-          "Tax Prep Pipeline service not found in Personal Services table. Please create it first."
-        );
-        setTimeout(() => setError(null), 5000);
-        setSaving(false);
-        return;
-      }
-
-      // Create the junction record in Subscriptions Personal
-      const subscriptionResponse = await fetch("/api/subscriptions-personal", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          personalId: clientId,
-          serviceId: taxPrepService.id,
-        }),
-      });
-
-      const subscriptionData = await subscriptionResponse.json();
-
-      if (!subscriptionData.success) {
-        throw new Error(
-          subscriptionData.error || "Failed to create subscription"
-        );
-      }
-
-      // Refresh pipeline from Airtable
-      const pipelineResponse = await fetch("/api/subscriptions-personal");
-      const pipelineData = await pipelineResponse.json();
-
-      if (pipelineData.success) {
-        const pipeline = pipelineData.data.map((record: any) => {
-          // Full Name is a lookup field in Subscriptions Personal
-          const fullName = record.fields["Full Name"];
-          const fullNameStr = Array.isArray(fullName)
-            ? fullName[0]
-            : fullName || "";
-
-          // Split Full Name into First Name and Last Name
-          const nameParts = fullNameStr.split(" ");
-          const firstName = nameParts[0] || "";
-          const lastName = nameParts.slice(1).join(" ") || "";
-
-          // Get phone - it's a lookup field with emoji
-          const phone = record.fields["📞Phone number"] || "";
-          const phoneStr = Array.isArray(phone) ? phone[0] : phone;
-
-          // Get the Personal ID from the "Last Name" link field (which links to Personal table)
-          const personalId = record.fields["Last Name"];
-          const personalIdStr = Array.isArray(personalId)
-            ? personalId[0]
-            : personalId;
-
-          return {
-            id: record.id,
-            personalId: personalIdStr,
-            firstName,
-            lastName,
-            phone: phoneStr,
-            addedAt: record.createdTime,
-          };
-        });
-        setPipelineClients(pipeline);
-      }
-
-      const fullName = `${firstName} ${lastName}`.trim();
-      setSuccessMessage(
-        `✅ ${fullName} added to Tax Prep Pipeline in Airtable!`
-      );
-      setTimeout(() => setSuccessMessage(null), 3000);
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to add to pipeline"
-      );
-      setTimeout(() => setError(null), 5000);
-    } finally {
-      setSaving(false);
-    }
-  };
-
   return (
     <div className="min-h-screen bg-base-200">
       {/* Header */}
-      <header className="bg-base-100 shadow-sm border-b border-base-300">
+      <div className="bg-base-100 shadow-sm border-b border-base-300">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="flex items-center justify-between">
             <div>
-              <a
-                href="/"
-                className="text-primary hover:text-primary-focus mb-2 inline-block"
-              >
-                ← Back to Dashboard
-              </a>
+              <div className="flex items-center space-x-4 mb-2">
+                <Link
+                  href="/airtable-dashboard"
+                  className="text-primary hover:text-primary-focus flex items-center space-x-2"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                  <span>Back to Business Management</span>
+                </Link>
+              </div>
               <h1 className="text-3xl font-bold text-base-content">
-                Client Intake
+                Personal Client Intake
               </h1>
-              <p className="text-base-content/70 mt-1">
-                {isNewClient
-                  ? "Create new client record"
-                  : `Editing: ${
-                      formData["Full Name"] ||
-                      `${formData["First Name"] || ""} ${
-                        formData["Last Name"] || ""
-                      }`.trim()
-                    }`}
+              <p className="text-base-content/70 mt-2">
+                {isNewClient ? "Create new personal client" : "Update personal client information"}
               </p>
             </div>
             <div className="flex gap-2">
-              {!isNewClient && selectedClient?.id && (
-                <>
-                  <Link
-                    href={`/tax-family-dashboard?id=${selectedClient.id}`}
-                    className="btn btn-outline btn-primary btn-sm"
-                  >
-                    👨‍👩‍👧‍👦 Tax Family
-                  </Link>
-                  <button
-                    onClick={async () => {
-                      const ssn = selectedClient.fields.SSN || "";
-                      const clientCode = ssn.replace(/-/g, "").slice(-4);
-                      if (clientCode) {
-                        router.push(`/document-management?clientCode=${clientCode}&personalId=${selectedClient.id}`);
-                      } else {
-                        setError("Client code not available");
-                        setTimeout(() => setError(null), 3000);
-                      }
-                    }}
-                    className="btn btn-outline btn-sm"
-                  >
-                    📄 Documents
-                  </button>
-                </>
-              )}
-              <Link
-                href="/tax-prep-pipeline"
-                className="btn btn-outline btn-sm"
-              >
-                📊 View Full Pipeline
+              <Link href="/tax-prep-pipeline" className="btn btn-accent btn-sm">
+                📊 View Pipeline
               </Link>
-              <button
-                onClick={handleNewClient}
-                className="btn btn-outline btn-sm"
-              >
+              <button onClick={handleNewClient} className="btn btn-primary btn-sm">
                 + New Client
               </button>
             </div>
           </div>
-
-          {/* Success/Error Messages */}
-          {successMessage && (
-            <div className="alert alert-success mt-4">
-              <span>✅ {successMessage}</span>
-            </div>
-          )}
-          {error && (
-            <div className="alert alert-error mt-4">
-              <span>❌ {error}</span>
-            </div>
-          )}
         </div>
-      </header>
+      </div>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Form Navigation */}
-        <div className="sticky top-0 z-10 bg-base-200 pb-4 mb-8">
-          <div className="flex gap-2 overflow-x-auto py-2">
-            {formSections.map((section) => (
-              <button
-                key={section.id}
-                onClick={() => scrollToSection(section.id)}
-                className={`btn btn-sm whitespace-nowrap ${
-                  activeSection === section.id ? "btn-primary" : "btn-ghost"
-                }`}
-              >
-                <span className="mr-1">{section.icon}</span>
-                {section.label}
-              </button>
-            ))}
-          </div>
-        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+          {/* Search/Select Client Sidebar */}
+          <div className="lg:col-span-1">
+            <div className="card bg-base-100 shadow-xl sticky top-4">
+              <div className="card-body">
+                <h3 className="card-title text-lg">Find Client</h3>
 
-        {/* Search Existing Clients */}
-        <div className="card bg-base-100 shadow-xl mb-8">
-          <div className="card-body">
-            <h2 className="card-title text-base-content">
-              Search Existing Clients
-            </h2>
-            <p className="text-base-content/60 text-sm">
-              Search by name, email, phone, or last 4 digits of SSN
-            </p>
-            <div className="flex gap-4 mt-4">
-              <input
-                type="text"
-                placeholder="Start typing to search..."
-                className="input input-bordered flex-1"
-                value={searchTerm}
-                onChange={(e) => {
-                  setSearchTerm(e.target.value);
-                  if (e.target.value.length >= 2) {
-                    handleSearch();
-                  }
-                }}
-              />
-              <button
-                onClick={handleSearch}
-                className="btn btn-primary"
-                disabled={loading || searchTerm.length < 2}
-              >
-                {loading ? "Searching..." : "Search"}
-              </button>
-            </div>
+                <div className="form-control">
+                  <input
+                    type="text"
+                    placeholder="Name, email, phone, or SSN"
+                    className="input input-bordered"
+                    value={searchTerm}
+                    onChange={(e) => {
+                      setSearchTerm(e.target.value);
+                      if (e.target.value.length >= 2) {
+                        handleSearch();
+                      }
+                    }}
+                    onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                  />
+                </div>
 
-            {/* Search Results */}
-            {searchResults.length > 0 && (
-              <div className="mt-4 space-y-2">
-                {searchResults.map((client) => (
-                  <div
-                    key={client.id}
-                    className="p-4 bg-base-200 rounded-lg hover:bg-base-300 cursor-pointer"
-                    onClick={() => handleSelectClient(client)}
-                  >
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <p className="font-semibold text-base-content">
+                <button
+                  onClick={handleSearch}
+                  disabled={loading || searchTerm.length < 2}
+                  className="btn btn-primary btn-sm"
+                >
+                  {loading ? <span className="loading loading-spinner loading-sm"></span> : "Search"}
+                </button>
+
+                {searchResults.length > 0 && (
+                  <div className="mt-4 space-y-2 max-h-96 overflow-y-auto">
+                    {searchResults.map((client) => (
+                      <div
+                        key={client.id}
+                        onClick={() => handleSelectClient(client)}
+                        className="p-3 bg-base-200 rounded-lg cursor-pointer hover:bg-base-300 transition-colors"
+                      >
+                        <p className="font-medium text-sm">
                           {client.fields["Full Name"] ||
-                            `${client.fields["First Name"] || ""} ${
-                              client.fields["Last Name"] || ""
-                            }`.trim()}
+                            `${client.fields["First Name"] || ""} ${client.fields["Last Name"] || ""}`.trim()}
                         </p>
-                        <p className="text-sm text-base-content/60">
-                          {client.fields["Email"]} •{" "}
+                        <p className="text-xs text-base-content/60">
                           {client.fields["📞Phone number"]}
                         </p>
                       </div>
-                      <div className="text-sm text-base-content/60">
-                        Tax Year: {client.fields["Tax Year"] || "N/A"}
+                    ))}
+                  </div>
+                )}
+
+                {selectedClient && (
+                  <>
+                    <div className="alert alert-info mt-4">
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" className="stroke-current shrink-0 w-6 h-6">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                      </svg>
+                      <span className="text-xs">
+                        Editing: {selectedClient.fields["Full Name"] ||
+                          `${selectedClient.fields["First Name"] || ""} ${selectedClient.fields["Last Name"] || ""}`.trim()}
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => {
+                        const ssn = selectedClient.fields.SSN || "";
+                        const clientCode = ssn.replace(/-/g, "").slice(-4);
+                        if (clientCode) {
+                          router.push(`/document-management?clientCode=${clientCode}&personalId=${selectedClient.id}`);
+                        } else {
+                          setError("Client code not available");
+                          setTimeout(() => setError(null), 3000);
+                        }
+                      }}
+                      className="btn btn-primary btn-sm w-full mt-2"
+                    >
+                      📄 Go to Documents
+                    </button>
+                    <Link
+                      href={`/tax-family-dashboard?id=${selectedClient.id}`}
+                      className="btn btn-outline btn-sm w-full mt-2"
+                    >
+                      👨‍👩‍👧‍👦 Tax Family
+                    </Link>
+                  </>
+                )}
+
+                {/* Section Navigation */}
+                <div className="divider">Sections</div>
+                <ul className="menu menu-compact">
+                  {formSections.map((section) => (
+                    <li key={section.id}>
+                      <a
+                        onClick={() => setActiveSection(section.id)}
+                        className={activeSection === section.id ? "active" : ""}
+                      >
+                        <span className="text-lg">{section.icon}</span>
+                        {section.label}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          {/* Main Form */}
+          <div className="lg:col-span-3">
+            <div className="card bg-base-100 shadow-xl">
+              <div className="card-body">
+                {/* Error/Success Messages */}
+                {error && (
+                  <div className="alert alert-error mb-4">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span>{error}</span>
+                  </div>
+                )}
+
+                {successMessage && (
+                  <div className="alert alert-success mb-4">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span>{successMessage}</span>
+                  </div>
+                )}
+
+                {/* Tax Information Section */}
+                {activeSection === "tax-info" && (
+                  <div className="space-y-4">
+                    <h2 className="text-2xl font-bold">📋 Tax Information</h2>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="form-control">
+                        <label className="label">
+                          <span className="label-text">Tax Year <span className="text-error">*</span></span>
+                        </label>
+                        <input
+                          type="text"
+                          className="input input-bordered"
+                          value={formData["Tax Year"] || ""}
+                          onChange={(e) => handleInputChange("Tax Year", e.target.value)}
+                          placeholder="2024"
+                        />
+                      </div>
+
+                      <div className="form-control">
+                        <label className="label">
+                          <span className="label-text">Filing Status <span className="text-error">*</span></span>
+                        </label>
+                        <select
+                          className="select select-bordered"
+                          value={formData["Filing Status"] || ""}
+                          onChange={(e) => handleInputChange("Filing Status", e.target.value)}
+                        >
+                          <option value="Single">Single</option>
+                          <option value="Married Filing Jointly">Married Filing Jointly</option>
+                          <option value="Married Filing Separately">Married Filing Separately</option>
+                          <option value="Head of Household">Head of Household</option>
+                          <option value="Qualifying Widow(er)">Qualifying Widow(er)</option>
+                        </select>
                       </div>
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
+                )}
 
-        {/* Client Intake Form */}
-        <div className="card bg-base-100 shadow-xl mb-8">
-          <div className="card-body">
-            <h2 className="card-title text-base-content">
-              Personal Information
-            </h2>
+                {/* Primary Taxpayer Section */}
+                {activeSection === "primary-taxpayer" && (
+                  <div className="space-y-4">
+                    <h2 className="text-2xl font-bold">👤 Primary Taxpayer</h2>
 
-            {/* Tax Information Section */}
-            <section id="tax-info" className="scroll-mt-24">
-              <div className="sticky top-0 z-10 -mx-4 md:mx-0 bg-base-100/80 backdrop-blur supports-[backdrop-filter]:bg-base-100/60">
-                <h3 className="text-xl md:text-2xl font-semibold text-base-content px-4 md:px-0 pt-3 pb-2 border-b border-base-300">
-                  📋 Tax Information
-                </h3>
-              </div>
-
-              <div className="card mt-4 border border-base-300 bg-base-100 shadow-sm">
-                <div className="card-body p-4 md:p-6">
-                  <form className="grid grid-cols-12 gap-4 md:gap-6">
-                    <div className="form-control col-span-12 md:col-span-6">
-                      <label className="label" htmlFor="taxYear">
-                        <span className="label-text text-base-content/70">
-                          Tax Year <span className="text-error">*</span>
-                        </span>
-                        <span className="label-text-alt text-base-content/50">
-                          required
-                        </span>
-                      </label>
-                      <input
-                        id="taxYear"
-                        type="text"
-                        className="input input-bordered w-full"
-                        value={formData["Tax Year"] || ""}
-                        onChange={(e) =>
-                          handleInputChange("Tax Year", e.target.value)
-                        }
-                      />
-                      <span className="label-text-alt opacity-60 mt-1">
-                        Enter the tax year for this return
-                      </span>
-                    </div>
-
-                    <div className="form-control col-span-12 md:col-span-6">
-                      <label className="label" htmlFor="filingStatus">
-                        <span className="label-text text-base-content/70">
-                          Filing Status <span className="text-error">*</span>
-                        </span>
-                        <span className="label-text-alt text-base-content/50">
-                          required
-                        </span>
-                      </label>
-                      <select
-                        id="filingStatus"
-                        className="select select-bordered w-full"
-                        value={formData["Filing Status"] || ""}
-                        onChange={(e) =>
-                          handleInputChange("Filing Status", e.target.value)
-                        }
-                      >
-                        <option value="Single">Single</option>
-                        <option value="Married Filing Jointly">
-                          Married Filing Jointly
-                        </option>
-                        <option value="Married Filing Separately">
-                          Married Filing Separately
-                        </option>
-                        <option value="Head of Household">
-                          Head of Household
-                        </option>
-                        <option value="Qualifying Widow(er)">
-                          Qualifying Widow(er)
-                        </option>
-                      </select>
-                      <span className="label-text-alt opacity-60 mt-1">
-                        Select your filing status
-                      </span>
-                    </div>
-
-                    <div className="col-span-12 flex items-center justify-end gap-2 pt-2">
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          await handleSave();
-                          scrollToSection("primary-taxpayer");
-                        }}
-                        className="btn btn-primary"
-                        disabled={saving}
-                      >
-                        {saving ? "Saving..." : "Save & Continue"}
-                      </button>
-                    </div>
-                  </form>
-                </div>
-              </div>
-            </section>
-
-            {/* Primary Taxpayer Information */}
-            <section id="primary-taxpayer" className="scroll-mt-24">
-              <div className="sticky top-0 z-10 -mx-4 md:mx-0 bg-base-100/80 backdrop-blur supports-[backdrop-filter]:bg-base-100/60">
-                <h3 className="text-xl md:text-2xl font-semibold text-base-content px-4 md:px-0 pt-3 pb-2 border-b border-base-300">
-                  Primary Taxpayer
-                </h3>
-              </div>
-
-              <div className="card mt-4 border border-base-300 bg-base-100 shadow-sm">
-                <div className="card-body p-4 md:p-6">
-                  <form className="grid grid-cols-12 gap-4 md:gap-6">
-                    <div className="form-control col-span-12 md:col-span-6">
-                      <label className="label" htmlFor="firstName">
-                        <span className="label-text text-base-content/70">
-                          First Name <span className="text-error">*</span>
-                        </span>
-                        <span className="label-text-alt text-base-content/50">
-                          as on ID
-                        </span>
-                      </label>
-                      <input
-                        id="firstName"
-                        type="text"
-                        className="input input-bordered w-full"
-                        value={formData["First Name"] || ""}
-                        onChange={(e) =>
-                          handleInputChange("First Name", e.target.value)
-                        }
-                      />
-                      <span className="label-text-alt opacity-60 mt-1">
-                        Enter legal first name
-                      </span>
-                    </div>
-
-                    <div className="form-control col-span-12 md:col-span-6">
-                      <label className="label" htmlFor="lastName">
-                        <span className="label-text text-base-content/70">
-                          Last Name <span className="text-error">*</span>
-                        </span>
-                        <span className="label-text-alt text-base-content/50">
-                          required
-                        </span>
-                      </label>
-                      <input
-                        id="lastName"
-                        type="text"
-                        className="input input-bordered w-full"
-                        value={formData["Last Name"] || ""}
-                        onChange={(e) =>
-                          handleInputChange("Last Name", e.target.value)
-                        }
-                      />
-                      <span className="label-text-alt opacity-60 mt-1">
-                        Surname / family name
-                      </span>
-                    </div>
-
-                    <div className="divider col-span-12 my-1"></div>
-
-                    <div className="form-control col-span-12 md:col-span-6">
-                      <label className="label" htmlFor="ssn">
-                        <span className="label-text text-base-content/70">
-                          Social Security Number{" "}
-                          <span className="text-error">*</span>
-                        </span>
-                        <span className="label-text-alt text-base-content/50">
-                          Format: 123-45-6789
-                        </span>
-                      </label>
-                      <input
-                        id="ssn"
-                        type="text"
-                        className="input input-bordered w-full tracking-wider"
-                        placeholder="XXX-XX-XXXX"
-                        value={formData.SSN || ""}
-                        onChange={(e) =>
-                          handleInputChange("SSN", formatSSN(e.target.value))
-                        }
-                      />
-                      <span className="label-text-alt opacity-60 mt-1">
-                        We only use this for tax filing
-                      </span>
-                    </div>
-
-                    <div className="form-control col-span-12 md:col-span-6">
-                      <label className="label" htmlFor="dob">
-                        <span className="label-text text-base-content/70">
-                          Date of Birth <span className="text-error">*</span>
-                        </span>
-                        <span className="label-text-alt text-base-content/50">
-                          MM/DD/YYYY
-                        </span>
-                      </label>
-                      <input
-                        id="dob"
-                        type="date"
-                        className="input input-bordered w-full"
-                        value={formData["Date of Birth"] || ""}
-                        onChange={(e) =>
-                          handleInputChange("Date of Birth", e.target.value)
-                        }
-                      />
-                      <span className="label-text-alt opacity-60 mt-1">
-                        Required for eligibility checks
-                      </span>
-                    </div>
-
-                    <div className="divider col-span-12 my-1"></div>
-
-                    <div className="form-control col-span-12 md:col-span-6">
-                      <label className="label" htmlFor="occupation">
-                        <span className="label-text text-base-content/70">
-                          Occupation
-                        </span>
-                        <span className="label-text-alt text-base-content/50">
-                          optional
-                        </span>
-                      </label>
-                      <input
-                        id="occupation"
-                        type="text"
-                        className="input input-bordered w-full"
-                        value={formData.Occupation || ""}
-                        onChange={(e) =>
-                          handleInputChange("Occupation", e.target.value)
-                        }
-                      />
-                      <span className="label-text-alt opacity-60 mt-1">
-                        Used for certain credits/deductions
-                      </span>
-                    </div>
-
-                    <div className="form-control col-span-12 md:col-span-6">
-                      <label className="label" htmlFor="dl">
-                        <span className="label-text text-base-content/70">
-                          Driver's License / State ID
-                        </span>
-                        <span className="label-text-alt text-base-content/50">
-                          optional
-                        </span>
-                      </label>
-                      <div className="join w-full">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="form-control">
+                        <label className="label">
+                          <span className="label-text">First Name <span className="text-error">*</span></span>
+                        </label>
                         <input
-                          id="dl"
                           type="text"
-                          className="input input-bordered join-item w-full uppercase"
+                          className="input input-bordered"
+                          value={formData["First Name"] || ""}
+                          onChange={(e) => handleInputChange("First Name", e.target.value)}
+                        />
+                      </div>
+
+                      <div className="form-control">
+                        <label className="label">
+                          <span className="label-text">Last Name <span className="text-error">*</span></span>
+                        </label>
+                        <input
+                          type="text"
+                          className="input input-bordered"
+                          value={formData["Last Name"] || ""}
+                          onChange={(e) => handleInputChange("Last Name", e.target.value)}
+                        />
+                      </div>
+
+                      <div className="form-control">
+                        <label className="label">
+                          <span className="label-text">Social Security Number <span className="text-error">*</span></span>
+                        </label>
+                        <input
+                          type="text"
+                          className="input input-bordered"
+                          placeholder="XXX-XX-XXXX"
+                          value={formData.SSN || ""}
+                          onChange={(e) => handleInputChange("SSN", formatSSN(e.target.value))}
+                        />
+                      </div>
+
+                      <div className="form-control">
+                        <label className="label">
+                          <span className="label-text">Date of Birth <span className="text-error">*</span></span>
+                        </label>
+                        <input
+                          type="date"
+                          className="input input-bordered"
+                          value={formData["Date of Birth"] || ""}
+                          onChange={(e) => handleInputChange("Date of Birth", e.target.value)}
+                        />
+                      </div>
+
+                      <div className="form-control">
+                        <label className="label">
+                          <span className="label-text">Occupation</span>
+                        </label>
+                        <input
+                          type="text"
+                          className="input input-bordered"
+                          value={formData.Occupation || ""}
+                          onChange={(e) => handleInputChange("Occupation", e.target.value)}
+                        />
+                      </div>
+
+                      <div className="form-control">
+                        <label className="label">
+                          <span className="label-text">Driver's License / State ID</span>
+                        </label>
+                        <input
+                          type="text"
+                          className="input input-bordered uppercase"
                           value={formData["Driver License"] || ""}
-                          onChange={(e) =>
-                            handleInputChange(
-                              "Driver License",
-                              e.target.value.toUpperCase()
-                            )
-                          }
+                          onChange={(e) => handleInputChange("Driver License", e.target.value.toUpperCase())}
                         />
-                        <button
-                          type="button"
-                          className="btn btn-ghost join-item tooltip"
-                          data-tip="Why we ask"
-                          onClick={() =>
-                            alert(
-                              "We use ID to e-file in some states and prevent identity theft."
-                            )
-                          }
-                        >
-                          ?
-                        </button>
-                      </div>
-                      <span className="label-text-alt opacity-60 mt-1">
-                        Uppercased automatically
-                      </span>
-                    </div>
-
-                    <div className="col-span-12">
-                      <div className="alert bg-base-200/60 border border-base-300">
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          viewBox="0 0 24 24"
-                          fill="currentColor"
-                          className="w-5 h-5"
-                        >
-                          <path
-                            fillRule="evenodd"
-                            d="M11.484 2.394a.75.75 0 0 1 1.032 0l8.25 7.875a.75.75 0 1 1-1.032 1.088L12 3.987 4.266 11.357a.75.75 0 1 1-1.032-1.088l8.25-7.875Zm.516 5.106a.75.75 0 0 1 .75.75v7.5a.75.75 0 0 1-1.5 0v-7.5a.75.75 0 0 1 .75-.75ZM12 19.5a1.125 1.125 0 1 0 0 2.25 1.125 1.125 0 0 0 0-2.25Z"
-                            clipRule="evenodd"
-                          />
-                        </svg>
-                        <div>
-                          <h4 className="font-medium">
-                            Your information is encrypted.
-                          </h4>
-                          <p className="text-sm opacity-70">
-                            We follow industry standards and never share your
-                            SSN or ID outside your return.
-                          </p>
-                        </div>
                       </div>
                     </div>
+                  </div>
+                )}
 
-                    <div className="col-span-12 flex items-center justify-end gap-2 pt-2">
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          await handleSave();
-                          const nextSection =
-                            formData["Filing Status"] ===
-                              "Married Filing Jointly" ||
-                            formData["Filing Status"] ===
-                              "Married Filing Separately"
-                              ? "spouse-info"
-                              : "contact-info";
-                          scrollToSection(nextSection);
-                        }}
-                        className="btn btn-primary"
-                        disabled={saving}
-                      >
-                        {saving ? "Saving..." : "Save & Continue"}
-                      </button>
-                    </div>
-                  </form>
-                </div>
-              </div>
-            </section>
+                {/* Spouse Information Section */}
+                {activeSection === "spouse-info" && (
+                  <div className="space-y-4">
+                    <h2 className="text-2xl font-bold">💑 Spouse Information</h2>
+                    <p className="text-base-content/70">
+                      {formData["Filing Status"] === "Married Filing Jointly" ||
+                      formData["Filing Status"] === "Married Filing Separately"
+                        ? "Please enter spouse information"
+                        : "Spouse information only required for married filing jointly or separately"}
+                    </p>
 
-            {/* Spouse Information */}
-            {(formData["Filing Status"] === "Married Filing Jointly" ||
-              formData["Filing Status"] === "Married Filing Separately") && (
-              <section id="spouse-info" className="scroll-mt-24">
-                <div className="sticky top-0 z-10 -mx-4 md:mx-0 bg-base-100/80 backdrop-blur supports-[backdrop-filter]:bg-base-100/60">
-                  <h3 className="text-xl md:text-2xl font-semibold text-base-content px-4 md:px-0 pt-3 pb-2 border-b border-base-300">
-                    💑 Spouse Information
-                  </h3>
-                </div>
-
-                <div className="card mt-4 border border-base-300 bg-base-100 shadow-sm">
-                  <div className="card-body p-4 md:p-6">
-                    <form className="grid grid-cols-12 gap-4 md:gap-6">
-                      <div className="form-control col-span-12">
-                        <label className="label" htmlFor="spouseName">
-                          <span className="label-text text-base-content/70">
-                            Spouse Full Name
-                          </span>
-                          <span className="label-text-alt text-base-content/50">
-                            optional
-                          </span>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="form-control md:col-span-2">
+                        <label className="label">
+                          <span className="label-text">Spouse Full Name</span>
                         </label>
                         <input
-                          id="spouseName"
                           type="text"
-                          className="input input-bordered w-full"
+                          className="input input-bordered"
                           value={formData["Spouse Name"] || ""}
-                          onChange={(e) =>
-                            handleInputChange("Spouse Name", e.target.value)
-                          }
+                          onChange={(e) => handleInputChange("Spouse Name", e.target.value)}
                         />
-                        <span className="label-text-alt opacity-60 mt-1">
-                          Full legal name of spouse
-                        </span>
                       </div>
 
-                      <div className="divider col-span-12 my-1"></div>
-
-                      <div className="form-control col-span-12 md:col-span-6">
-                        <label className="label" htmlFor="spouseSSN">
-                          <span className="label-text text-base-content/70">
-                            Spouse Social Security Number
-                          </span>
-                          <span className="label-text-alt text-base-content/50">
-                            Format: 123-45-6789
-                          </span>
+                      <div className="form-control">
+                        <label className="label">
+                          <span className="label-text">Spouse Social Security Number</span>
                         </label>
                         <input
-                          id="spouseSSN"
                           type="text"
-                          className="input input-bordered w-full tracking-wider"
+                          className="input input-bordered"
                           placeholder="XXX-XX-XXXX"
                           value={formData["Spouse SSN"] || ""}
-                          onChange={(e) =>
-                            handleInputChange(
-                              "Spouse SSN",
-                              formatSSN(e.target.value)
-                            )
-                          }
+                          onChange={(e) => handleInputChange("Spouse SSN", formatSSN(e.target.value))}
                         />
-                        <span className="label-text-alt opacity-60 mt-1">
-                          Required for joint filing
-                        </span>
                       </div>
 
-                      <div className="form-control col-span-12 md:col-span-6">
-                        <label className="label" htmlFor="spouseDOB">
-                          <span className="label-text text-base-content/70">
-                            Spouse Date of Birth
-                          </span>
-                          <span className="label-text-alt text-base-content/50">
-                            MM/DD/YYYY
-                          </span>
+                      <div className="form-control">
+                        <label className="label">
+                          <span className="label-text">Spouse Date of Birth</span>
                         </label>
                         <input
-                          id="spouseDOB"
                           type="date"
-                          className="input input-bordered w-full"
+                          className="input input-bordered"
                           value={formData["Spouse DOB"] || ""}
-                          onChange={(e) =>
-                            handleInputChange("Spouse DOB", e.target.value)
-                          }
+                          onChange={(e) => handleInputChange("Spouse DOB", e.target.value)}
                         />
-                        <span className="label-text-alt opacity-60 mt-1">
-                          Required for eligibility checks
-                        </span>
                       </div>
 
-                      <div className="divider col-span-12 my-1"></div>
-
-                      <div className="form-control col-span-12 md:col-span-6">
-                        <label className="label" htmlFor="spouseOccupation">
-                          <span className="label-text text-base-content/70">
-                            Spouse Occupation
-                          </span>
-                          <span className="label-text-alt text-base-content/50">
-                            optional
-                          </span>
+                      <div className="form-control">
+                        <label className="label">
+                          <span className="label-text">Spouse Occupation</span>
                         </label>
                         <input
-                          id="spouseOccupation"
                           type="text"
-                          className="input input-bordered w-full"
+                          className="input input-bordered"
                           value={formData["Spouse Occupation"] || ""}
-                          onChange={(e) =>
-                            handleInputChange(
-                              "Spouse Occupation",
-                              e.target.value
-                            )
-                          }
+                          onChange={(e) => handleInputChange("Spouse Occupation", e.target.value)}
                         />
-                        <span className="label-text-alt opacity-60 mt-1">
-                          Used for certain credits/deductions
-                        </span>
                       </div>
 
-                      <div className="form-control col-span-12 md:col-span-6">
-                        <label className="label" htmlFor="spouseDL">
-                          <span className="label-text text-base-content/70">
-                            Spouse Driver's License / State ID
-                          </span>
-                          <span className="label-text-alt text-base-content/50">
-                            optional
-                          </span>
+                      <div className="form-control">
+                        <label className="label">
+                          <span className="label-text">Spouse Driver's License / State ID</span>
                         </label>
                         <input
-                          id="spouseDL"
                           type="text"
-                          className="input input-bordered w-full uppercase"
+                          className="input input-bordered uppercase"
                           value={formData["Spouse Driver License"] || ""}
-                          onChange={(e) =>
-                            handleInputChange(
-                              "Spouse Driver License",
-                              e.target.value.toUpperCase()
-                            )
-                          }
+                          onChange={(e) => handleInputChange("Spouse Driver License", e.target.value.toUpperCase())}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Contact Information Section */}
+                {activeSection === "contact-info" && (
+                  <div className="space-y-4">
+                    <h2 className="text-2xl font-bold">📞 Contact Information</h2>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="form-control md:col-span-2">
+                        <label className="label">
+                          <span className="label-text">Mailing Address <span className="text-error">*</span></span>
+                        </label>
+                        <input
+                          type="text"
+                          className="input input-bordered"
+                          value={formData["Mailing Address"] || ""}
+                          onChange={(e) => handleInputChange("Mailing Address", e.target.value)}
+                          placeholder="123 Main Street"
+                        />
+                      </div>
+
+                      <div className="form-control">
+                        <label className="label">
+                          <span className="label-text">City <span className="text-error">*</span></span>
+                        </label>
+                        <input
+                          type="text"
+                          className="input input-bordered"
+                          value={formData.City || ""}
+                          onChange={(e) => handleInputChange("City", e.target.value)}
+                        />
+                      </div>
+
+                      <div className="form-control">
+                        <label className="label">
+                          <span className="label-text">State <span className="text-error">*</span></span>
+                        </label>
+                        <input
+                          type="text"
+                          className="input input-bordered uppercase"
+                          placeholder="CA"
+                          maxLength={2}
+                          value={formData.State || ""}
+                          onChange={(e) => handleInputChange("State", e.target.value.toUpperCase())}
+                        />
+                      </div>
+
+                      <div className="form-control">
+                        <label className="label">
+                          <span className="label-text">ZIP Code <span className="text-error">*</span></span>
+                        </label>
+                        <input
+                          type="text"
+                          className="input input-bordered"
+                          value={formData.ZIP || ""}
+                          onChange={(e) => handleInputChange("ZIP", e.target.value)}
+                        />
+                      </div>
+
+                      <div className="form-control">
+                        <label className="label">
+                          <span className="label-text">Primary Phone <span className="text-error">*</span></span>
+                        </label>
+                        <input
+                          type="tel"
+                          className="input input-bordered"
+                          placeholder="(555) 123-4567"
+                          value={formData["📞Phone number"] || ""}
+                          onChange={(e) => handleInputChange("📞Phone number", formatPhoneNumber(e.target.value))}
+                        />
+                      </div>
+
+                      <div className="form-control">
+                        <label className="label">
+                          <span className="label-text">Secondary Phone</span>
+                        </label>
+                        <input
+                          type="tel"
+                          className="input input-bordered"
+                          placeholder="(555) 123-4567"
+                          value={formData["Secondary Phone"] || ""}
+                          onChange={(e) => handleInputChange("Secondary Phone", formatPhoneNumber(e.target.value))}
+                        />
+                      </div>
+
+                      <div className="form-control">
+                        <label className="label">
+                          <span className="label-text">Email Address <span className="text-error">*</span></span>
+                        </label>
+                        <input
+                          type="email"
+                          className="input input-bordered"
+                          placeholder="your@email.com"
+                          value={formData.Email || ""}
+                          onChange={(e) => handleInputChange("Email", e.target.value)}
+                        />
+                      </div>
+
+                      <div className="form-control">
+                        <label className="label">
+                          <span className="label-text">Preferred Contact Method</span>
+                        </label>
+                        <select
+                          className="select select-bordered"
+                          value={formData["Preferred Contact"] || ""}
+                          onChange={(e) => handleInputChange("Preferred Contact", e.target.value)}
+                        >
+                          <option value="Phone">Phone</option>
+                          <option value="Email">Email</option>
+                          <option value="Text">Text</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Bank Information Section */}
+                {activeSection === "bank-info" && (
+                  <div className="space-y-4">
+                    <h2 className="text-2xl font-bold">🏦 Bank Information</h2>
+                    <div className="alert bg-info/10 border border-info/20">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 24 24"
+                        fill="currentColor"
+                        className="w-5 h-5"
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12Zm8.706-1.442c1.146-.573 2.437.463 2.126 1.706l-.709 2.836.042-.02a.75.75 0 0 1 .67 1.34l-.04.022c-1.147.573-2.438-.463-2.127-1.706l.71-2.836-.042.02a.75.75 0 1 1-.671-1.34l.041-.022ZM12 9a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                      <div>
+                        <h4 className="font-medium text-sm">For Direct Deposit/Withdrawal</h4>
+                        <p className="text-xs opacity-70">
+                          This information is used for refund direct deposit or tax payment withdrawal
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="form-control">
+                        <label className="label">
+                          <span className="label-text">Bank Name</span>
+                        </label>
+                        <input
+                          type="text"
+                          className="input input-bordered"
+                          placeholder="e.g., Chase, Bank of America"
+                          value={formData["Bank Name"] || ""}
+                          onChange={(e) => handleInputChange("Bank Name", e.target.value)}
+                        />
+                      </div>
+
+                      <div className="form-control">
+                        <label className="label">
+                          <span className="label-text">Account Type</span>
+                        </label>
+                        <select
+                          className="select select-bordered"
+                          value={formData["Account Type"] || ""}
+                          onChange={(e) => handleInputChange("Account Type", e.target.value)}
+                        >
+                          <option value="Checking">Checking</option>
+                          <option value="Savings">Savings</option>
+                        </select>
+                      </div>
+
+                      <div className="form-control">
+                        <label className="label">
+                          <span className="label-text">Routing Number</span>
+                        </label>
+                        <input
+                          type="text"
+                          className="input input-bordered"
+                          placeholder="000000000"
+                          maxLength={9}
+                          value={formData["Routing Number"] || ""}
+                          onChange={(e) => handleInputChange("Routing Number", e.target.value)}
+                        />
+                      </div>
+
+                      <div className="form-control">
+                        <label className="label">
+                          <span className="label-text">Account Number</span>
+                        </label>
+                        <input
+                          type="text"
+                          className="input input-bordered"
+                          placeholder="Enter account number"
+                          value={formData["Account Number"] || ""}
+                          onChange={(e) => handleInputChange("Account Number", e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Prior Year Information Section */}
+                {activeSection === "prior-year" && (
+                  <div className="space-y-4">
+                    <h2 className="text-2xl font-bold">📅 Prior Year Information</h2>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="form-control">
+                        <label className="label">
+                          <span className="label-text">Prior Year AGI</span>
+                        </label>
+                        <input
+                          type="text"
+                          className="input input-bordered"
+                          placeholder="$0"
+                          value={formData["Prior Year AGI"] || ""}
+                          onChange={(e) => handleInputChange("Prior Year AGI", e.target.value)}
                         />
                         <span className="label-text-alt opacity-60 mt-1">
-                          Uppercased automatically
+                          Adjusted Gross Income from last year
                         </span>
                       </div>
 
-                      <div className="col-span-12 flex items-center justify-end gap-2 pt-2">
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            await handleSave();
-                            scrollToSection("contact-info");
-                          }}
-                          className="btn btn-primary"
-                          disabled={saving}
-                        >
-                          {saving ? "Saving..." : "Save & Continue"}
-                        </button>
+                      <div className="form-control">
+                        <label className="label">
+                          <span className="label-text">Identity Protection PIN</span>
+                        </label>
+                        <input
+                          type="text"
+                          className="input input-bordered"
+                          placeholder="6-digit PIN"
+                          maxLength={6}
+                          value={formData["Identity Protection PIN"] || ""}
+                          onChange={(e) => handleInputChange("Identity Protection PIN", e.target.value)}
+                        />
+                        <span className="label-text-alt opacity-60 mt-1">
+                          If issued by the IRS
+                        </span>
                       </div>
-                    </form>
+
+                      <div className="form-control">
+                        <label className="label">
+                          <span className="label-text">Spouse Identity Protection PIN</span>
+                        </label>
+                        <input
+                          type="text"
+                          className="input input-bordered"
+                          placeholder="6-digit PIN"
+                          maxLength={6}
+                          value={formData["Spouse Identity Protection PIN"] || ""}
+                          onChange={(e) => handleInputChange("Spouse Identity Protection PIN", e.target.value)}
+                        />
+                        <span className="label-text-alt opacity-60 mt-1">
+                          If issued by the IRS for spouse
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </section>
-            )}
+                )}
 
-            {/* Contact Information */}
-            <section id="contact-info" className="scroll-mt-24">
-              <div className="sticky top-0 z-10 -mx-4 md:mx-0 bg-base-100/80 backdrop-blur supports-[backdrop-filter]:bg-base-100/60">
-                <h3 className="text-xl md:text-2xl font-semibold text-base-content px-4 md:px-0 pt-3 pb-2 border-b border-base-300">
-                  📞 Contact Information
-                </h3>
-              </div>
-
-              <div className="card mt-4 border border-base-300 bg-base-100 shadow-sm">
-                <div className="card-body p-4 md:p-6">
-                  <form className="grid grid-cols-12 gap-4 md:gap-6">
-                    <div className="form-control col-span-12">
-                      <label className="label" htmlFor="mailingAddress">
-                        <span className="label-text text-base-content/70">
-                          Mailing Address <span className="text-error">*</span>
-                        </span>
-                        <span className="label-text-alt text-base-content/50">
-                          required
-                        </span>
-                      </label>
-                      <input
-                        id="mailingAddress"
-                        type="text"
-                        className="input input-bordered w-full"
-                        value={formData["Mailing Address"] || ""}
-                        onChange={(e) =>
-                          handleInputChange("Mailing Address", e.target.value)
+                {/* Action Buttons */}
+                <div className="divider"></div>
+                <div className="flex justify-between items-center">
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        const currentIndex = formSections.findIndex(s => s.id === activeSection);
+                        if (currentIndex > 0) {
+                          setActiveSection(formSections[currentIndex - 1].id);
                         }
-                      />
-                      <span className="label-text-alt opacity-60 mt-1">
-                        Street address, apartment, suite, etc.
-                      </span>
-                    </div>
-
-                    <div className="form-control col-span-12 md:col-span-5">
-                      <label className="label" htmlFor="city">
-                        <span className="label-text text-base-content/70">
-                          City <span className="text-error">*</span>
-                        </span>
-                        <span className="label-text-alt text-base-content/50">
-                          required
-                        </span>
-                      </label>
-                      <input
-                        id="city"
-                        type="text"
-                        className="input input-bordered w-full"
-                        value={formData["City"] || ""}
-                        onChange={(e) =>
-                          handleInputChange("City", e.target.value)
-                        }
-                      />
-                    </div>
-
-                    <div className="form-control col-span-12 md:col-span-3">
-                      <label className="label" htmlFor="state">
-                        <span className="label-text text-base-content/70">
-                          State <span className="text-error">*</span>
-                        </span>
-                        <span className="label-text-alt text-base-content/50">
-                          2-letter code
-                        </span>
-                      </label>
-                      <input
-                        id="state"
-                        type="text"
-                        className="input input-bordered w-full uppercase"
-                        placeholder="CA"
-                        maxLength={2}
-                        value={formData["State"] || ""}
-                        onChange={(e) =>
-                          handleInputChange(
-                            "State",
-                            e.target.value.toUpperCase()
-                          )
-                        }
-                      />
-                    </div>
-
-                    <div className="form-control col-span-12 md:col-span-4">
-                      <label className="label" htmlFor="zip">
-                        <span className="label-text text-base-content/70">
-                          ZIP Code <span className="text-error">*</span>
-                        </span>
-                        <span className="label-text-alt text-base-content/50">
-                          5-digit code
-                        </span>
-                      </label>
-                      <input
-                        id="zip"
-                        type="text"
-                        className="input input-bordered w-full"
-                        maxLength={5}
-                        value={formData["ZIP"] || ""}
-                        onChange={(e) =>
-                          handleInputChange("ZIP", e.target.value)
-                        }
-                      />
-                    </div>
-
-                    <div className="divider col-span-12 my-1"></div>
-
-                    <div className="form-control col-span-12 md:col-span-6">
-                      <label className="label" htmlFor="primaryPhone">
-                        <span className="label-text text-base-content/70">
-                          Primary Phone <span className="text-error">*</span>
-                        </span>
-                        <span className="label-text-alt text-base-content/50">
-                          required
-                        </span>
-                      </label>
-                      <input
-                        id="primaryPhone"
-                        type="tel"
-                        className="input input-bordered w-full"
-                        placeholder="(555) 123-4567"
-                        value={formData["📞Phone number"] || ""}
-                        onChange={(e) =>
-                          handleInputChange(
-                            "📞Phone number",
-                            formatPhoneNumber(e.target.value)
-                          )
-                        }
-                      />
-                      <span className="label-text-alt opacity-60 mt-1">
-                        Best number to reach you
-                      </span>
-                    </div>
-
-                    <div className="form-control col-span-12 md:col-span-6">
-                      <label className="label" htmlFor="secondaryPhone">
-                        <span className="label-text text-base-content/70">
-                          Secondary Phone
-                        </span>
-                        <span className="label-text-alt text-base-content/50">
-                          optional
-                        </span>
-                      </label>
-                      <input
-                        id="secondaryPhone"
-                        type="tel"
-                        className="input input-bordered w-full"
-                        placeholder="(555) 123-4567"
-                        value={formData["Secondary Phone"] || ""}
-                        onChange={(e) =>
-                          handleInputChange(
-                            "Secondary Phone",
-                            formatPhoneNumber(e.target.value)
-                          )
-                        }
-                      />
-                      <span className="label-text-alt opacity-60 mt-1">
-                        Alternative contact number
-                      </span>
-                    </div>
-
-                    <div className="form-control col-span-12 md:col-span-6">
-                      <label className="label" htmlFor="email">
-                        <span className="label-text text-base-content/70">
-                          Email Address <span className="text-error">*</span>
-                        </span>
-                        <span className="label-text-alt text-base-content/50">
-                          required
-                        </span>
-                      </label>
-                      <input
-                        id="email"
-                        type="email"
-                        className="input input-bordered w-full"
-                        placeholder="your@email.com"
-                        value={formData["Email"] || ""}
-                        onChange={(e) =>
-                          handleInputChange("Email", e.target.value)
-                        }
-                      />
-                      <span className="label-text-alt opacity-60 mt-1">
-                        For document delivery and updates
-                      </span>
-                    </div>
-
-                    <div className="form-control col-span-12 md:col-span-6">
-                      <label className="label" htmlFor="preferredContact">
-                        <span className="label-text text-base-content/70">
-                          Preferred Contact Method
-                        </span>
-                        <span className="label-text-alt text-base-content/50">
-                          optional
-                        </span>
-                      </label>
-                      <select
-                        id="preferredContact"
-                        className="select select-bordered w-full"
-                        value={formData["Preferred Contact"] || ""}
-                        onChange={(e) =>
-                          handleInputChange("Preferred Contact", e.target.value)
-                        }
-                      >
-                        <option value="Phone">Phone</option>
-                        <option value="Email">Email</option>
-                        <option value="Text">Text</option>
-                      </select>
-                      <span className="label-text-alt opacity-60 mt-1">
-                        How would you like us to reach you?
-                      </span>
-                    </div>
-
-                    <div className="col-span-12 flex items-center justify-end gap-2 pt-2">
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          await handleSave();
-                          scrollToSection("bank-info");
-                        }}
-                        className="btn btn-primary"
-                        disabled={saving}
-                      >
-                        {saving ? "Saving..." : "Save & Continue"}
-                      </button>
-                    </div>
-                  </form>
-                </div>
-              </div>
-            </section>
-
-            {/* Bank Information */}
-            <section id="bank-info" className="scroll-mt-24">
-              <div className="sticky top-0 z-10 -mx-4 md:mx-0 bg-base-100/80 backdrop-blur supports-[backdrop-filter]:bg-base-100/60">
-                <h3 className="text-xl md:text-2xl font-semibold text-base-content px-4 md:px-0 pt-3 pb-2 border-b border-base-300">
-                  🏦 Bank Information
-                </h3>
-              </div>
-
-              <div className="card mt-4 border border-base-300 bg-base-100 shadow-sm">
-                <div className="card-body p-4 md:p-6">
-                  <div className="alert bg-info/10 border border-info/20 mb-4">
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      viewBox="0 0 24 24"
-                      fill="currentColor"
-                      className="w-5 h-5"
+                      }}
+                      className="btn btn-ghost btn-sm"
+                      disabled={formSections.findIndex(s => s.id === activeSection) === 0}
                     >
-                      <path
-                        fillRule="evenodd"
-                        d="M11.484 2.394a.75.75 0 0 1 1.032 0l8.25 7.875a.75.75 0 1 1-1.032 1.088L12 3.987 4.266 11.357a.75.75 0 1 1-1.032-1.088l8.25-7.875Zm.516 5.106a.75.75 0 0 1 .75.75v7.5a.75.75 0 0 1-1.5 0v-7.5a.75.75 0 0 1 .75-.75ZM12 19.5a1.125 1.125 0 1 0 0 2.25 1.125 1.125 0 0 0 0-2.25Z"
-                        clipRule="evenodd"
-                      />
-                    </svg>
-                    <div>
-                      <h4 className="font-medium text-sm">
-                        For Direct Deposit/Withdrawal
-                      </h4>
-                      <p className="text-xs opacity-70">
-                        This information is used for refund direct deposit or
-                        tax payment withdrawal
-                      </p>
-                    </div>
+                      ← Previous
+                    </button>
+                    <button
+                      onClick={() => {
+                        const currentIndex = formSections.findIndex(s => s.id === activeSection);
+                        if (currentIndex < formSections.length - 1) {
+                          setActiveSection(formSections[currentIndex + 1].id);
+                        }
+                      }}
+                      className="btn btn-ghost btn-sm"
+                      disabled={formSections.findIndex(s => s.id === activeSection) === formSections.length - 1}
+                    >
+                      Next →
+                    </button>
                   </div>
 
-                  <form className="grid grid-cols-12 gap-4 md:gap-6">
-                    <div className="form-control col-span-12 md:col-span-6">
-                      <label className="label" htmlFor="bankName">
-                        <span className="label-text text-base-content/70">
-                          Bank Name
-                        </span>
-                        <span className="label-text-alt text-base-content/50">
-                          optional
-                        </span>
-                      </label>
-                      <input
-                        id="bankName"
-                        type="text"
-                        className="input input-bordered w-full"
-                        placeholder="e.g., Chase, Bank of America"
-                        value={formData["Bank Name"] || ""}
-                        onChange={(e) =>
-                          handleInputChange("Bank Name", e.target.value)
-                        }
-                      />
-                      <span className="label-text-alt opacity-60 mt-1">
-                        Name of your bank
-                      </span>
-                    </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleSave}
+                      disabled={saving}
+                      className="btn btn-primary"
+                    >
+                      {saving ? (
+                        <>
+                          <span className="loading loading-spinner loading-sm"></span>
+                          Saving...
+                        </>
+                      ) : (
+                        <>
+                          {isNewClient ? "Create Client" : "Update Client"}
+                        </>
+                      )}
+                    </button>
 
-                    <div className="form-control col-span-12 md:col-span-6">
-                      <label className="label" htmlFor="accountType">
-                        <span className="label-text text-base-content/70">
-                          Account Type
-                        </span>
-                        <span className="label-text-alt text-base-content/50">
-                          optional
-                        </span>
-                      </label>
-                      <select
-                        id="accountType"
-                        className="select select-bordered w-full"
-                        value={formData["Account Type"] || ""}
-                        onChange={(e) =>
-                          handleInputChange("Account Type", e.target.value)
-                        }
-                      >
-                        <option value="Checking">Checking</option>
-                        <option value="Savings">Savings</option>
-                      </select>
-                      <span className="label-text-alt opacity-60 mt-1">
-                        Type of account
-                      </span>
-                    </div>
-
-                    <div className="divider col-span-12 my-1"></div>
-
-                    <div className="form-control col-span-12 md:col-span-6">
-                      <label className="label" htmlFor="routingNumber">
-                        <span className="label-text text-base-content/70">
-                          Routing Number
-                        </span>
-                        <span className="label-text-alt text-base-content/50">
-                          9 digits
-                        </span>
-                      </label>
-                      <input
-                        id="routingNumber"
-                        type="text"
-                        className="input input-bordered w-full tracking-wider"
-                        placeholder="000000000"
-                        maxLength={9}
-                        value={formData["Routing Number"] || ""}
-                        onChange={(e) =>
-                          handleInputChange("Routing Number", e.target.value)
-                        }
-                      />
-                      <span className="label-text-alt opacity-60 mt-1">
-                        Found on bottom of check
-                      </span>
-                    </div>
-
-                    <div className="form-control col-span-12 md:col-span-6">
-                      <label className="label" htmlFor="accountNumber">
-                        <span className="label-text text-base-content/70">
-                          Account Number
-                        </span>
-                        <span className="label-text-alt text-base-content/50">
-                          optional
-                        </span>
-                      </label>
-                      <input
-                        id="accountNumber"
-                        type="text"
-                        className="input input-bordered w-full tracking-wider"
-                        placeholder="Enter account number"
-                        value={formData["Account Number"] || ""}
-                        onChange={(e) =>
-                          handleInputChange("Account Number", e.target.value)
-                        }
-                      />
-                      <span className="label-text-alt opacity-60 mt-1">
-                        Your bank account number
-                      </span>
-                    </div>
-
-                    <div className="col-span-12">
-                      <div className="alert bg-base-200/60 border border-base-300">
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          viewBox="0 0 24 24"
-                          fill="currentColor"
-                          className="w-5 h-5"
-                        >
-                          <path
-                            fillRule="evenodd"
-                            d="M12 1.5a5.25 5.25 0 0 0-5.25 5.25v3a3 3 0 0 0-3 3v6.75a3 3 0 0 0 3 3h10.5a3 3 0 0 0 3-3v-6.75a3 3 0 0 0-3-3v-3c0-2.9-2.35-5.25-5.25-5.25Zm3.75 8.25v-3a3.75 3.75 0 1 0-7.5 0v3h7.5Z"
-                            clipRule="evenodd"
-                          />
-                        </svg>
-                        <div>
-                          <h4 className="font-medium">
-                            Your banking details are secure.
-                          </h4>
-                          <p className="text-sm opacity-70">
-                            We use bank-level encryption and never share your
-                            account information.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="col-span-12 flex items-center justify-end gap-2 pt-2">
+                    {!isNewClient && selectedClient && (
                       <button
-                        type="button"
-                        onClick={async () => {
-                          await handleSave();
-                          scrollToSection("prior-year");
-                        }}
-                        className="btn btn-primary"
-                        disabled={saving}
+                        onClick={handleAddToPipeline}
+                        disabled={addingToPipeline}
+                        className="btn btn-success"
                       >
-                        {saving ? "Saving..." : "Save & Continue"}
+                        {addingToPipeline ? (
+                          <>
+                            <span className="loading loading-spinner loading-sm"></span>
+                            Adding...
+                          </>
+                        ) : (
+                          <>
+                            📊 Add to Pipeline
+                          </>
+                        )}
                       </button>
-                    </div>
-                  </form>
+                    )}
+                  </div>
                 </div>
               </div>
-            </section>
-
-            {/* Prior Year Information */}
-            <section id="prior-year" className="scroll-mt-24">
-              <div className="sticky top-0 z-10 -mx-4 md:mx-0 bg-base-100/80 backdrop-blur supports-[backdrop-filter]:bg-base-100/60">
-                <h3 className="text-xl md:text-2xl font-semibold text-base-content px-4 md:px-0 pt-3 pb-2 border-b border-base-300">
-                  📅 Prior Year Information
-                </h3>
-              </div>
-
-              <div className="card mt-4 border border-base-300 bg-base-100 shadow-sm">
-                <div className="card-body p-4 md:p-6">
-                  <form className="grid grid-cols-12 gap-4 md:gap-6">
-                    <div className="form-control col-span-12 md:col-span-6">
-                      <label className="label" htmlFor="priorYearAGI">
-                        <span className="label-text text-base-content/70">
-                          Prior Year AGI
-                        </span>
-                        <span className="label-text-alt text-base-content/50">
-                          optional
-                        </span>
-                      </label>
-                      <input
-                        id="priorYearAGI"
-                        type="text"
-                        className="input input-bordered w-full"
-                        placeholder="$0"
-                        value={formData["Prior Year AGI"] || ""}
-                        onChange={(e) =>
-                          handleInputChange("Prior Year AGI", e.target.value)
-                        }
-                      />
-                      <span className="label-text-alt opacity-60 mt-1">
-                        Adjusted Gross Income from last year
-                      </span>
-                    </div>
-
-                    <div className="col-span-12 md:col-span-6">
-                      <div className="alert bg-info/10 border border-info/20 h-full flex items-center">
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          viewBox="0 0 24 24"
-                          fill="currentColor"
-                          className="w-5 h-5"
-                        >
-                          <path
-                            fillRule="evenodd"
-                            d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12Zm8.706-1.442c1.146-.573 2.437.463 2.126 1.706l-.709 2.836.042-.02a.75.75 0 0 1 .67 1.34l-.04.022c-1.147.573-2.438-.463-2.127-1.706l.71-2.836-.042.02a.75.75 0 1 1-.671-1.34l.041-.022ZM12 9a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Z"
-                            clipRule="evenodd"
-                          />
-                        </svg>
-                        <div>
-                          <p className="text-xs">
-                            Used to verify your identity with the IRS when
-                            e-filing
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="divider col-span-12 my-1"></div>
-
-                    <div className="form-control col-span-12 md:col-span-6">
-                      <label className="label" htmlFor="identityProtectionPIN">
-                        <span className="label-text text-base-content/70">
-                          Identity Protection PIN
-                        </span>
-                        <span className="label-text-alt text-base-content/50">
-                          optional
-                        </span>
-                      </label>
-                      <input
-                        id="identityProtectionPIN"
-                        type="text"
-                        className="input input-bordered w-full tracking-wider"
-                        placeholder="6-digit PIN"
-                        maxLength={6}
-                        value={formData["Identity Protection PIN"] || ""}
-                        onChange={(e) =>
-                          handleInputChange(
-                            "Identity Protection PIN",
-                            e.target.value
-                          )
-                        }
-                      />
-                      <span className="label-text-alt opacity-60 mt-1">
-                        If issued by the IRS
-                      </span>
-                    </div>
-
-                    <div className="form-control col-span-12 md:col-span-6">
-                      <label
-                        className="label"
-                        htmlFor="spouseIdentityProtectionPIN"
-                      >
-                        <span className="label-text text-base-content/70">
-                          Spouse Identity Protection PIN
-                        </span>
-                        <span className="label-text-alt text-base-content/50">
-                          optional
-                        </span>
-                      </label>
-                      <input
-                        id="spouseIdentityProtectionPIN"
-                        type="text"
-                        className="input input-bordered w-full tracking-wider"
-                        placeholder="6-digit PIN"
-                        maxLength={6}
-                        value={formData["Spouse Identity Protection PIN"] || ""}
-                        onChange={(e) =>
-                          handleInputChange(
-                            "Spouse Identity Protection PIN",
-                            e.target.value
-                          )
-                        }
-                      />
-                      <span className="label-text-alt opacity-60 mt-1">
-                        If issued by the IRS for spouse
-                      </span>
-                    </div>
-
-                    <div className="col-span-12">
-                      <div className="alert bg-warning/10 border border-warning/20">
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          viewBox="0 0 24 24"
-                          fill="currentColor"
-                          className="w-5 h-5"
-                        >
-                          <path
-                            fillRule="evenodd"
-                            d="M9.401 3.003c1.155-2 4.043-2 5.197 0l7.355 12.748c1.154 2-.29 4.5-2.599 4.5H4.645c-2.309 0-3.752-2.5-2.598-4.5L9.4 3.003ZM12 8.25a.75.75 0 0 1 .75.75v3.75a.75.75 0 0 1-1.5 0V9a.75.75 0 0 1 .75-.75Zm0 8.25a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Z"
-                            clipRule="evenodd"
-                          />
-                        </svg>
-                        <div>
-                          <h4 className="font-medium text-sm">About IP PINs</h4>
-                          <p className="text-xs opacity-70">
-                            The IRS issues Identity Protection PINs to victims
-                            of tax-related identity theft. If you have one, you
-                            must provide it to file electronically.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="col-span-12 flex items-center justify-end gap-2 pt-2">
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          await handleSave();
-                          scrollToSection("document-checklist");
-                        }}
-                        className="btn btn-primary"
-                        disabled={saving}
-                      >
-                        {saving ? "Saving..." : "Save & Continue"}
-                      </button>
-                    </div>
-                  </form>
-                </div>
-              </div>
-            </section>
-
-            {/* Action Buttons */}
-            <div className="card-actions justify-end mt-8 gap-4">
-              {!isNewClient && (
-                <button
-                  onClick={handleSave}
-                  className="btn btn-warning btn-lg"
-                  disabled={saving}
-                >
-                  {saving ? "Updating..." : "💾 Update Client Info"}
-                </button>
-              )}
-              <button
-                onClick={handleAddToPipeline}
-                className="btn btn-success btn-lg"
-                disabled={saving}
-              >
-                📋 Add to Tax Prep Pipeline
-              </button>
-              {isNewClient && (
-                <button
-                  onClick={handleSave}
-                  className="btn btn-primary btn-lg"
-                  disabled={saving}
-                >
-                  {saving ? "Saving..." : "Create Client"}
-                </button>
-              )}
-            </div>
-
-            {/* Error and Success Messages */}
-            {error && (
-              <div className="alert alert-error mt-4">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="stroke-current shrink-0 h-6 w-6"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"
-                  />
-                </svg>
-                <span>{error}</span>
-              </div>
-            )}
-            {successMessage && (
-              <div className="alert alert-success mt-4">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="stroke-current shrink-0 h-6 w-6"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                  />
-                </svg>
-                <span>{successMessage}</span>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Document Checklist and Tax Prep Pipeline - Two Column Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-          {/* Document Checklist */}
-          <div
-            id="document-checklist"
-            className="card bg-base-100 shadow-xl scroll-mt-24"
-          >
-            <div className="card-body">
-              <h2 className="card-title text-base-content mb-4">
-                Document Checklist
-              </h2>
-              <p className="text-base-content/60 mb-6">
-                Track which documents have been received for this client's tax
-                return. In the future, this will link to the document management
-                system for file uploads.
-              </p>
-              <DocumentChecklist />
-            </div>
-          </div>
-
-          {/* Tax Prep Pipeline */}
-          <div
-            id="tax-prep-pipeline"
-            className="card bg-base-100 shadow-xl scroll-mt-24"
-          >
-            <div className="card-body">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="card-title text-base-content">
-                  📋 Tax Prep Pipeline ({pipelineClients.length} clients)
-                </h2>
-                <Link
-                  href="/tax-prep-pipeline"
-                  className="btn btn-primary btn-sm"
-                >
-                  View Full Pipeline →
-                </Link>
-              </div>
-              <div className="alert alert-info mb-4 text-xs">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  className="stroke-current shrink-0 w-4 h-4"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                  ></path>
-                </svg>
-                <span>
-                  Pipeline data is synced with Airtable Subscriptions Personal
-                  table.
-                </span>
-              </div>
-              {pipelineClients.length > 0 ? (
-                <div className="overflow-x-auto">
-                  <table className="table table-zebra table-sm">
-                    <thead>
-                      <tr>
-                        <th>First Name</th>
-                        <th>Last Name</th>
-                        <th>Phone</th>
-                        <th>Added</th>
-                        <th>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {pipelineClients.map((client, index) => (
-                        <tr key={index}>
-                          <td className="font-semibold">{client.firstName}</td>
-                          <td className="font-semibold">{client.lastName}</td>
-                          <td>{client.phone}</td>
-                          <td className="text-xs">
-                            {new Date(client.addedAt).toLocaleDateString()}
-                          </td>
-                          <td>
-                            <div className="flex gap-2">
-                              <button
-                                className="btn btn-primary btn-xs"
-                                onClick={async () => {
-                                  // Navigate to document management with client pre-selected
-                                  if (client.personalId) {
-                                    try {
-                                      const response = await fetch(`/api/personal/${client.personalId}`);
-                                      const data = await response.json();
-
-                                      if (data.success) {
-                                        const ssn = data.data.fields.SSN || "";
-                                        const clientCode = ssn.replace(/-/g, "").slice(-4);
-
-                                        if (clientCode) {
-                                          router.push(`/document-management?clientCode=${clientCode}&personalId=${client.personalId}`);
-                                        } else {
-                                          setError("Client code not available");
-                                          setTimeout(() => setError(null), 3000);
-                                        }
-                                      }
-                                    } catch (err) {
-                                      console.error("Failed to load client:", err);
-                                    }
-                                  }
-                                }}
-                              >
-                                📄 Docs
-                              </button>
-                              <button
-                                className="btn btn-error btn-xs"
-                                onClick={async () => {
-                                  try {
-                                    const response = await fetch(
-                                      `/api/subscriptions-personal/${client.id}`,
-                                      { method: "DELETE" }
-                                    );
-
-                                  if (response.ok) {
-                                    // Refresh pipeline from Airtable
-                                    const pipelineResponse = await fetch(
-                                      "/api/subscriptions-personal"
-                                    );
-                                    const pipelineData =
-                                      await pipelineResponse.json();
-
-                                    if (pipelineData.success) {
-                                      const pipeline = pipelineData.data.map(
-                                        (record: any) => {
-                                          // Full Name is a lookup field in Subscriptions Personal
-                                          const fullName =
-                                            record.fields["Full Name"];
-                                          const fullNameStr = Array.isArray(
-                                            fullName
-                                          )
-                                            ? fullName[0]
-                                            : fullName || "";
-
-                                          // Split Full Name into First Name and Last Name
-                                          const nameParts =
-                                            fullNameStr.split(" ");
-                                          const firstName = nameParts[0] || "";
-                                          const lastName =
-                                            nameParts.slice(1).join(" ") || "";
-
-                                          const phone =
-                                            record.fields["Phone"] ||
-                                            record.fields["📞Phone number"] ||
-                                            "";
-                                          const phoneStr = Array.isArray(phone)
-                                            ? phone[0]
-                                            : phone;
-
-                                          return {
-                                            id: record.id,
-                                            firstName,
-                                            lastName,
-                                            phone: phoneStr,
-                                            addedAt: record.createdTime,
-                                          };
-                                        }
-                                      );
-                                      setPipelineClients(pipeline);
-                                    }
-                                  }
-                                } catch (error) {
-                                  console.error(
-                                    "Failed to remove from pipeline:",
-                                    error
-                                  );
-                                  setError(
-                                    "Failed to remove client from pipeline"
-                                  );
-                                  setTimeout(() => setError(null), 3000);
-                                }
-                              }}
-                            >
-                              Remove
-                            </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className="text-center text-base-content/60 py-8">
-                  No clients in pipeline yet. Add clients using the button
-                  above.
-                </div>
-              )}
             </div>
           </div>
         </div>
