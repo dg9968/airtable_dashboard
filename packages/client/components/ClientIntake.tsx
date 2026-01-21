@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -142,7 +142,7 @@ export default function ClientIntake() {
   }, [selectedClient]);
 
   // Search for existing clients
-  const handleSearch = async () => {
+  const handleSearch = useCallback(async () => {
     if (searchTerm.length < 2) {
       setSearchResults([]);
       return;
@@ -165,7 +165,20 @@ export default function ClientIntake() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [searchTerm]);
+
+  // Debounce search - wait 500ms after user stops typing before searching
+  useEffect(() => {
+    if (searchTerm.length >= 2) {
+      const timeoutId = setTimeout(() => {
+        handleSearch();
+      }, 500);
+
+      return () => clearTimeout(timeoutId);
+    } else {
+      setSearchResults([]);
+    }
+  }, [searchTerm, handleSearch]);
 
   // Load selected client data into form
   const handleSelectClient = (client: PersonalRecord) => {
@@ -413,14 +426,20 @@ export default function ClientIntake() {
                     placeholder="Name, email, phone, or SSN"
                     className="input input-bordered"
                     value={searchTerm}
-                    onChange={(e) => {
-                      setSearchTerm(e.target.value);
-                      if (e.target.value.length >= 2) {
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
                         handleSearch();
                       }
                     }}
-                    onKeyDown={(e) => e.key === "Enter" && handleSearch()}
                   />
+                  {searchTerm.length > 0 && searchTerm.length < 2 && (
+                    <label className="label">
+                      <span className="label-text-alt text-base-content/60">
+                        Type at least 2 characters to search
+                      </span>
+                    </label>
+                  )}
                 </div>
 
                 <button
