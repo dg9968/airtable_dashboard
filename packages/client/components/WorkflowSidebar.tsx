@@ -118,6 +118,23 @@ export default function WorkflowSidebar({
 
   const handleStepClick = (path: string) => {
     setMobileMenuOpen(false);
+
+    // If navigating to corporate document management, try to pass the last selected company
+    if (path === '/corporate-document-management') {
+      const lastCompany = localStorage.getItem('lastSelectedCompany');
+      if (lastCompany) {
+        try {
+          const company = JSON.parse(lastCompany);
+          if (company.id) {
+            router.push(`${path}?companyId=${company.id}`);
+            return;
+          }
+        } catch (e) {
+          console.error('Error parsing last selected company:', e);
+        }
+      }
+    }
+
     router.push(path);
   };
 

@@ -127,7 +127,18 @@ app.get("/search", async (c) => {
 
     console.log(`[Companies Search] Found ${records.length} results for query: "${searchTerm}"`);
 
-    const filteredCompanies = records.map((record) => {
+    const filteredCompanies = records.map((record, index) => {
+      // Log first record's fields to help debug
+      if (index === 0) {
+        console.log('[Companies Search] Sample record fields:', Object.keys(record.fields));
+        console.log('[Companies Search] Sample record field values:', {
+          Company: record.fields["Company"],
+          'Company Name': record.fields["Company Name"],
+          Name: record.fields["Name"],
+          'Name ': record.fields["Name "], // Check for trailing space
+        });
+      }
+
       // Extract registered agent
       let registeredAgent = record.fields["Registered Agent"];
       if (registeredAgent && typeof registeredAgent === "object") {
@@ -137,13 +148,16 @@ app.get("/search", async (c) => {
           JSON.stringify(registeredAgent);
       }
 
+      // Try to get the company name from various possible field names
+      // The primary field in Airtable is usually the first column
       const name =
+        record.fields["Name "] ||  // Check with trailing space (common Airtable issue)
         record.fields["Company"] ||
         record.fields["Company Name"] ||
         record.fields["Name"] ||
         record.fields["Business Name"] ||
         record.fields["Legal Name"] ||
-        "Unnamed Company";
+        "";
 
       const clientCode = record.fields["Client Code"] || "";
       const ein = record.fields["EIN"] || record.fields["Tax ID"] || "";

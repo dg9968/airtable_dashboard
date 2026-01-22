@@ -29,11 +29,11 @@ function CorporateDocumentManagementContent() {
   const [selectedClient, setSelectedClient] = useState<CorporateClient | null>(null);
   const [isLoadingClient, setIsLoadingClient] = useState(false);
 
-  // Auto-load client if companyId is provided in URL or localStorage
+  // Auto-load client if companyId is provided in URL only (localStorage disabled for cleaner UX)
   useEffect(() => {
     const companyId = searchParams.get('companyId');
 
-    // Try URL param first
+    // Only load from URL param, not from localStorage
     if (companyId && !selectedClient && session) {
       setIsLoadingClient(true);
       fetch(`/api/view/Corporations/${companyId}`)
@@ -44,7 +44,7 @@ function CorporateDocumentManagementContent() {
             setSelectedClient({
               id: company.id,
               clientCode: company.fields?.['Client Code'],
-              name: company.fields?.['Company Name'] || '',
+              name: company.fields?.['Company'] || company.fields?.['Company Name'] || '',
               ein: company.fields?.['EIN'] || '',
               entityNumber: company.fields?.['Entity Number'] || '',
               address: company.fields?.['Address'],
@@ -61,46 +61,6 @@ function CorporateDocumentManagementContent() {
         .finally(() => {
           setIsLoadingClient(false);
         });
-    }
-    // Fallback to localStorage if no URL param
-    else if (!companyId && !selectedClient && session && typeof window !== 'undefined') {
-      const lastCompany = localStorage.getItem('lastSelectedCompany');
-      if (lastCompany) {
-        try {
-          const companyData = JSON.parse(lastCompany);
-          if (companyData.id) {
-            // Load the full company data using the stored ID
-            setIsLoadingClient(true);
-            fetch(`/api/view/Corporations/${companyData.id}`)
-              .then((res) => res.json())
-              .then((data) => {
-                if (data.success && data.data) {
-                  const company = data.data;
-                  setSelectedClient({
-                    id: company.id,
-                    clientCode: company.fields?.['Client Code'],
-                    name: company.fields?.['Company Name'] || '',
-                    ein: company.fields?.['EIN'] || '',
-                    entityNumber: company.fields?.['Entity Number'] || '',
-                    address: company.fields?.['Address'],
-                    city: company.fields?.['City'],
-                    state: company.fields?.['State'],
-                    zipCode: company.fields?.['Zip Code'],
-                    phone: company.fields?.['Phone']
-                  });
-                }
-              })
-              .catch((error) => {
-                console.error('Error loading client from localStorage:', error);
-              })
-              .finally(() => {
-                setIsLoadingClient(false);
-              });
-          }
-        } catch (e) {
-          console.error('Failed to parse last selected company:', e);
-        }
-      }
     }
   }, [searchParams, selectedClient, session]);
 
@@ -193,7 +153,7 @@ function CorporateDocumentManagementContent() {
             <CorporateClientSearch
               selectedClient={selectedClient}
               onClientSelect={setSelectedClient}
-              placeholder="Search by company name, EIN, or entity number..."
+              placeholder="Search by company, EIN, entity number, or client code..."
               className="max-w-2xl"
             />
           </div>
@@ -241,45 +201,58 @@ function CorporateDocumentManagementContent() {
 
       {/* Upload and Browse Sections - Only show when client and category are selected */}
       {selectedClient && selectedCategory && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Upload Section */}
-          <div>
-            <div className="card bg-base-100 shadow-xl mb-4">
-              <div className="card-body pb-4">
-                <h3 className="card-title text-lg">
-                  <span className="mr-2">📤</span>
-                  Step 3: Upload Documents
-                </h3>
-                <p className="text-sm text-base-content/70">
-                  Upload documents for <strong>{selectedClient.name}</strong> in the <strong>{documentCategories.find(cat => cat.value === selectedCategory)?.label}</strong> category.
-                </p>
+        <div key={`client-${selectedClient.id}-${selectedClient.clientCode}`}>
+          {/* Client & Category Info Bar */}
+          <div className="alert alert-info mb-6">
+            <div className="flex items-center gap-2">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" className="stroke-current shrink-0 w-6 h-6">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+              </svg>
+              <div className="flex-1">
+                <div className="font-bold text-base">
+                  {selectedClient.name}
+                  {selectedClient.clientCode && <span className="ml-2 font-mono text-sm opacity-70">({selectedClient.clientCode})</span>}
+                </div>
+                <div className="text-sm">
+                  Category: <strong>{documentCategories.find(cat => cat.value === selectedCategory)?.label}</strong>
+                </div>
               </div>
             </div>
-            <DocumentUpload
-              onUploadComplete={handleUploadComplete}
-              useGoogleDrive={useGoogleDrive}
-              documentCategory={selectedCategory}
-              isCorporate={true}
-              clientCode={selectedClient.clientCode || ''}
-              onCategoryChange={setSelectedCategory}
-            />
           </div>
 
-          {/* Browser Section */}
-          <div>
-            <div className="card bg-base-100 shadow-xl mb-4">
-              <div className="card-body pb-4">
-                <h3 className="card-title text-lg">
-                  <span className="mr-2">🔍</span>
-                  Browse Documents
-                </h3>
-                <p className="text-sm text-base-content/70">
-                  View and manage documents for <strong>{selectedClient.name}</strong> in the <strong>{documentCategories.find(cat => cat.value === selectedCategory)?.label}</strong> category.
-                </p>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {/* Upload Section */}
+            <div>
+              <div className="card bg-base-100 shadow-xl mb-4">
+                <div className="card-body pb-4">
+                  <h3 className="card-title text-lg">
+                    <span className="mr-2">📤</span>
+                    Step 3: Upload Documents
+                  </h3>
+                </div>
               </div>
+              <DocumentUpload
+                onUploadComplete={handleUploadComplete}
+                useGoogleDrive={useGoogleDrive}
+                documentCategory={selectedCategory}
+                isCorporate={true}
+                clientCode={selectedClient.clientCode || ''}
+                onCategoryChange={setSelectedCategory}
+              />
             </div>
+
+            {/* Browser Section */}
+            <div>
+              <div className="card bg-base-100 shadow-xl mb-4">
+                <div className="card-body pb-4">
+                  <h3 className="card-title text-lg">
+                    <span className="mr-2">🔍</span>
+                    Browse Documents
+                  </h3>
+                </div>
+              </div>
             <DocumentBrowser
-              key={`${refreshKey}-${useGoogleDrive ? 'gdrive' : 'local'}-${selectedCategory}-${selectedClient.clientCode}`}
+              key={`${selectedClient.id}-${refreshKey}-${useGoogleDrive ? 'gdrive' : 'local'}-${selectedCategory}-${selectedClient.clientCode}`}
               useGoogleDrive={useGoogleDrive}
               documentCategory={selectedCategory}
               isCorporate={true}
@@ -287,6 +260,7 @@ function CorporateDocumentManagementContent() {
               onCategoryChange={setSelectedCategory}
             />
           </div>
+        </div>
         </div>
       )}
 

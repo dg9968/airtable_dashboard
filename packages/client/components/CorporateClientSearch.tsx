@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 
 interface CorporateClient {
   id: string;
@@ -30,48 +30,27 @@ export default function CorporateClientSearch({
 }: CorporateClientSearchProps) {
   const [searchResults, setSearchResults] = useState<CorporateClient[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Handle clicks outside dropdown to close it
+  // When a client is pre-selected (from URL), automatically search to show it in the list
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsDropdownOpen(false);
+    if (selectedClient && searchResults.length === 0) {
+      // Search using EIN (most precise), then client code, then name
+      // EIN ensures we get exactly one result since client code is last 4 digits of EIN
+      const searchQuery = selectedClient.ein || selectedClient.clientCode || selectedClient.name;
+      if (searchQuery && searchQuery.length >= 2) {
+        setSearchTerm(searchQuery);
+        searchCorporateClients(searchQuery);
       }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  // Cleanup debounce timer on unmount
-  useEffect(() => {
-    return () => {
-      if (debounceTimerRef.current) {
-        clearTimeout(debounceTimerRef.current);
-      }
-    };
-  }, []);
-
-  // Update search term when selected client changes
-  useEffect(() => {
-    if (selectedClient) {
-      setSearchTerm(selectedClient.name);
-      setIsDropdownOpen(false);
-    } else {
-      setSearchTerm('');
     }
-  }, [selectedClient]);
+  }, [selectedClient?.id]); // Only run when selectedClient.id changes
 
   const searchCorporateClients = async (query: string) => {
-    if (query.length < 1) {
+    if (query.length < 2) {
       setSearchResults([]);
-      setIsDropdownOpen(false);
+      setIsSearching(false);
       return;
     }
 
@@ -90,22 +69,29 @@ export default function CorporateClientSearch({
 
       if (data.data) {
         const clientsList: CorporateClient[] = data.data
-          .map((company: any) => ({
-            id: company.id,
-            clientCode: (company.clientCode || '').toString().trim(),
-            name: (company.name || '').toString().trim(),
-            ein: (company.taxId || '').toString().trim(),
-            entityNumber: (company.entityNumber || '').toString().trim(),
-            address: (company.address || '').toString().trim(),
-            city: (company.city || '').toString().trim(),
-            state: (company.state || '').toString().trim(),
-            zipCode: (company.zipCode || '').toString().trim(),
-            phone: (company.phone || '').toString().trim()
-          }))
+          .map((company: any) => {
+            const clientCode = (company.clientCode || '').toString().trim();
+            const name = (company.name || '').toString().trim();
+
+            // Use client code as fallback if company name is missing
+            const displayName = name || (clientCode ? `Client ${clientCode}` : '');
+
+            return {
+              id: company.id,
+              clientCode,
+              name: displayName,
+              ein: (company.taxId || '').toString().trim(),
+              entityNumber: (company.entityNumber || '').toString().trim(),
+              address: (company.address || '').toString().trim(),
+              city: (company.city || '').toString().trim(),
+              state: (company.state || '').toString().trim(),
+              zipCode: (company.zipCode || '').toString().trim(),
+              phone: (company.phone || '').toString().trim()
+            };
+          })
           .filter((client: CorporateClient) => client.name);
 
         setSearchResults(clientsList);
-        setIsDropdownOpen(true);
       } else {
         setSearchResults([]);
       }
@@ -121,158 +107,175 @@ export default function CorporateClientSearch({
 
   const handleClientSelect = (client: CorporateClient) => {
     onClientSelect(client);
-    setIsDropdownOpen(false);
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setSearchTerm(value);
 
-    // Clear selection if user starts typing
-    if (selectedClient && value !== selectedClient.name) {
-      onClientSelect(null);
-    }
-
-    // Clear existing debounce timer
-    if (debounceTimerRef.current) {
-      clearTimeout(debounceTimerRef.current);
-      debounceTimerRef.current = null;
-    }
-
-    // Don't search if empty
-    if (value.length < 1) {
+    // Clear results when input is too short
+    if (value.length < 2) {
       setSearchResults([]);
-      setIsDropdownOpen(false);
-      setIsSearching(false);
       return;
     }
-
-    // Show dropdown immediately when typing (but don't disable input)
-    setIsDropdownOpen(true);
-
-    // Debounce: wait 500ms after user stops typing before searching
-    debounceTimerRef.current = setTimeout(() => {
-      searchCorporateClients(value);
-    }, 500);
   };
 
-  const handleInputFocus = () => {
-    if (searchTerm.length >= 2) {
-      setIsDropdownOpen(true);
+  const handleSearch = () => {
+    if (searchTerm.length < 2) {
+      setError('Please enter at least 2 characters');
+      return;
+    }
+    searchCorporateClients(searchTerm);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      handleSearch();
     }
   };
 
   const clearSelection = () => {
     onClientSelect(null);
-    setSearchTerm('');
-    inputRef.current?.focus();
   };
 
   return (
-    <div className={`relative ${className}`} ref={dropdownRef}>
-      {/* Search Input */}
-      <div className="relative">
-        <input
-          ref={inputRef}
-          type="text"
-          className={`input input-bordered w-full ${selectedClient ? 'pr-20' : 'pr-10'}`}
-          placeholder={placeholder}
-          value={searchTerm}
-          onChange={handleInputChange}
-          onFocus={handleInputFocus}
-        />
+    <div className={className}>
+      {/* Search Input with Button */}
+      <div className="flex gap-2 mb-4">
+        <div className="relative flex-1">
+          <input
+            ref={inputRef}
+            type="text"
+            className="input input-bordered w-full"
+            placeholder={placeholder}
+            value={searchTerm}
+            onChange={handleInputChange}
+            onKeyDown={handleKeyDown}
+          />
+        </div>
 
-        {/* Right side icons/buttons */}
-        <div className="absolute right-2 top-1/2 transform -translate-y-1/2 flex items-center gap-2">
-          {isSearching && (
-            <span className="loading loading-spinner loading-xs"></span>
-          )}
-
-          {selectedClient && !isSearching && (
+        {/* Search Button */}
+        <button
+          type="button"
+          onClick={handleSearch}
+          disabled={isSearching || searchTerm.length < 2}
+          className="btn btn-primary"
+        >
+          {isSearching ? (
             <>
-              <svg className="w-4 h-4 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
+              <span className="loading loading-spinner loading-xs"></span>
+              Searching
+            </>
+          ) : (
+            <>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
               </svg>
-              <button
-                type="button"
-                onClick={clearSelection}
-                className="btn btn-ghost btn-xs btn-circle"
-                title="Clear selection"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path>
-                </svg>
-              </button>
+              Search
             </>
           )}
-        </div>
+        </button>
+
+        {/* Clear Selection Button */}
+        {selectedClient && (
+          <button
+            type="button"
+            onClick={clearSelection}
+            className="btn btn-outline btn-error"
+            title="Clear selection"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+            Clear
+          </button>
+        )}
       </div>
 
       {/* Error Message */}
       {error && (
-        <div className="text-xs text-error mt-1">{error}</div>
+        <div className="alert alert-error mb-4">
+          <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span>{error}</span>
+        </div>
       )}
 
-      {/* Selected Client Card - Compact */}
-      {selectedClient && (
-        <div className="mt-2 p-3 bg-base-200 rounded-lg">
-          <div className="flex items-start justify-between gap-2">
-            <div className="flex-1 min-w-0">
-              <div className="font-semibold text-sm truncate">{selectedClient.name}</div>
-              <div className="text-xs text-base-content/70 space-x-3">
-                {selectedClient.clientCode && (
-                  <span className="font-mono">{selectedClient.clientCode}</span>
-                )}
-                {selectedClient.ein && (
-                  <span>EIN: {selectedClient.ein}</span>
-                )}
-                {selectedClient.entityNumber && (
-                  <span>Entity: {selectedClient.entityNumber}</span>
-                )}
-              </div>
-            </div>
+      {/* Search Results List - Always visible when there are results */}
+      {searchResults.length > 0 && (
+        <div className="border border-base-300 rounded-lg overflow-hidden">
+          <div className="bg-base-200 px-4 py-2 font-semibold text-sm">
+            Search Results ({searchResults.length})
+          </div>
+          <div className="divide-y divide-base-200 max-h-96 overflow-y-auto">
+            {searchResults.map((client) => {
+              const isSelected = selectedClient?.id === client.id;
+              return (
+                <button
+                  key={client.id}
+                  className={`w-full px-4 py-3 text-left transition-colors ${
+                    isSelected
+                      ? 'bg-primary text-primary-content'
+                      : 'hover:bg-base-200'
+                  }`}
+                  onClick={() => handleClientSelect(client)}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold text-sm flex items-center gap-2">
+                        {client.name}
+                        {client.name.startsWith('Client ') && (
+                          <span className={`badge badge-xs ${isSelected ? 'badge-warning' : 'badge-warning'}`}>
+                            No Name
+                          </span>
+                        )}
+                      </div>
+                      <div className={`text-xs mt-0.5 space-x-3 ${isSelected ? 'opacity-90' : 'text-base-content/70'}`}>
+                        {client.clientCode && !client.name.startsWith('Client ') && (
+                          <span className="font-mono">{client.clientCode}</span>
+                        )}
+                        {client.ein && <span>EIN: {client.ein}</span>}
+                        {client.entityNumber && <span>Entity: {client.entityNumber}</span>}
+                      </div>
+                      {(client.city || client.state) && (
+                        <div className={`text-xs mt-0.5 ${isSelected ? 'opacity-80' : 'text-base-content/50'}`}>
+                          {client.city && client.state ? `${client.city}, ${client.state}` :
+                           client.city || client.state}
+                        </div>
+                      )}
+                    </div>
+                    {isSelected && (
+                      <div className="flex-shrink-0">
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                      </div>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
 
-      {/* Dropdown Results */}
-      {isDropdownOpen && !selectedClient && (
-        <div className="absolute z-50 w-full mt-1 bg-base-100 border border-base-300 rounded-lg shadow-xl max-h-80 overflow-y-auto">
-          {isSearching ? (
-            <div className="p-4 text-center">
-              <span className="loading loading-spinner loading-sm"></span>
-              <div className="text-xs text-base-content/60 mt-2">Searching...</div>
-            </div>
-          ) : searchResults.length === 0 ? (
-            <div className="p-4 text-center text-sm text-base-content/60">
-              {searchTerm ? 'No clients found' : 'Start typing to search...'}
-            </div>
-          ) : (
-            <div className="divide-y divide-base-200">
-              {searchResults.map((client) => (
-                <button
-                  key={client.id}
-                  className="w-full px-4 py-2.5 text-left hover:bg-base-200 transition-colors"
-                  onClick={() => handleClientSelect(client)}
-                >
-                  <div className="font-medium text-sm">{client.name}</div>
-                  <div className="text-xs text-base-content/70 mt-0.5 space-x-3">
-                    {client.clientCode && (
-                      <span className="font-mono">{client.clientCode}</span>
-                    )}
-                    {client.ein && <span>EIN: {client.ein}</span>}
-                    {client.entityNumber && <span>Entity: {client.entityNumber}</span>}
-                  </div>
-                  {(client.city || client.state) && (
-                    <div className="text-xs text-base-content/50 mt-0.5">
-                      {client.city && client.state ? `${client.city}, ${client.state}` :
-                       client.city || client.state}
-                    </div>
-                  )}
-                </button>
-              ))}
-            </div>
-          )}
+      {/* Empty state when searching but no results */}
+      {!isSearching && searchTerm.length >= 2 && searchResults.length === 0 && (
+        <div className="text-center py-8 text-base-content/60">
+          <svg className="w-16 h-16 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+          </svg>
+          <p className="font-semibold">No companies found</p>
+          <p className="text-sm mt-1">Try a different search term</p>
+        </div>
+      )}
+
+      {/* Loading state */}
+      {isSearching && (
+        <div className="text-center py-8">
+          <span className="loading loading-spinner loading-lg"></span>
+          <p className="mt-4 text-base-content/60">Searching...</p>
         </div>
       )}
     </div>
