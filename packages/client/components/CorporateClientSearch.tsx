@@ -170,122 +170,105 @@ export default function CorporateClientSearch({
 
   return (
     <div className={`relative ${className}`} ref={dropdownRef}>
-      <div className="form-control w-full">
-        <label className="label">
-          <span className="label-text font-medium">Corporate Client</span>
-          {selectedClient && (
-            <button
-              type="button"
-              onClick={clearSelection}
-              className="label-text-alt text-error hover:text-error-focus"
-            >
-              Clear
-            </button>
-          )}
-        </label>
+      {/* Search Input */}
+      <div className="relative">
+        <input
+          ref={inputRef}
+          type="text"
+          className={`input input-bordered w-full ${selectedClient ? 'pr-20' : 'pr-10'}`}
+          placeholder={placeholder}
+          value={searchTerm}
+          onChange={handleInputChange}
+          onFocus={handleInputFocus}
+        />
 
-        <div className="relative">
-          <input
-            ref={inputRef}
-            type="text"
-            className={`input input-bordered w-full pr-10 ${selectedClient ? 'input-success' : ''}`}
-            placeholder={placeholder}
-            value={searchTerm}
-            onChange={handleInputChange}
-            onFocus={handleInputFocus}
-          />
-
+        {/* Right side icons/buttons */}
+        <div className="absolute right-2 top-1/2 transform -translate-y-1/2 flex items-center gap-2">
           {isSearching && (
-            <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-              <span className="loading loading-spinner loading-xs"></span>
-            </div>
+            <span className="loading loading-spinner loading-xs"></span>
           )}
 
-          {selectedClient && (
-            <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-              <svg className="w-5 h-5 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          {selectedClient && !isSearching && (
+            <>
+              <svg className="w-4 h-4 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
               </svg>
-            </div>
+              <button
+                type="button"
+                onClick={clearSelection}
+                className="btn btn-ghost btn-xs btn-circle"
+                title="Clear selection"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+              </button>
+            </>
           )}
         </div>
-
-        {/* Selected Client Details */}
-        {selectedClient && (
-          <div className="mt-2 p-3 bg-success/10 border border-success/20 rounded-lg">
-            <div className="text-sm">
-              <div className="font-medium text-success">{selectedClient.name}</div>
-              {selectedClient.clientCode && (
-                <div className="text-base-content/70">
-                  <span className="font-medium">Client Code:</span> <span className="font-mono">{selectedClient.clientCode}</span>
-                </div>
-              )}
-              {selectedClient.ein && (
-                <div className="text-base-content/70">
-                  <span className="font-medium">EIN:</span> {selectedClient.ein}
-                </div>
-              )}
-              {selectedClient.entityNumber && (
-                <div className="text-base-content/70">
-                  <span className="font-medium">Entity #:</span> {selectedClient.entityNumber}
-                </div>
-              )}
-              {(selectedClient.city || selectedClient.state) && (
-                <div className="text-base-content/60 text-xs">
-                  {selectedClient.city && selectedClient.state ? `${selectedClient.city}, ${selectedClient.state}` :
-                   selectedClient.city || selectedClient.state}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Error Message */}
-        {error && (
-          <div className="label">
-            <span className="label-text-alt text-error">{error}</span>
-          </div>
-        )}
       </div>
 
-      {/* Dropdown */}
+      {/* Error Message */}
+      {error && (
+        <div className="text-xs text-error mt-1">{error}</div>
+      )}
+
+      {/* Selected Client Card - Compact */}
+      {selectedClient && (
+        <div className="mt-2 p-3 bg-base-200 rounded-lg">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex-1 min-w-0">
+              <div className="font-semibold text-sm truncate">{selectedClient.name}</div>
+              <div className="text-xs text-base-content/70 space-x-3">
+                {selectedClient.clientCode && (
+                  <span className="font-mono">{selectedClient.clientCode}</span>
+                )}
+                {selectedClient.ein && (
+                  <span>EIN: {selectedClient.ein}</span>
+                )}
+                {selectedClient.entityNumber && (
+                  <span>Entity: {selectedClient.entityNumber}</span>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Dropdown Results */}
       {isDropdownOpen && !selectedClient && (
-        <div className="absolute z-50 w-full mt-1 bg-base-100 border border-base-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+        <div className="absolute z-50 w-full mt-1 bg-base-100 border border-base-300 rounded-lg shadow-xl max-h-80 overflow-y-auto">
           {isSearching ? (
             <div className="p-4 text-center">
               <span className="loading loading-spinner loading-sm"></span>
-              <div className="text-sm text-base-content/60 mt-2">Searching...</div>
+              <div className="text-xs text-base-content/60 mt-2">Searching...</div>
             </div>
           ) : searchResults.length === 0 ? (
-            <div className="p-4 text-center text-base-content/60">
-              {searchTerm ? 'No clients found matching your search' : 'Type to search corporate clients'}
+            <div className="p-4 text-center text-sm text-base-content/60">
+              {searchTerm ? 'No clients found' : 'Start typing to search...'}
             </div>
           ) : (
-            <div className="py-1">
+            <div className="divide-y divide-base-200">
               {searchResults.map((client) => (
                 <button
                   key={client.id}
-                  className="w-full px-4 py-3 text-left hover:bg-base-200 border-b border-base-200 last:border-b-0 transition-colors"
+                  className="w-full px-4 py-2.5 text-left hover:bg-base-200 transition-colors"
                   onClick={() => handleClientSelect(client)}
                 >
-                  <div className="font-medium text-base-content">{client.name}</div>
-                  <div className="text-sm text-base-content/70 space-y-1">
+                  <div className="font-medium text-sm">{client.name}</div>
+                  <div className="text-xs text-base-content/70 mt-0.5 space-x-3">
                     {client.clientCode && (
-                      <div><span className="font-medium">Client Code:</span> <span className="font-mono">{client.clientCode}</span></div>
+                      <span className="font-mono">{client.clientCode}</span>
                     )}
-                    {client.ein && (
-                      <div><span className="font-medium">EIN:</span> {client.ein}</div>
-                    )}
-                    {client.entityNumber && (
-                      <div><span className="font-medium">Entity #:</span> {client.entityNumber}</div>
-                    )}
-                    {(client.city || client.state) && (
-                      <div className="text-base-content/60">
-                        {client.city && client.state ? `${client.city}, ${client.state}` :
-                         client.city || client.state}
-                      </div>
-                    )}
+                    {client.ein && <span>EIN: {client.ein}</span>}
+                    {client.entityNumber && <span>Entity: {client.entityNumber}</span>}
                   </div>
+                  {(client.city || client.state) && (
+                    <div className="text-xs text-base-content/50 mt-0.5">
+                      {client.city && client.state ? `${client.city}, ${client.state}` :
+                       client.city || client.state}
+                    </div>
+                  )}
                 </button>
               ))}
             </div>
