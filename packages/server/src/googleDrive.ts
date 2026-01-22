@@ -13,6 +13,70 @@ const auth = new GoogleAuth({
 // Initialize Google Drive API
 const drive = google.drive({ version: 'v3', auth });
 
+// In-memory lock to prevent duplicate folder creation during concurrent uploads
+const folderLocks = new Map<string, Promise<string>>();
+
+/**
+ * Get or create folder with lock to prevent race conditions
+ */
+async function getOrCreateFolderWithLock(
+  lockKey: string,
+  folderName: string,
+  parentFolderId: string
+): Promise<string> {
+  // If there's already a lock for this folder, wait for it
+  const existingLock = folderLocks.get(lockKey);
+  if (existingLock) {
+    console.log(`[Lock] Waiting for existing lock: ${lockKey}`);
+    return existingLock;
+  }
+
+  // Create new lock
+  const lockPromise = (async () => {
+    try {
+      // Search for existing folder (check for duplicates too)
+      const searchResponse = await drive.files.list({
+        q: `name='${folderName}' and '${parentFolderId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+        fields: 'files(id, name)',
+        supportsAllDrives: true,
+        includeItemsFromAllDrives: true,
+      });
+
+      // If multiple folders found, use the first one and log warning
+      if (searchResponse.data.files && searchResponse.data.files.length > 1) {
+        console.warn(`[Dedup] Found ${searchResponse.data.files.length} folders named "${folderName}" in parent ${parentFolderId}. Using first one.`);
+        return searchResponse.data.files[0].id!;
+      }
+
+      // If folder exists, return it
+      if (searchResponse.data.files && searchResponse.data.files.length > 0) {
+        return searchResponse.data.files[0].id!;
+      }
+
+      // Create folder if it doesn't exist
+      console.log(`[Lock] Creating new folder: ${folderName} in ${parentFolderId}`);
+      const createResponse = await drive.files.create({
+        requestBody: {
+          name: folderName,
+          parents: [parentFolderId],
+          mimeType: 'application/vnd.google-apps.folder',
+        },
+        supportsAllDrives: true,
+      });
+
+      return createResponse.data.id!;
+    } finally {
+      // Remove lock after operation completes
+      folderLocks.delete(lockKey);
+    }
+  })();
+
+  // Store the lock
+  folderLocks.set(lockKey, lockPromise);
+
+  return lockPromise;
+}
+
 // Validate environment variables
 function validateGoogleDriveEnvironment() {
   if (!process.env.GOOGLE_DRIVE_CREDENTIALS_JSON) {
@@ -71,82 +135,33 @@ export async function getOrCreateCorporateCategoryFolder(clientCode: string, cat
   try {
     const rootFolderId = await getRootFolderId();
 
-    // Create/get "Corporate" folder
-    const corporateFolderName = 'Corporate';
-    let corporateFolderId: string;
+    // Create/get "Corporate" folder with lock
+    const corporateFolderId = await getOrCreateFolderWithLock(
+      `corporate-${rootFolderId}`,
+      'Corporate',
+      rootFolderId
+    );
 
-    const corporateSearchResponse = await drive.files.list({
-      q: `name='${corporateFolderName}' and parents in '${rootFolderId}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
-      fields: 'files(id, name)',
-      supportsAllDrives: true,
-      includeItemsFromAllDrives: true,
-    });
-
-    if (corporateSearchResponse.data.files && corporateSearchResponse.data.files.length > 0) {
-      corporateFolderId = corporateSearchResponse.data.files[0].id!;
-    } else {
-      const createResponse = await drive.files.create({
-        requestBody: {
-          name: corporateFolderName,
-          parents: [rootFolderId],
-          mimeType: 'application/vnd.google-apps.folder',
-        },
-        supportsAllDrives: true,
-      });
-      corporateFolderId = createResponse.data.id!;
-    }
-
-    // Create/get client folder under Corporate
+    // Create/get client folder under Corporate with lock
     const clientFolderName = `Client ${clientCode}`;
-    let clientFolderId: string;
+    const clientFolderId = await getOrCreateFolderWithLock(
+      `client-${clientCode}-${corporateFolderId}`,
+      clientFolderName,
+      corporateFolderId
+    );
 
-    const clientSearchResponse = await drive.files.list({
-      q: `name='${clientFolderName}' and parents in '${corporateFolderId}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
-      fields: 'files(id, name)',
-      supportsAllDrives: true,
-      includeItemsFromAllDrives: true,
-    });
-
-    if (clientSearchResponse.data.files && clientSearchResponse.data.files.length > 0) {
-      clientFolderId = clientSearchResponse.data.files[0].id!;
-    } else {
-      const createResponse = await drive.files.create({
-        requestBody: {
-          name: clientFolderName,
-          parents: [corporateFolderId],
-          mimeType: 'application/vnd.google-apps.folder',
-        },
-        supportsAllDrives: true,
-      });
-      clientFolderId = createResponse.data.id!;
-    }
-
-    // Create/get category folder under client
+    // Create/get category folder under client with lock
     const categoryFolderName = category === 'business-credentials' ? 'Business Credentials' :
                                category === 'notices-letters' ? 'Notices and Letters' :
                                category;
 
-    const categorySearchResponse = await drive.files.list({
-      q: `name='${categoryFolderName}' and parents in '${clientFolderId}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
-      fields: 'files(id, name)',
-      supportsAllDrives: true,
-      includeItemsFromAllDrives: true,
-    });
+    const categoryFolderId = await getOrCreateFolderWithLock(
+      `category-${category}-${clientFolderId}`,
+      categoryFolderName,
+      clientFolderId
+    );
 
-    if (categorySearchResponse.data.files && categorySearchResponse.data.files.length > 0) {
-      return categorySearchResponse.data.files[0].id!;
-    }
-
-    const createResponse = await drive.files.create({
-      requestBody: {
-        name: categoryFolderName,
-        parents: [clientFolderId],
-        mimeType: 'application/vnd.google-apps.folder',
-      },
-      supportsAllDrives: true,
-    });
-
-    return createResponse.data.id!;
+    return categoryFolderId;
   } catch (error) {
     console.error('Error getting/creating corporate category folder:', error);
     throw error;
@@ -158,127 +173,43 @@ export async function getOrCreateFinancialStatementsFolder(clientCode: string, b
   try {
     const rootFolderId = await getRootFolderId();
 
-    // Create/get "Corporate" folder
-    const corporateFolderName = 'Corporate';
-    let corporateFolderId: string;
+    // Create/get "Corporate" folder with lock
+    const corporateFolderId = await getOrCreateFolderWithLock(
+      `corporate-${rootFolderId}`,
+      'Corporate',
+      rootFolderId
+    );
 
-    const corporateSearchResponse = await drive.files.list({
-      q: `name='${corporateFolderName}' and parents in '${rootFolderId}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
-      fields: 'files(id, name)',
-      supportsAllDrives: true,
-      includeItemsFromAllDrives: true,
-    });
-
-    if (corporateSearchResponse.data.files && corporateSearchResponse.data.files.length > 0) {
-      corporateFolderId = corporateSearchResponse.data.files[0].id!;
-    } else {
-      const createResponse = await drive.files.create({
-        requestBody: {
-          name: corporateFolderName,
-          parents: [rootFolderId],
-          mimeType: 'application/vnd.google-apps.folder',
-        },
-        supportsAllDrives: true,
-      });
-      corporateFolderId = createResponse.data.id!;
-    }
-
-    // Create/get client folder under Corporate
+    // Create/get client folder under Corporate with lock
     const clientFolderName = `Client ${clientCode}`;
-    let clientFolderId: string;
+    const clientFolderId = await getOrCreateFolderWithLock(
+      `client-${clientCode}-${corporateFolderId}`,
+      clientFolderName,
+      corporateFolderId
+    );
 
-    const clientSearchResponse = await drive.files.list({
-      q: `name='${clientFolderName}' and parents in '${corporateFolderId}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
-      fields: 'files(id, name)',
-      supportsAllDrives: true,
-      includeItemsFromAllDrives: true,
-    });
+    // Create/get "Financial Statements" folder under client with lock
+    const statementsFolderId = await getOrCreateFolderWithLock(
+      `statements-${clientCode}-${clientFolderId}`,
+      'Financial Statements',
+      clientFolderId
+    );
 
-    if (clientSearchResponse.data.files && clientSearchResponse.data.files.length > 0) {
-      clientFolderId = clientSearchResponse.data.files[0].id!;
-    } else {
-      const createResponse = await drive.files.create({
-        requestBody: {
-          name: clientFolderName,
-          parents: [corporateFolderId],
-          mimeType: 'application/vnd.google-apps.folder',
-        },
-        supportsAllDrives: true,
-      });
-      clientFolderId = createResponse.data.id!;
-    }
+    // Create/get bank folder under Financial Statements with lock
+    const bankFolderId = await getOrCreateFolderWithLock(
+      `bank-${bankName}-${statementsFolderId}`,
+      bankName,
+      statementsFolderId
+    );
 
-    // Create/get "Financial Statements" folder under client
-    const statementsFolderName = 'Financial Statements';
-    let statementsFolderId: string;
+    // Create/get year folder under bank with lock
+    const yearFolderId = await getOrCreateFolderWithLock(
+      `year-${taxYear}-${bankFolderId}`,
+      taxYear,
+      bankFolderId
+    );
 
-    const statementsSearchResponse = await drive.files.list({
-      q: `name='${statementsFolderName}' and parents in '${clientFolderId}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
-      fields: 'files(id, name)',
-      supportsAllDrives: true,
-      includeItemsFromAllDrives: true,
-    });
-
-    if (statementsSearchResponse.data.files && statementsSearchResponse.data.files.length > 0) {
-      statementsFolderId = statementsSearchResponse.data.files[0].id!;
-    } else {
-      const createResponse = await drive.files.create({
-        requestBody: {
-          name: statementsFolderName,
-          parents: [clientFolderId],
-          mimeType: 'application/vnd.google-apps.folder',
-        },
-        supportsAllDrives: true,
-      });
-      statementsFolderId = createResponse.data.id!;
-    }
-
-    // Create/get bank folder under Financial Statements
-    let bankFolderId: string;
-
-    const bankSearchResponse = await drive.files.list({
-      q: `name='${bankName}' and parents in '${statementsFolderId}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
-      fields: 'files(id, name)',
-      supportsAllDrives: true,
-      includeItemsFromAllDrives: true,
-    });
-
-    if (bankSearchResponse.data.files && bankSearchResponse.data.files.length > 0) {
-      bankFolderId = bankSearchResponse.data.files[0].id!;
-    } else {
-      const createResponse = await drive.files.create({
-        requestBody: {
-          name: bankName,
-          parents: [statementsFolderId],
-          mimeType: 'application/vnd.google-apps.folder',
-        },
-        supportsAllDrives: true,
-      });
-      bankFolderId = createResponse.data.id!;
-    }
-
-    // Create/get year folder under bank
-    const yearSearchResponse = await drive.files.list({
-      q: `name='${taxYear}' and parents in '${bankFolderId}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
-      fields: 'files(id, name)',
-      supportsAllDrives: true,
-      includeItemsFromAllDrives: true,
-    });
-
-    if (yearSearchResponse.data.files && yearSearchResponse.data.files.length > 0) {
-      return yearSearchResponse.data.files[0].id!;
-    }
-
-    const createResponse = await drive.files.create({
-      requestBody: {
-        name: taxYear,
-        parents: [bankFolderId],
-        mimeType: 'application/vnd.google-apps.folder',
-      },
-      supportsAllDrives: true,
-    });
-
-    return createResponse.data.id!;
+    return yearFolderId;
   } catch (error) {
     console.error('Error getting/creating financial statements folder:', error);
     throw error;
@@ -404,83 +335,30 @@ export async function getOrCreateClientFolder(clientCode: string, taxYear: strin
   try {
     const rootFolderId = await getRootFolderId();
 
-    // Create/get "Personal" folder
-    const personalFolderName = 'Personal';
-    let personalFolderId: string;
+    // Create/get "Personal" folder with lock
+    const personalFolderId = await getOrCreateFolderWithLock(
+      `personal-${rootFolderId}`,
+      'Personal',
+      rootFolderId
+    );
 
-    const personalSearchResponse = await drive.files.list({
-      q: `name='${personalFolderName}' and '${rootFolderId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
-      fields: 'files(id, name)',
-      supportsAllDrives: true,
-      includeItemsFromAllDrives: true,
-      corpora: 'allDrives',
-    });
-
-    if (personalSearchResponse.data.files && personalSearchResponse.data.files.length > 0) {
-      personalFolderId = personalSearchResponse.data.files[0].id!;
-    } else {
-      const createResponse = await drive.files.create({
-        requestBody: {
-          name: personalFolderName,
-          parents: [rootFolderId],
-          mimeType: 'application/vnd.google-apps.folder',
-        },
-        supportsAllDrives: true,
-      });
-      personalFolderId = createResponse.data.id!;
-    }
-
-    // Create/get client folder under Personal
+    // Create/get client folder under Personal with lock
     const clientFolderName = `Client ${clientCode}`;
-    let clientFolderId: string;
+    const clientFolderId = await getOrCreateFolderWithLock(
+      `personal-client-${clientCode}-${personalFolderId}`,
+      clientFolderName,
+      personalFolderId
+    );
 
-    const clientSearchResponse = await drive.files.list({
-      q: `name='${clientFolderName}' and '${personalFolderId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
-      fields: 'files(id, name)',
-      supportsAllDrives: true,
-      includeItemsFromAllDrives: true,
-      corpora: 'allDrives',
-    });
-
-    if (clientSearchResponse.data.files && clientSearchResponse.data.files.length > 0) {
-      clientFolderId = clientSearchResponse.data.files[0].id!;
-    } else {
-      const createResponse = await drive.files.create({
-        requestBody: {
-          name: clientFolderName,
-          parents: [personalFolderId],
-          mimeType: 'application/vnd.google-apps.folder',
-        },
-        supportsAllDrives: true,
-      });
-      clientFolderId = createResponse.data.id!;
-    }
-
-    // Create/get tax year folder under client folder
+    // Create/get tax year folder under client folder with lock
     const taxYearFolderName = `Tax Year ${taxYear}`;
-    const taxYearSearchResponse = await drive.files.list({
-      q: `name='${taxYearFolderName}' and '${clientFolderId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
-      fields: 'files(id, name)',
-      supportsAllDrives: true,
-      includeItemsFromAllDrives: true,
-      corpora: 'allDrives',
-    });
+    const taxYearFolderId = await getOrCreateFolderWithLock(
+      `personal-year-${taxYear}-${clientFolderId}`,
+      taxYearFolderName,
+      clientFolderId
+    );
 
-    if (taxYearSearchResponse.data.files && taxYearSearchResponse.data.files.length > 0) {
-      return taxYearSearchResponse.data.files[0].id!;
-    }
-
-    // Create tax year folder if it doesn't exist
-    const createResponse = await drive.files.create({
-      requestBody: {
-        name: taxYearFolderName,
-        parents: [clientFolderId],
-        mimeType: 'application/vnd.google-apps.folder',
-      },
-      supportsAllDrives: true,
-    });
-
-    return createResponse.data.id!;
+    return taxYearFolderId;
   } catch (error) {
     console.error('Error getting/creating client folder:', error);
     throw error;

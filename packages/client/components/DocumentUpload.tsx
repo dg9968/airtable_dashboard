@@ -74,7 +74,7 @@ export default function DocumentUpload({ onUploadComplete, useGoogleDrive = fals
   ];
 
   const documentCategoryOptions = [
-    { value: 'statements', label: 'Financial Statements', icon: '📊' },
+    { value: 'statements', label: 'Bank and Credit Card Statements', icon: '📊' },
     { value: 'tax-returns', label: 'Tax Returns', icon: '📋' },
     { value: 'notices-letters', label: 'Notices and Letters', icon: '📄' },
     { value: 'sales-tax', label: 'Sales Tax', icon: '🛒' },

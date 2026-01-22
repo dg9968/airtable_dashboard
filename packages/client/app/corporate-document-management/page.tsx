@@ -126,7 +126,7 @@ function CorporateDocumentManagementContent() {
   }
 
   const documentCategories = [
-    { value: 'statements', label: 'Financial Statements', icon: '📊' },
+    { value: 'statements', label: 'Bank and Credit Card Statements', icon: '📊' },
     { value: 'tax-returns', label: 'Tax Returns', icon: '📋' },
     { value: 'notices-letters', label: 'Notices and Letters', icon: '📄' },
     { value: 'sales-tax', label: 'Sales Tax', icon: '🛒' },
@@ -374,7 +374,7 @@ function CorporateDocumentManagementContent() {
                 <h3 className="font-bold">Corporate Document Management Workflow:</h3>
                 <ul className="mt-2 space-y-1 text-sm">
                   <li>• <strong>Step 1:</strong> Search and select a corporate client using company name, EIN, or entity number</li>
-                  <li>• <strong>Step 2:</strong> Choose document category (Financial Statements, Tax Returns, Notices and Letters, Sales Tax, Payroll Tax, or Business Credentials)</li>
+                  <li>• <strong>Step 2:</strong> Choose document category (Bank and Credit Card Statements, Tax Returns, Notices and Letters, Sales Tax, Payroll Tax, or Business Credentials)</li>
                   <li>• <strong>Step 3:</strong> Upload corporate documents with automatic client and category association</li>
                   <li>• <strong>Step 4:</strong> Browse and download documents organized by client and category</li>
                   <li>• Client search includes EIN and entity number for accurate identification</li>
