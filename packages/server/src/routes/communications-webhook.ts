@@ -52,23 +52,18 @@ app.post('/trigger', async (c) => {
     console.log('Triggering n8n webhook:', { messageId, corporateId, emailSubject });
 
     // Add timestamp if not provided
-    const timestamp = payload.timestamp || new Date().toISOString();
+    const webhookPayload = {
+      ...payload,
+      timestamp: payload.timestamp || new Date().toISOString(),
+    };
 
-    // Build URL with query parameters (n8n webhook expects GET request)
-    const url = new URL(webhookUrl);
-    url.searchParams.append('messageId', messageId);
-    url.searchParams.append('corporateId', corporateId);
-    url.searchParams.append('emailSubject', emailSubject);
-    url.searchParams.append('emailContent', emailContent);
-    url.searchParams.append('junctionRecordId', junctionRecordId);
-    url.searchParams.append('timestamp', timestamp);
-
-    // Trigger n8n webhook with GET request
-    const response = await fetch(url.toString(), {
-      method: 'GET',
+    // Trigger n8n webhook with POST request (secure, no URL length limits)
+    const response = await fetch(webhookUrl, {
+      method: 'POST',
       headers: {
-        'Accept': 'application/json',
+        'Content-Type': 'application/json',
       },
+      body: JSON.stringify(webhookPayload),
     });
 
     if (!response.ok) {
