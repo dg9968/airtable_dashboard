@@ -8,6 +8,7 @@ interface CorporateClient {
   name: string;
   ein: string;
   entityNumber: string;
+  email?: string;
   address?: string;
   city?: string;
   state?: string;
@@ -82,6 +83,7 @@ export default function CorporateClientSearch({
               name: displayName,
               ein: (company.taxId || '').toString().trim(),
               entityNumber: (company.entityNumber || '').toString().trim(),
+              email: (company.email || company.companyContacts || '').toString().trim(),
               address: (company.address || '').toString().trim(),
               city: (company.city || '').toString().trim(),
               state: (company.state || '').toString().trim(),

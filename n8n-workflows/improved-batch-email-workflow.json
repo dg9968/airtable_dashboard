@@ -1,0 +1,351 @@
+{
+  "name": "Improved Batch Email Workflow with Error Handling",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "c75fab36-4de8-4225-886b-6e014e077b41",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [400, 300],
+      "id": "webhook",
+      "name": "Webhook",
+      "webhookId": "c75fab36-4de8-4225-886b-6e014e077b41"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "body.clients",
+        "options": {}
+      },
+      "id": "split-clients",
+      "name": "Split Out Clients",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [600, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract and log the data for debugging\nconst item = $input.first();\n\nconsole.log('Processing client:', item.json.clientData?.name);\nconsole.log('Junction Record ID:', item.json.junctionRecordId);\nconsole.log('Email:', item.json.clientData?.email);\n\nreturn [\n  {\n    json: {\n      ...item.json,\n      // Ensure we have all required fields\n      emailTo: item.json.clientData?.email || '',\n      emailSubject: item.json.emailSubject || '',\n      emailContent: item.json.emailContent || '',\n      junctionRecordId: item.json.junctionRecordId || '',\n      clientName: item.json.clientData?.name || 'Unknown',\n      timestamp: new Date().toISOString()\n    }\n  }\n];"
+      },
+      "id": "prepare-data",
+      "name": "Prepare Email Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [800, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.emailTo }}",
+              "operation": "isNotEmpty"
+            },
+            {
+              "value1": "={{ $json.junctionRecordId }}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        }
+      },
+      "id": "validate-data",
+      "name": "Has Email & Record ID?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1000, 300]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.emailTo }}",
+        "subject": "={{ $json.emailSubject }}",
+        "message": "={{ $json.emailContent }}",
+        "options": {}
+      },
+      "id": "send-email",
+      "name": "Send Email via Gmail",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [1200, 200],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "KpJyHSTd0xG0Yk8z",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "app3Gj45Ql7EwjLIg"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tbljseIDN7BhR2TyE"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $json.junctionRecordId }}",
+            "Status": "Sent"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Sent",
+                  "value": "Sent"
+                },
+                {
+                  "name": "Pending",
+                  "value": "Pending"
+                },
+                {
+                  "name": "Failed",
+                  "value": "Failed"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            }
+          ]
+        },
+        "options": {
+          "bulkSize": 10,
+          "useRawBody": false
+        }
+      },
+      "id": "update-success",
+      "name": "Update Status to Sent",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [1400, 200],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "CubnTYM9Dd2TC0FT",
+          "name": "Airtable Personal Access Token account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "app3Gj45Ql7EwjLIg"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tbljseIDN7BhR2TyE"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $json.junctionRecordId }}",
+            "Status": "Failed"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Sent",
+                  "value": "Sent"
+                },
+                {
+                  "name": "Pending",
+                  "value": "Pending"
+                },
+                {
+                  "name": "Failed",
+                  "value": "Failed"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "update-failed",
+      "name": "Update Status to Failed",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [1400, 400],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "CubnTYM9Dd2TC0FT",
+          "name": "Airtable Personal Access Token account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Log the skipped client\nconst item = $input.first();\n\nconsole.error('SKIPPED CLIENT:', item.json.clientName);\nconsole.error('Reason: Missing email or junction record ID');\nconsole.error('Email:', item.json.emailTo);\nconsole.error('Junction ID:', item.json.junctionRecordId);\n\nreturn [item];"
+      },
+      "id": "log-skip",
+      "name": "Log Skipped Client",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Aggregate results from all processed clients\nconst allItems = $input.all();\n\nconst results = {\n  totalProcessed: allItems.length,\n  successful: allItems.filter(item => item.json.status === 'Sent').length,\n  failed: allItems.filter(item => item.json.status === 'Failed').length,\n  skipped: allItems.filter(item => item.json.status === 'Skipped').length,\n  timestamp: new Date().toISOString()\n};\n\nconsole.log('Batch processing complete:', results);\n\nreturn [{ json: results }];"
+      },
+      "id": "aggregate",
+      "name": "Aggregate Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1600, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Split Out Clients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out Clients": {
+      "main": [
+        [
+          {
+            "node": "Prepare Email Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Email Data": {
+      "main": [
+        [
+          {
+            "node": "Has Email & Record ID?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Email & Record ID?": {
+      "main": [
+        [
+          {
+            "node": "Send Email via Gmail",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Skipped Client",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email via Gmail": {
+      "main": [
+        [
+          {
+            "node": "Update Status to Sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Status to Sent": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Skipped Client": {
+      "main": [
+        [
+          {
+            "node": "Update Status to Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Status to Failed": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "instanceId": "your-instance-id"
+  },
+  "tags": []
+}

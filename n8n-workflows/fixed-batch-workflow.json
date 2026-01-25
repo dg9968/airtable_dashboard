@@ -1,0 +1,146 @@
+{
+  "name": "Batch Email with Status Update (Fixed)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "batch-email",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [400, 300],
+      "id": "webhook",
+      "name": "Webhook"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "body.clients",
+        "options": {}
+      },
+      "id": "split-clients",
+      "name": "Split Out Clients",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [600, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process ALL items, not just the first one\nconst items = $input.all();\n\nconsole.log(`Processing ${items.length} client(s)`);\n\nconst results = items.map((item, index) => {\n  const data = item.json;\n  \n  console.log(`Client ${index + 1}:`, data.clientData?.name || 'Unknown');\n  \n  // Preserve the data we need for later nodes\n  const result = {\n    junctionRecordId: data.junctionRecordId || '',\n    clientEmail: (data.clientData && data.clientData.email) || '',\n    emailSubject: data.emailSubject || '',\n    emailContent: data.emailContent || '',\n    clientName: (data.clientData && data.clientData.name) || 'Unknown'\n  };\n  \n  if (!result.junctionRecordId) {\n    throw new Error(`Missing junctionRecordId for client: ${result.clientName}`);\n  }\n  \n  if (!result.clientEmail) {\n    throw new Error(`Missing clientEmail for client: ${result.clientName}`);\n  }\n  \n  return { json: result };\n});\n\nconsole.log(`Successfully processed ${results.length} client(s)`);\n\nreturn results;"
+      },
+      "id": "preserve-data",
+      "name": "Preserve Junction ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [800, 300]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.clientEmail }}",
+        "subject": "={{ $json.emailSubject }}",
+        "message": "={{ $json.emailContent }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "send-email",
+      "name": "Send Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [1000, 300],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "YOUR_GMAIL_CREDENTIAL_ID",
+          "name": "Gmail account"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "app3Gj45Ql7EwjLIg"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tbljseIDN7BhR2TyE"
+        },
+        "id": "={{ $('Preserve Junction ID').item.json.junctionRecordId }}",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Status": "={{ $json.error ? 'Failed' : 'Sent' }}"
+          },
+          "matchingColumns": []
+        },
+        "options": {}
+      },
+      "id": "update-status",
+      "name": "Update Status",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [1200, 300],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "YOUR_AIRTABLE_CREDENTIAL_ID",
+          "name": "Airtable Personal Access Token account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Split Out Clients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out Clients": {
+      "main": [
+        [
+          {
+            "node": "Preserve Junction ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preserve Junction ID": {
+      "main": [
+        [
+          {
+            "node": "Send Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email": {
+      "main": [
+        [
+          {
+            "node": "Update Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": []
+}

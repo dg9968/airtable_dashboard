@@ -1,0 +1,30 @@
+{
+  "mode": "batch",
+  "batchId": "test_manual_trigger",
+  "timestamp": "2026-01-24T12:00:00Z",
+  "totalClients": 1,
+  "clients": [
+    {
+      "messageId": "recTestMessage123",
+      "corporateId": "recOvWy22R57Z5btA",
+      "junctionRecordId": "recDkDGrtt8okSFcC",
+      "clientData": {
+        "name": "DAME CONSULTING LLC",
+        "email": "daniel.galindo@me.com",
+        "ein": "46-5443009",
+        "phone": "(786) 402-0386",
+        "address": "10913 SW 232nd Ter",
+        "city": "MIAMI",
+        "state": "FLORIDA",
+        "zipCode": "33032",
+        "clientCode": "3009"
+      },
+      "emailSubject": "Test Subject - Manual Trigger",
+      "emailContent": "This is a test email to verify the n8n workflow is working correctly.",
+      "variableValues": {
+        "currentAmount": "100",
+        "newAmount": "200"
+      }
+    }
+  ]
+}

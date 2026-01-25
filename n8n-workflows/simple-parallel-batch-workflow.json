@@ -1,0 +1,204 @@
+{
+  "name": "Simple Parallel Batch Email (No Loop)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "batch-email",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [400, 300],
+      "id": "webhook",
+      "name": "Webhook"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "body.clients",
+        "options": {}
+      },
+      "id": "split-clients",
+      "name": "Split Out Clients",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [600, 300]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.clientData.email }}",
+        "subject": "={{ $json.emailSubject }}",
+        "message": "={{ $json.emailContent }}",
+        "options": {}
+      },
+      "id": "send-email",
+      "name": "Send Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [800, 300],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "KpJyHSTd0xG0Yk8z",
+          "name": "Gmail account"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "success-check",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "check-success",
+      "name": "Email Sent Successfully?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1000, 300]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "app3Gj45Ql7EwjLIg"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tbljseIDN7BhR2TyE"
+        },
+        "id": "={{ $json.junctionRecordId }}",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Status": "Sent"
+          },
+          "matchingColumns": []
+        },
+        "options": {}
+      },
+      "id": "update-sent",
+      "name": "Mark as Sent",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [1200, 200],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "CubnTYM9Dd2TC0FT",
+          "name": "Airtable Personal Access Token account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "app3Gj45Ql7EwjLIg"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tbljseIDN7BhR2TyE"
+        },
+        "id": "={{ $json.junctionRecordId }}",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Status": "Failed"
+          },
+          "matchingColumns": []
+        },
+        "options": {}
+      },
+      "id": "update-failed",
+      "name": "Mark as Failed",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [1200, 400],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "CubnTYM9Dd2TC0FT",
+          "name": "Airtable Personal Access Token account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Split Out Clients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out Clients": {
+      "main": [
+        [
+          {
+            "node": "Send Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email": {
+      "main": [
+        [
+          {
+            "node": "Email Sent Successfully?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email Sent Successfully?": {
+      "main": [
+        [
+          {
+            "node": "Mark as Sent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark as Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": []
+}
