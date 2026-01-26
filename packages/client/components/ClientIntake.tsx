@@ -57,7 +57,7 @@ export default function ClientIntake() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [activeSection, setActiveSection] = useState("tax-info");
+  const [activeSection, setActiveSection] = useState("primary-taxpayer");
   const [addingToPipeline, setAddingToPipeline] = useState(false);
 
   // Form state
@@ -70,10 +70,10 @@ export default function ClientIntake() {
 
   // Form navigation sections
   const formSections = [
-    { id: "tax-info", label: "Tax Information", icon: "📋" },
     { id: "primary-taxpayer", label: "Primary Taxpayer", icon: "👤" },
-    { id: "spouse-info", label: "Spouse Information", icon: "💑" },
     { id: "contact-info", label: "Contact Information", icon: "📞" },
+    { id: "spouse-info", label: "Spouse Information", icon: "💑" },
+    { id: "tax-info", label: "Tax Information", icon: "📋" },
     { id: "bank-info", label: "Bank Information", icon: "🏦" },
     { id: "prior-year", label: "Prior Year Info", icon: "📅" },
   ];
