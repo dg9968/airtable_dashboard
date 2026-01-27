@@ -1048,8 +1048,8 @@ export default function ClientIntake() {
                           className={`input input-bordered ${linkedSpouseId && !isNewClient ? 'bg-base-200' : ''}`}
                           value={formData["Spouse Name"] || ""}
                           onChange={(e) => handleInputChange("Spouse Name", e.target.value)}
-                          readOnly={linkedSpouseId && !isNewClient}
-                          disabled={linkedSpouseId && !isNewClient}
+                          readOnly={!!(linkedSpouseId && !isNewClient)}
+                          disabled={!!(linkedSpouseId && !isNewClient)}
                         />
                       </div>
 
@@ -1063,8 +1063,8 @@ export default function ClientIntake() {
                           placeholder="XXX-XX-XXXX"
                           value={formData["Spouse SSN"] || ""}
                           onChange={(e) => handleInputChange("Spouse SSN", formatSSN(e.target.value))}
-                          readOnly={linkedSpouseId && !isNewClient}
-                          disabled={linkedSpouseId && !isNewClient}
+                          readOnly={!!(linkedSpouseId && !isNewClient)}
+                          disabled={!!(linkedSpouseId && !isNewClient)}
                         />
                       </div>
 
@@ -1077,8 +1077,8 @@ export default function ClientIntake() {
                           className={`input input-bordered ${linkedSpouseId && !isNewClient ? 'bg-base-200' : ''}`}
                           value={formData["Spouse DOB"] || ""}
                           onChange={(e) => handleInputChange("Spouse DOB", e.target.value)}
-                          readOnly={linkedSpouseId && !isNewClient}
-                          disabled={linkedSpouseId && !isNewClient}
+                          readOnly={!!(linkedSpouseId && !isNewClient)}
+                          disabled={!!(linkedSpouseId && !isNewClient)}
                         />
                       </div>
 
@@ -1091,8 +1091,8 @@ export default function ClientIntake() {
                           className={`input input-bordered ${linkedSpouseId && !isNewClient ? 'bg-base-200' : ''}`}
                           value={formData["Spouse Occupation"] || ""}
                           onChange={(e) => handleInputChange("Spouse Occupation", e.target.value)}
-                          readOnly={linkedSpouseId && !isNewClient}
-                          disabled={linkedSpouseId && !isNewClient}
+                          readOnly={!!(linkedSpouseId && !isNewClient)}
+                          disabled={!!(linkedSpouseId && !isNewClient)}
                         />
                       </div>
 
@@ -1105,8 +1105,8 @@ export default function ClientIntake() {
                           className={`input input-bordered uppercase ${linkedSpouseId && !isNewClient ? 'bg-base-200' : ''}`}
                           value={formData["Spouse Driver License"] || ""}
                           onChange={(e) => handleInputChange("Spouse Driver License", e.target.value.toUpperCase())}
-                          readOnly={linkedSpouseId && !isNewClient}
-                          disabled={linkedSpouseId && !isNewClient}
+                          readOnly={!!(linkedSpouseId && !isNewClient)}
+                          disabled={!!(linkedSpouseId && !isNewClient)}
                         />
                       </div>
 
