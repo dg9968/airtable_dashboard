@@ -7,6 +7,17 @@
 import { Hono } from "hono";
 import { testConnection } from "../airtable";
 import { fetchAllRecords, createRecords, updateRecords, deleteRecords, getRecord } from "../lib/airtable-helpers";
+import {
+  findPersonBySSN,
+  createSpouseRecord,
+  linkSpouses,
+  createDependentRecord,
+  linkDependent,
+  validateUniqueFamilySSN,
+  parseName,
+  type FamilyMemberData,
+  type DependentData,
+} from "../lib/family-record-helpers";
 
 const app = new Hono();
 
@@ -141,14 +152,36 @@ app.get("/:id", async (c) => {
 
 /**
  * POST /api/personal
- * Create a new personal record
+ * Create a new personal record with optional spouse and dependents
  */
 app.post("/", async (c) => {
   try {
     const body = await c.req.json();
     const fields = body.fields;
+    const spouse = body.spouse;
+    const dependents = body.dependents || [];
+    const spouseSameAddress = body.spouseSameAddress !== false; // Default to true
 
-    // List of computed fields that Airtable doesn't accept
+    // Validate unique SSNs across family if spouse or dependents provided
+    if (spouse || (dependents && dependents.length > 0)) {
+      const validation = validateUniqueFamilySSN(
+        fields.SSN,
+        spouse?.ssn,
+        dependents.map((d: any) => d.ssn)
+      );
+
+      if (!validation.valid) {
+        return c.json(
+          {
+            success: false,
+            errors: validation.errors,
+          },
+          400
+        );
+      }
+    }
+
+    // List of computed/lookup fields that Airtable doesn't accept
     const computedFields = [
       "Full Name",
       "Last modified time",
@@ -158,6 +191,16 @@ app.post("/", async (c) => {
       "last name first name",
       "Record ID",
       "Client Code",
+      // Spouse text fields - these are legacy, we use linked records instead
+      "Spouse Name",
+      "Spouse SSN",
+      "Spouse DOB",
+      "Spouse Occupation",
+      "Spouse Driver License",
+      "Spouse Identity Protection PIN",
+      // Spouse lookup fields
+      "Spouse First Name",
+      "Spouse Last Name",
     ];
 
     // Fields that should be numbers in Airtable
@@ -195,11 +238,144 @@ app.post("/", async (c) => {
       { fields: cleanedFields },
     ]);
 
+    const primaryRecord = records[0];
+    const primaryId = primaryRecord.id;
+
+    // Handle spouse creation and linking
+    let spouseResult = null;
+    if (spouse && spouse.name && spouse.ssn && spouse.dob) {
+      console.log("Processing spouse creation/linking...");
+
+      // Check if spouse already exists
+      const existingSpouse = await findPersonBySSN(spouse.ssn);
+
+      if (existingSpouse) {
+        console.log(`Found existing spouse record: ${existingSpouse.id}`);
+        // Link to existing spouse
+        const linkResult = await linkSpouses(primaryId, existingSpouse.id);
+        spouseResult = {
+          ...linkResult,
+          recordId: existingSpouse.id,
+          existing: true,
+        };
+      } else {
+        console.log("Creating new spouse record...");
+        // Create new spouse record
+        const nameData = parseName(spouse.name);
+        const spouseData: FamilyMemberData = {
+          firstName: nameData.firstName,
+          lastName: nameData.lastName,
+          ssn: spouse.ssn,
+          dob: spouse.dob,
+          occupation: spouse.occupation,
+          driverLicense: spouse.driverLicense,
+        };
+
+        // Copy address if spouse has same address
+        if (spouseSameAddress) {
+          spouseData.address = fields["Mailing Address"];
+          spouseData.city = fields.City;
+          spouseData.state = fields.State;
+          spouseData.zip = fields.ZIP;
+          spouseData.phone = fields["📞Phone number"];
+          spouseData.email = fields.Email;
+        }
+
+        const createResult = await createSpouseRecord(
+          spouseData,
+          String(fields["Tax Year"] || new Date().getFullYear())
+        );
+
+        if (createResult.success && createResult.recordId) {
+          // Link the spouse bidirectionally
+          const linkResult = await linkSpouses(primaryId, createResult.recordId);
+          spouseResult = {
+            ...linkResult,
+            recordId: createResult.recordId,
+            existing: false,
+          };
+        } else {
+          spouseResult = createResult;
+        }
+      }
+    }
+
+    // Handle dependents creation and linking
+    const dependentResults = [];
+    if (dependents && dependents.length > 0) {
+      console.log(`Processing ${dependents.length} dependent(s)...`);
+
+      for (const dep of dependents) {
+        // Skip incomplete dependents
+        if (!dep.name || !dep.ssn || !dep.dob) {
+          console.log("Skipping incomplete dependent");
+          continue;
+        }
+
+        // Check if dependent already exists
+        const existingDependent = await findPersonBySSN(dep.ssn);
+
+        if (existingDependent) {
+          console.log(`Found existing dependent record: ${existingDependent.id}`);
+          // Link to existing dependent
+          const linkResult = await linkDependent(
+            primaryId,
+            existingDependent.id,
+            dep.relationshipType || "Other Dependent"
+          );
+          dependentResults.push({
+            ...linkResult,
+            recordId: existingDependent.id,
+            existing: true,
+          });
+        } else {
+          console.log("Creating new dependent record...");
+          // Create new dependent record
+          const nameData = parseName(dep.name);
+          const dependentData: DependentData = {
+            firstName: nameData.firstName,
+            lastName: nameData.lastName,
+            ssn: dep.ssn,
+            dob: dep.dob,
+            relationshipType: dep.relationshipType || "Other Dependent",
+          };
+
+          // Copy address from primary by default
+          dependentData.address = fields["Mailing Address"];
+          dependentData.city = fields.City;
+          dependentData.state = fields.State;
+          dependentData.zip = fields.ZIP;
+
+          const createResult = await createDependentRecord(
+            dependentData,
+            String(fields["Tax Year"] || new Date().getFullYear())
+          );
+
+          if (createResult.success && createResult.recordId) {
+            // Link the dependent
+            const linkResult = await linkDependent(
+              primaryId,
+              createResult.recordId,
+              dep.relationshipType || "Other Dependent"
+            );
+            dependentResults.push({
+              ...linkResult,
+              recordId: createResult.recordId,
+              existing: false,
+            });
+          } else {
+            dependentResults.push(createResult);
+          }
+        }
+      }
+    }
+
     return c.json({
       success: true,
       data: {
-        id: records[0].id,
-        fields: records[0].fields,
+        primary: primaryRecord,
+        spouse: spouseResult,
+        dependents: dependentResults,
       },
     });
   } catch (error) {
@@ -223,15 +399,37 @@ app.post("/", async (c) => {
 
 /**
  * PATCH /api/personal/:id
- * Update a personal record
+ * Update a personal record with optional spouse and dependents
  */
 app.patch("/:id", async (c) => {
   try {
     const id = c.req.param("id");
     const body = await c.req.json();
     const fields = body.fields;
+    const spouse = body.spouse;
+    const dependents = body.dependents || [];
+    const spouseSameAddress = body.spouseSameAddress !== false; // Default to true
 
-    // List of computed fields that Airtable doesn't accept
+    // Validate unique SSNs across family if spouse or dependents provided
+    if (spouse || (dependents && dependents.length > 0)) {
+      const validation = validateUniqueFamilySSN(
+        fields.SSN || "",
+        spouse?.ssn,
+        dependents.map((d: any) => d.ssn)
+      );
+
+      if (!validation.valid) {
+        return c.json(
+          {
+            success: false,
+            errors: validation.errors,
+          },
+          400
+        );
+      }
+    }
+
+    // List of computed/lookup fields that Airtable doesn't accept
     const computedFields = [
       "Full Name",
       "Last modified time",
@@ -241,6 +439,16 @@ app.patch("/:id", async (c) => {
       "last name first name",
       "Record ID",
       "Client Code",
+      // Spouse text fields - these are legacy, we use linked records instead
+      "Spouse Name",
+      "Spouse SSN",
+      "Spouse DOB",
+      "Spouse Occupation",
+      "Spouse Driver License",
+      "Spouse Identity Protection PIN",
+      // Spouse lookup fields
+      "Spouse First Name",
+      "Spouse Last Name",
     ];
 
     // Fields that should be numbers in Airtable
@@ -279,11 +487,143 @@ app.patch("/:id", async (c) => {
       },
     ]);
 
+    const primaryRecord = records[0];
+
+    // Handle spouse creation and linking (same logic as POST)
+    let spouseResult = null;
+    if (spouse && spouse.name && spouse.ssn && spouse.dob) {
+      console.log("Processing spouse update/creation...");
+
+      // Check if spouse already exists
+      const existingSpouse = await findPersonBySSN(spouse.ssn);
+
+      if (existingSpouse) {
+        console.log(`Found existing spouse record: ${existingSpouse.id}`);
+        // Link to existing spouse
+        const linkResult = await linkSpouses(id, existingSpouse.id);
+        spouseResult = {
+          ...linkResult,
+          recordId: existingSpouse.id,
+          existing: true,
+        };
+      } else {
+        console.log("Creating new spouse record...");
+        // Create new spouse record
+        const nameData = parseName(spouse.name);
+        const spouseData: FamilyMemberData = {
+          firstName: nameData.firstName,
+          lastName: nameData.lastName,
+          ssn: spouse.ssn,
+          dob: spouse.dob,
+          occupation: spouse.occupation,
+          driverLicense: spouse.driverLicense,
+        };
+
+        // Copy address if spouse has same address
+        if (spouseSameAddress) {
+          spouseData.address = fields["Mailing Address"];
+          spouseData.city = fields.City;
+          spouseData.state = fields.State;
+          spouseData.zip = fields.ZIP;
+          spouseData.phone = fields["📞Phone number"];
+          spouseData.email = fields.Email;
+        }
+
+        const createResult = await createSpouseRecord(
+          spouseData,
+          String(fields["Tax Year"] || new Date().getFullYear())
+        );
+
+        if (createResult.success && createResult.recordId) {
+          // Link the spouse bidirectionally
+          const linkResult = await linkSpouses(id, createResult.recordId);
+          spouseResult = {
+            ...linkResult,
+            recordId: createResult.recordId,
+            existing: false,
+          };
+        } else {
+          spouseResult = createResult;
+        }
+      }
+    }
+
+    // Handle dependents creation and linking (same logic as POST)
+    const dependentResults = [];
+    if (dependents && dependents.length > 0) {
+      console.log(`Processing ${dependents.length} dependent(s)...`);
+
+      for (const dep of dependents) {
+        // Skip incomplete dependents
+        if (!dep.name || !dep.ssn || !dep.dob) {
+          console.log("Skipping incomplete dependent");
+          continue;
+        }
+
+        // Check if dependent already exists
+        const existingDependent = await findPersonBySSN(dep.ssn);
+
+        if (existingDependent) {
+          console.log(`Found existing dependent record: ${existingDependent.id}`);
+          // Link to existing dependent
+          const linkResult = await linkDependent(
+            id,
+            existingDependent.id,
+            dep.relationshipType || "Other Dependent"
+          );
+          dependentResults.push({
+            ...linkResult,
+            recordId: existingDependent.id,
+            existing: true,
+          });
+        } else {
+          console.log("Creating new dependent record...");
+          // Create new dependent record
+          const nameData = parseName(dep.name);
+          const dependentData: DependentData = {
+            firstName: nameData.firstName,
+            lastName: nameData.lastName,
+            ssn: dep.ssn,
+            dob: dep.dob,
+            relationshipType: dep.relationshipType || "Other Dependent",
+          };
+
+          // Copy address from primary by default
+          dependentData.address = fields["Mailing Address"];
+          dependentData.city = fields.City;
+          dependentData.state = fields.State;
+          dependentData.zip = fields.ZIP;
+
+          const createResult = await createDependentRecord(
+            dependentData,
+            String(fields["Tax Year"] || new Date().getFullYear())
+          );
+
+          if (createResult.success && createResult.recordId) {
+            // Link the dependent
+            const linkResult = await linkDependent(
+              id,
+              createResult.recordId,
+              dep.relationshipType || "Other Dependent"
+            );
+            dependentResults.push({
+              ...linkResult,
+              recordId: createResult.recordId,
+              existing: false,
+            });
+          } else {
+            dependentResults.push(createResult);
+          }
+        }
+      }
+    }
+
     return c.json({
       success: true,
       data: {
-        id: records[0].id,
-        fields: records[0].fields,
+        primary: primaryRecord,
+        spouse: spouseResult,
+        dependents: dependentResults,
       },
     });
   } catch (error) {

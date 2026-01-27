@@ -6,6 +6,13 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
 // Types
+interface DependentFormData {
+  name: string;
+  ssn: string;
+  dob: string;
+  relationshipType: 'Child' | 'Parent' | 'Other Dependent';
+}
+
 interface PersonalRecord {
   id: string;
   fields: {
@@ -23,6 +30,10 @@ interface PersonalRecord {
     "Spouse DOB"?: string;
     "Spouse Occupation"?: string;
     "Spouse Driver License"?: string;
+    "Spouse (Linked)"?: string[];
+    "Dependent (Linked)"?: string[];
+    "Child (Linked)"?: string[];
+    "Parent (Linked)"?: string[];
     "Mailing Address"?: string;
     City?: string;
     State?: string;
@@ -68,11 +79,21 @@ export default function ClientIntake() {
     "Account Type": "Checking",
   });
 
+  // Family member state
+  const [dependents, setDependents] = useState<DependentFormData[]>([]);
+  const [spouseSameAddress, setSpouseSameAddress] = useState(true);
+  const [spouseSearchTerm, setSpouseSearchTerm] = useState("");
+  const [spouseSearchResults, setSpouseSearchResults] = useState<PersonalRecord[]>([]);
+  const [isSearchingSpouse, setIsSearchingSpouse] = useState(false);
+  const [showSpouseSearch, setShowSpouseSearch] = useState(false);
+  const [linkedSpouseId, setLinkedSpouseId] = useState<string | null>(null);
+
   // Form navigation sections
   const formSections = [
     { id: "primary-taxpayer", label: "Primary Taxpayer", icon: "👤" },
     { id: "contact-info", label: "Contact Information", icon: "📞" },
     { id: "spouse-info", label: "Spouse Information", icon: "💑" },
+    { id: "dependents-info", label: "Dependents", icon: "👨‍👩‍👧‍👦" },
     { id: "tax-info", label: "Tax Information", icon: "📋" },
     { id: "bank-info", label: "Bank Information", icon: "🏦" },
     { id: "prior-year", label: "Prior Year Info", icon: "📅" },
@@ -113,6 +134,97 @@ export default function ClientIntake() {
             setSelectedClient(client);
             setFormData(client.fields);
             setIsNewClient(false);
+
+            // Check if this client has a linked spouse
+            if (client.fields["Spouse (Linked)"] && client.fields["Spouse (Linked)"].length > 0) {
+              const spouseId = client.fields["Spouse (Linked)"][0];
+              setLinkedSpouseId(spouseId);
+
+              // Fetch the spouse's information
+              const spouseResponse = await fetch(`/api/personal/${spouseId}`);
+              const spouseData = await spouseResponse.json();
+
+              if (spouseData.success) {
+                const spouse = spouseData.data;
+                // Populate the form fields with spouse info for display
+                setFormData(prev => ({
+                  ...prev,
+                  "Spouse Name": spouse.fields["Full Name"] || `${spouse.fields["First Name"]} ${spouse.fields["Last Name"]}`,
+                  "Spouse SSN": spouse.fields.SSN || "",
+                  "Spouse DOB": spouse.fields["Date of Birth"] || "",
+                  "Spouse Occupation": spouse.fields.Occupation || "",
+                  "Spouse Driver License": spouse.fields["Driver License"] || "",
+                }));
+              }
+            }
+
+            // Load all linked dependents (children, parents, other dependents)
+            const loadedDependents: DependentFormData[] = [];
+
+            // Load children
+            if (client.fields["Child (Linked)"] && client.fields["Child (Linked)"].length > 0) {
+              for (const childId of client.fields["Child (Linked)"]) {
+                try {
+                  const childResponse = await fetch(`/api/personal/${childId}`);
+                  const childData = await childResponse.json();
+                  if (childData.success) {
+                    const child = childData.data;
+                    loadedDependents.push({
+                      name: child.fields["Full Name"] || `${child.fields["First Name"]} ${child.fields["Last Name"]}`,
+                      ssn: child.fields.SSN || "",
+                      dob: child.fields["Date of Birth"] || "",
+                      relationshipType: "Child",
+                    });
+                  }
+                } catch (err) {
+                  console.error('Error loading child:', err);
+                }
+              }
+            }
+
+            // Load parents
+            if (client.fields["Parent (Linked)"] && client.fields["Parent (Linked)"].length > 0) {
+              for (const parentId of client.fields["Parent (Linked)"]) {
+                try {
+                  const parentResponse = await fetch(`/api/personal/${parentId}`);
+                  const parentData = await parentResponse.json();
+                  if (parentData.success) {
+                    const parent = parentData.data;
+                    loadedDependents.push({
+                      name: parent.fields["Full Name"] || `${parent.fields["First Name"]} ${parent.fields["Last Name"]}`,
+                      ssn: parent.fields.SSN || "",
+                      dob: parent.fields["Date of Birth"] || "",
+                      relationshipType: "Parent",
+                    });
+                  }
+                } catch (err) {
+                  console.error('Error loading parent:', err);
+                }
+              }
+            }
+
+            // Load other dependents
+            if (client.fields["Dependent (Linked)"] && client.fields["Dependent (Linked)"].length > 0) {
+              for (const depId of client.fields["Dependent (Linked)"]) {
+                try {
+                  const depResponse = await fetch(`/api/personal/${depId}`);
+                  const depData = await depResponse.json();
+                  if (depData.success) {
+                    const dep = depData.data;
+                    loadedDependents.push({
+                      name: dep.fields["Full Name"] || `${dep.fields["First Name"]} ${dep.fields["Last Name"]}`,
+                      ssn: dep.fields.SSN || "",
+                      dob: dep.fields["Date of Birth"] || "",
+                      relationshipType: "Other Dependent",
+                    });
+                  }
+                } catch (err) {
+                  console.error('Error loading dependent:', err);
+                }
+              }
+            }
+
+            setDependents(loadedDependents);
           }
         } catch (err) {
           setError(err instanceof Error ? err.message : "Failed to load client");
@@ -181,18 +293,175 @@ export default function ClientIntake() {
   }, [searchTerm, handleSearch]);
 
   // Load selected client data into form
-  const handleSelectClient = (client: PersonalRecord) => {
+  const handleSelectClient = async (client: PersonalRecord) => {
     setSelectedClient(client);
     setFormData(client.fields);
     setIsNewClient(false);
     setSearchResults([]);
     setSearchTerm("");
+
+    // Reset and check for spouse link
+    setLinkedSpouseId(null);
+    setDependents([]);
+
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+
+    // Check if this client has a linked spouse
+    if (client.fields["Spouse (Linked)"] && client.fields["Spouse (Linked)"].length > 0) {
+      const spouseId = client.fields["Spouse (Linked)"][0];
+      setLinkedSpouseId(spouseId);
+
+      try {
+        // Fetch the spouse's information
+        const spouseResponse = await fetch(`${apiUrl}/api/personal/${spouseId}`);
+        const spouseData = await spouseResponse.json();
+
+        if (spouseData.success) {
+          const spouse = spouseData.data;
+          // Populate the form fields with spouse info for display
+          setFormData(prev => ({
+            ...prev,
+            "Spouse Name": spouse.fields["Full Name"] || `${spouse.fields["First Name"]} ${spouse.fields["Last Name"]}`,
+            "Spouse SSN": spouse.fields.SSN || "",
+            "Spouse DOB": spouse.fields["Date of Birth"] || "",
+            "Spouse Occupation": spouse.fields.Occupation || "",
+            "Spouse Driver License": spouse.fields["Driver License"] || "",
+          }));
+        }
+      } catch (err) {
+        console.error('Error loading spouse data:', err);
+      }
+    } else {
+      // Clear spouse fields if no spouse linked
+      setFormData(prev => ({
+        ...prev,
+        "Spouse Name": "",
+        "Spouse SSN": "",
+        "Spouse DOB": "",
+        "Spouse Occupation": "",
+        "Spouse Driver License": "",
+      }));
+    }
+
+    // Load all linked dependents (children, parents, other dependents)
+    const loadedDependents: DependentFormData[] = [];
+
+    try {
+      // Load children
+      if (client.fields["Child (Linked)"] && client.fields["Child (Linked)"].length > 0) {
+        for (const childId of client.fields["Child (Linked)"]) {
+          const childResponse = await fetch(`${apiUrl}/api/personal/${childId}`);
+          const childData = await childResponse.json();
+          if (childData.success) {
+            const child = childData.data;
+            loadedDependents.push({
+              name: child.fields["Full Name"] || `${child.fields["First Name"]} ${child.fields["Last Name"]}`,
+              ssn: child.fields.SSN || "",
+              dob: child.fields["Date of Birth"] || "",
+              relationshipType: "Child",
+            });
+          }
+        }
+      }
+
+      // Load parents
+      if (client.fields["Parent (Linked)"] && client.fields["Parent (Linked)"].length > 0) {
+        for (const parentId of client.fields["Parent (Linked)"]) {
+          const parentResponse = await fetch(`${apiUrl}/api/personal/${parentId}`);
+          const parentData = await parentResponse.json();
+          if (parentData.success) {
+            const parent = parentData.data;
+            loadedDependents.push({
+              name: parent.fields["Full Name"] || `${parent.fields["First Name"]} ${parent.fields["Last Name"]}`,
+              ssn: parent.fields.SSN || "",
+              dob: parent.fields["Date of Birth"] || "",
+              relationshipType: "Parent",
+            });
+          }
+        }
+      }
+
+      // Load other dependents
+      if (client.fields["Dependent (Linked)"] && client.fields["Dependent (Linked)"].length > 0) {
+        for (const depId of client.fields["Dependent (Linked)"]) {
+          const depResponse = await fetch(`${apiUrl}/api/personal/${depId}`);
+          const depData = await depResponse.json();
+          if (depData.success) {
+            const dep = depData.data;
+            loadedDependents.push({
+              name: dep.fields["Full Name"] || `${dep.fields["First Name"]} ${dep.fields["Last Name"]}`,
+              ssn: dep.fields.SSN || "",
+              dob: dep.fields["Date of Birth"] || "",
+              relationshipType: "Other Dependent",
+            });
+          }
+        }
+      }
+
+      setDependents(loadedDependents);
+    } catch (err) {
+      console.error('Error loading dependents:', err);
+    }
+  };
+
+  // Search for spouse
+  const handleSpouseSearch = useCallback(async (query: string) => {
+    if (query.length < 2) {
+      setSpouseSearchResults([]);
+      return;
+    }
+
+    try {
+      setIsSearchingSpouse(true);
+      const response = await fetch(`/api/personal/search?q=${encodeURIComponent(query)}`);
+      const data = await response.json();
+
+      if (data.success) {
+        // Filter out the current client from results
+        const filtered = data.data.filter((person: PersonalRecord) => person.id !== selectedClient?.id);
+        setSpouseSearchResults(filtered);
+      }
+    } catch (err) {
+      console.error("Error searching for spouse:", err);
+    } finally {
+      setIsSearchingSpouse(false);
+    }
+  }, [selectedClient?.id]);
+
+  // Debounce spouse search
+  useEffect(() => {
+    if (spouseSearchTerm.length >= 2) {
+      const timeoutId = setTimeout(() => {
+        handleSpouseSearch(spouseSearchTerm);
+      }, 500);
+
+      return () => clearTimeout(timeoutId);
+    } else {
+      setSpouseSearchResults([]);
+    }
+  }, [spouseSearchTerm, handleSpouseSearch]);
+
+  // Link to existing spouse
+  const handleLinkExistingSpouse = (spouse: PersonalRecord) => {
+    // Populate spouse fields with existing person's data
+    handleInputChange("Spouse Name", spouse.fields["Full Name"] || `${spouse.fields["First Name"]} ${spouse.fields["Last Name"]}`);
+    handleInputChange("Spouse SSN", spouse.fields.SSN || "");
+    handleInputChange("Spouse DOB", spouse.fields["Date of Birth"] || "");
+    handleInputChange("Spouse Occupation", spouse.fields.Occupation || "");
+    handleInputChange("Spouse Driver License", spouse.fields["Driver License"] || "");
+
+    setLinkedSpouseId(spouse.id);
+    setShowSpouseSearch(false);
+    setSpouseSearchTerm("");
+    setSpouseSearchResults([]);
   };
 
   // Reset to new client
   const handleNewClient = () => {
     setSelectedClient(null);
     setIsNewClient(true);
+    setLinkedSpouseId(null);
+    setDependents([]);
     setFormData({
       "Tax Year": new Date().getFullYear().toString(),
       "Filing Status": "Single",
@@ -209,6 +478,29 @@ export default function ClientIntake() {
       setSaving(true);
       setError(null);
 
+      // Validate spouse SSN vs primary SSN
+      if (formData["Spouse SSN"] && formData.SSN === formData["Spouse SSN"]) {
+        setError("Spouse SSN cannot be the same as primary taxpayer SSN");
+        setTimeout(() => setError(null), 3000);
+        setSaving(false);
+        return;
+      }
+
+      // Validate dependent SSNs are unique within family
+      const allSSNs = [
+        formData.SSN,
+        formData["Spouse SSN"],
+        ...dependents.map(d => d.ssn)
+      ].filter(Boolean);
+
+      const uniqueSSNs = new Set(allSSNs);
+      if (allSSNs.length !== uniqueSSNs.size) {
+        setError("All family members must have unique SSNs");
+        setTimeout(() => setError(null), 3000);
+        setSaving(false);
+        return;
+      }
+
       const url = isNewClient
         ? "/api/personal"
         : `/api/personal/${selectedClient?.id}`;
@@ -218,6 +510,11 @@ export default function ClientIntake() {
         "Full Name": _fullName,
         "Last modified time": _lastModified,
         "last name first name": _lastNameFirstName,
+        "Spouse Name": _spouseName,
+        "Spouse SSN": _spouseSSN,
+        "Spouse DOB": _spouseDOB,
+        "Spouse Occupation": _spouseOccupation,
+        "Spouse Driver License": _spouseDriverLicense,
         ...fieldsToSave
       } = formData;
 
@@ -226,28 +523,32 @@ export default function ClientIntake() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ fields: fieldsToSave }),
+        body: JSON.stringify({
+          fields: fieldsToSave,
+        }),
       });
 
       const data = await response.json();
 
       if (data.success) {
-        setSuccessMessage(
-          isNewClient
-            ? "Client created successfully!"
-            : "Client updated successfully!"
-        );
-        if (isNewClient) {
+        const message = isNewClient
+          ? "Client created successfully!"
+          : "Client updated successfully!";
+
+        setSuccessMessage(message);
+
+        if (isNewClient && data.data.primary) {
           setSelectedClient({
-            id: data.data.id,
-            fields: data.data.fields,
+            id: data.data.primary.id,
+            fields: data.data.primary.fields,
             createdTime: new Date().toISOString(),
           });
           setIsNewClient(false);
         }
-        setTimeout(() => setSuccessMessage(null), 3000);
+
+        setTimeout(() => setSuccessMessage(null), 5000);
       } else {
-        setError(data.error || "Failed to save client");
+        setError(data.error || data.errors?.join(", ") || "Failed to save client");
         setTimeout(() => setError(null), 3000);
       }
     } catch (err) {
@@ -543,7 +844,7 @@ export default function ClientIntake() {
                     <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
-                    <span>{successMessage}</span>
+                    <div className="whitespace-pre-line">{successMessage}</div>
                   </div>
                 )}
 
@@ -675,72 +976,328 @@ export default function ClientIntake() {
                     <p className="text-base-content/70">
                       {formData["Filing Status"] === "Married Filing Jointly" ||
                       formData["Filing Status"] === "Married Filing Separately"
-                        ? "Please enter spouse information"
+                        ? "Search for an existing client or enter new spouse information below. A separate Personal record will be created and linked."
                         : "Spouse information only required for married filing jointly or separately"}
                     </p>
+
+                    {/* Show linked spouse status */}
+                    {linkedSpouseId && !isNewClient && (
+                      <div className="alert alert-success">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <div className="flex-1">
+                          <p className="font-semibold">Spouse Already Linked</p>
+                          <p className="text-sm">This client has a linked spouse record. Information shown below is from the linked record.</p>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            className="btn btn-sm"
+                            onClick={() => {
+                              if (linkedSpouseId) {
+                                window.open(`/client-intake?id=${linkedSpouseId}`, '_blank');
+                              }
+                            }}
+                          >
+                            View Spouse Record
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-ghost"
+                            onClick={() => {
+                              if (confirm('This will unlink the spouse. To manage the relationship, use the Tax Family Dashboard. Continue?')) {
+                                setLinkedSpouseId(null);
+                                setFormData(prev => ({
+                                  ...prev,
+                                  "Spouse Name": "",
+                                  "Spouse SSN": "",
+                                  "Spouse DOB": "",
+                                  "Spouse Occupation": "",
+                                  "Spouse Driver License": "",
+                                }));
+                              }
+                            }}
+                          >
+                            Unlink
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Show message when no spouse linked */}
+                    {!linkedSpouseId && (
+                      <div className="alert alert-warning">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                        <div>
+                          <p className="font-semibold">No spouse linked</p>
+                          <p className="text-sm">To add or link a spouse, use the Tax Family Dashboard after saving this client.</p>
+                        </div>
+                      </div>
+                    )}
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="form-control md:col-span-2">
                         <label className="label">
-                          <span className="label-text">Spouse Full Name</span>
+                          <span className="label-text">Spouse Full Name {linkedSpouseId && !isNewClient && <span className="text-info text-xs">(read-only, linked record)</span>}</span>
                         </label>
                         <input
                           type="text"
-                          className="input input-bordered"
+                          className={`input input-bordered ${linkedSpouseId && !isNewClient ? 'bg-base-200' : ''}`}
                           value={formData["Spouse Name"] || ""}
                           onChange={(e) => handleInputChange("Spouse Name", e.target.value)}
+                          readOnly={linkedSpouseId && !isNewClient}
+                          disabled={linkedSpouseId && !isNewClient}
                         />
                       </div>
 
                       <div className="form-control">
                         <label className="label">
-                          <span className="label-text">Spouse Social Security Number</span>
+                          <span className="label-text">Spouse Social Security Number {linkedSpouseId && !isNewClient && <span className="text-info text-xs">(read-only, linked record)</span>}</span>
                         </label>
                         <input
                           type="text"
-                          className="input input-bordered"
+                          className={`input input-bordered ${linkedSpouseId && !isNewClient ? 'bg-base-200' : ''}`}
                           placeholder="XXX-XX-XXXX"
                           value={formData["Spouse SSN"] || ""}
                           onChange={(e) => handleInputChange("Spouse SSN", formatSSN(e.target.value))}
+                          readOnly={linkedSpouseId && !isNewClient}
+                          disabled={linkedSpouseId && !isNewClient}
                         />
                       </div>
 
                       <div className="form-control">
                         <label className="label">
-                          <span className="label-text">Spouse Date of Birth</span>
+                          <span className="label-text">Spouse Date of Birth {linkedSpouseId && !isNewClient && <span className="text-info text-xs">(read-only, linked record)</span>}</span>
                         </label>
                         <input
                           type="date"
-                          className="input input-bordered"
+                          className={`input input-bordered ${linkedSpouseId && !isNewClient ? 'bg-base-200' : ''}`}
                           value={formData["Spouse DOB"] || ""}
                           onChange={(e) => handleInputChange("Spouse DOB", e.target.value)}
+                          readOnly={linkedSpouseId && !isNewClient}
+                          disabled={linkedSpouseId && !isNewClient}
                         />
                       </div>
 
                       <div className="form-control">
                         <label className="label">
-                          <span className="label-text">Spouse Occupation</span>
+                          <span className="label-text">Spouse Occupation {linkedSpouseId && !isNewClient && <span className="text-info text-xs">(read-only, linked record)</span>}</span>
                         </label>
                         <input
                           type="text"
-                          className="input input-bordered"
+                          className={`input input-bordered ${linkedSpouseId && !isNewClient ? 'bg-base-200' : ''}`}
                           value={formData["Spouse Occupation"] || ""}
                           onChange={(e) => handleInputChange("Spouse Occupation", e.target.value)}
+                          readOnly={linkedSpouseId && !isNewClient}
+                          disabled={linkedSpouseId && !isNewClient}
                         />
                       </div>
 
                       <div className="form-control">
                         <label className="label">
-                          <span className="label-text">Spouse Driver's License / State ID</span>
+                          <span className="label-text">Spouse Driver's License / State ID {linkedSpouseId && !isNewClient && <span className="text-info text-xs">(read-only, linked record)</span>}</span>
                         </label>
                         <input
                           type="text"
-                          className="input input-bordered uppercase"
+                          className={`input input-bordered uppercase ${linkedSpouseId && !isNewClient ? 'bg-base-200' : ''}`}
                           value={formData["Spouse Driver License"] || ""}
                           onChange={(e) => handleInputChange("Spouse Driver License", e.target.value.toUpperCase())}
+                          readOnly={linkedSpouseId && !isNewClient}
+                          disabled={linkedSpouseId && !isNewClient}
                         />
                       </div>
+
+                      <div className="form-control md:col-span-2">
+                        <label className="cursor-pointer label justify-start gap-4">
+                          <input
+                            type="checkbox"
+                            className="checkbox checkbox-primary"
+                            checked={spouseSameAddress}
+                            onChange={(e) => setSpouseSameAddress(e.target.checked)}
+                          />
+                          <span className="label-text">
+                            Spouse has the same address as primary taxpayer
+                          </span>
+                        </label>
+                        <p className="text-sm text-base-content/60 ml-10 mt-1">
+                          {spouseSameAddress
+                            ? "Spouse record will inherit the same contact information from the Contact Information section"
+                            : "Uncheck to enter different address for spouse (future enhancement)"}
+                        </p>
+                        <div className="alert alert-info mt-4">
+                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" className="stroke-current shrink-0 w-6 h-6">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                          </svg>
+                          <div>
+                            <p className="font-semibold">How spouse information works:</p>
+                            <ul className="text-sm mt-2 space-y-1">
+                              <li>• <strong>If spouse already linked:</strong> All fields are read-only (displayed from the linked spouse record)</li>
+                              <li>• <strong>To edit spouse info:</strong> Click "View Spouse Record" button to open and edit the spouse's own record</li>
+                              <li>• <strong>To link a spouse:</strong> Use the Tax Family Dashboard after saving this client</li>
+                              <li>• <strong>All relationships:</strong> Managed through the Tax Family Dashboard, not here</li>
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
                     </div>
+                  </div>
+                )}
+
+                {/* Dependents Section */}
+                {activeSection === "dependents-info" && (
+                  <div className="space-y-4">
+                    <h2 className="text-2xl font-bold">👨‍👩‍👧‍👦 Dependents</h2>
+
+                    {!isNewClient && dependents.length > 0 ? (
+                      <>
+                        <div className="alert alert-info">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                          </svg>
+                          <div>
+                            <p className="font-semibold">Linked Dependents</p>
+                            <p className="text-sm">The dependents below are linked records from Airtable. To manage relationships, use the Tax Family Dashboard.</p>
+                          </div>
+                        </div>
+                        <p className="text-base-content/70">
+                          Viewing dependents linked to this taxpayer. Information is read-only.
+                        </p>
+                      </>
+                    ) : (
+                      <div className="alert alert-warning">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                        <div>
+                          <p className="font-semibold">No dependents linked</p>
+                          <p className="text-sm">To add or link dependents, use the Tax Family Dashboard after saving this client.</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {dependents.map((dep, index) => (
+                      <div key={index} className="card bg-base-200 p-4">
+                        <div className="flex justify-between items-center mb-4">
+                          <h3 className="font-semibold">
+                            {dep.relationshipType} #{index + 1}
+                            {!isNewClient && <span className="text-info text-xs ml-2">(read-only, linked record)</span>}
+                          </h3>
+                          {isNewClient && (
+                            <button
+                              type="button"
+                              onClick={() => setDependents(dependents.filter((_, i) => i !== index))}
+                              className="btn btn-error btn-sm"
+                            >
+                              Remove
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="form-control md:col-span-2">
+                            <label className="label">
+                              <span className="label-text">Full Name <span className="text-error">*</span></span>
+                            </label>
+                            <input
+                              type="text"
+                              className={`input input-bordered ${!isNewClient ? 'bg-base-300' : ''}`}
+                              value={dep.name}
+                              onChange={(e) => {
+                                const updated = [...dependents];
+                                updated[index].name = e.target.value;
+                                setDependents(updated);
+                              }}
+                              placeholder="John Doe"
+                              readOnly={!isNewClient}
+                              disabled={!isNewClient}
+                            />
+                          </div>
+
+                          <div className="form-control">
+                            <label className="label">
+                              <span className="label-text">Social Security Number <span className="text-error">*</span></span>
+                            </label>
+                            <input
+                              type="text"
+                              className={`input input-bordered ${!isNewClient ? 'bg-base-300' : ''}`}
+                              placeholder="XXX-XX-XXXX"
+                              value={dep.ssn}
+                              onChange={(e) => {
+                                const updated = [...dependents];
+                                updated[index].ssn = formatSSN(e.target.value);
+                                setDependents(updated);
+                              }}
+                              readOnly={!isNewClient}
+                              disabled={!isNewClient}
+                            />
+                          </div>
+
+                          <div className="form-control">
+                            <label className="label">
+                              <span className="label-text">Date of Birth <span className="text-error">*</span></span>
+                            </label>
+                            <input
+                              type="date"
+                              className={`input input-bordered ${!isNewClient ? 'bg-base-300' : ''}`}
+                              value={dep.dob}
+                              onChange={(e) => {
+                                const updated = [...dependents];
+                                updated[index].dob = e.target.value;
+                                setDependents(updated);
+                              }}
+                              readOnly={!isNewClient}
+                              disabled={!isNewClient}
+                            />
+                          </div>
+
+                          <div className="form-control">
+                            <label className="label">
+                              <span className="label-text">Relationship Type <span className="text-error">*</span></span>
+                            </label>
+                            <select
+                              className={`select select-bordered ${!isNewClient ? 'bg-base-300' : ''}`}
+                              value={dep.relationshipType}
+                              onChange={(e) => {
+                                const updated = [...dependents];
+                                updated[index].relationshipType = e.target.value as DependentFormData['relationshipType'];
+                                setDependents(updated);
+                              }}
+                              disabled={!isNewClient}
+                            >
+                              <option value="Child">Child</option>
+                              <option value="Parent">Parent</option>
+                              <option value="Other Dependent">Other Dependent</option>
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+
+                    {isNewClient && (
+                      <>
+                        {dependents.length === 0 && (
+                          <div className="text-center py-8 border-2 border-dashed border-base-300 rounded-lg">
+                            <p className="text-base-content/60 mb-4">No dependents added yet</p>
+                          </div>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={() => setDependents([...dependents, { name: '', ssn: '', dob: '', relationshipType: 'Child' }])}
+                          className="btn btn-secondary btn-sm"
+                          disabled={dependents.length >= 10}
+                        >
+                          + Add Dependent
+                        </button>
+
+                        {dependents.length >= 10 && (
+                          <p className="text-sm text-warning">Maximum of 10 dependents reached</p>
+                        )}
+                      </>
+                    )}
                   </div>
                 )}
 
