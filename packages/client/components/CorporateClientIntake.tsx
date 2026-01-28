@@ -87,6 +87,9 @@ export default function CorporateClientIntake() {
     "Payroll",
     "Bookkeeping",
     "Annual Report",
+    "Sales Tax Monthly",
+    "Sales Tax Quarterly",
+    "Registered Agent",
     "1099 Filing",
     "Corporate Cases",
     "Tax Returns"
