@@ -129,14 +129,62 @@ app.get('/corporate/:corporateId', async (c) => {
     const corporateId = c.req.param('corporateId');
     const baseId = process.env.AIRTABLE_BASE_ID || '';
 
-    const records = await fetchAllRecords(baseId, 'Subscriptions Corporate', {
-      filterByFormula: `FIND("${corporateId}", ARRAYJOIN({Customer}))`,
+    // First, fetch the company record to get its name
+    const Airtable = require('airtable');
+    const airtable = new Airtable({
+      apiKey: process.env.AIRTABLE_PERSONAL_ACCESS_TOKEN,
     });
+    const base = airtable.base(baseId);
 
-    return c.json({
-      success: true,
-      data: records,
-    });
+    try {
+      const companyRecord = await base('Corporations').find(corporateId);
+      const subscriptionIds = companyRecord.fields['Subscriptions'] || [];
+
+      console.log('[DEBUG API] Company Record ID:', corporateId);
+      console.log('[DEBUG API] Subscription IDs from Corporations record:', subscriptionIds);
+
+      if (!Array.isArray(subscriptionIds) || subscriptionIds.length === 0) {
+        console.log('[DEBUG API] No subscriptions found for this company');
+        return c.json({
+          success: true,
+          data: [],
+        });
+      }
+
+      // Fetch each subscription record by ID
+      console.log('[DEBUG API] Fetching', subscriptionIds.length, 'subscription records...');
+      const records = await Promise.all(
+        subscriptionIds.map(async (id: string) => {
+          try {
+            const record = await base('Subscriptions Corporate').find(id);
+            return record;
+          } catch (error) {
+            console.error('[DEBUG API] Error fetching subscription record', id, ':', error);
+            return null;
+          }
+        })
+      );
+
+      // Filter out any null records (failed fetches)
+      const validRecords = records.filter(record => record !== null);
+
+      console.log('[DEBUG API] Successfully fetched', validRecords.length, 'subscription records');
+      if (validRecords.length > 0) {
+        console.log('[DEBUG API] First record fields:', JSON.stringify(validRecords[0].fields, null, 2));
+      }
+
+      return c.json({
+        success: true,
+        data: validRecords,
+      });
+    } catch (error) {
+      console.error('[API] Error fetching company or subscriptions:', error);
+      console.error('[API] Error details:', error);
+      return c.json({
+        success: true,
+        data: [],
+      });
+    }
   } catch (error) {
     console.error('Error fetching corporate subscriptions:', error);
     return c.json(

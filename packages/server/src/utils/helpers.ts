@@ -20,7 +20,7 @@ export function isValidClientCode(code: string): boolean {
  * Validate tax year
  */
 export function isValidTaxYear(year: string): boolean {
-  const validYears = ['2022', '2023', '2024', '2025', 'N/A'];
+  const validYears = ['2022', '2023', '2024', '2025', '2026', 'N/A'];
   return validYears.includes(year);
 }
 

@@ -173,11 +173,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate tax year is provided and valid (except for business credentials)
-    const validTaxYears = ['2022', '2023', '2024', '2025', 'N/A'];
+    const validTaxYears = ['2022', '2023', '2024', '2025', '2026', 'N/A'];
     const isBusinessCredentials = isCorporate && documentCategory === 'business-credentials';
-    
+
     if (!taxYear || (!validTaxYears.includes(taxYear))) {
-      return NextResponse.json({ error: 'Valid tax year is required (2022-2025)' }, { status: 400 });
+      return NextResponse.json({ error: 'Valid tax year is required (2022-2026)' }, { status: 400 });
     }
     
     // For business credentials, allow 'N/A' as tax year

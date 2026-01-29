@@ -96,7 +96,7 @@ app.post('/', async (c) => {
     }
 
     if (!isValidTaxYear(taxYear)) {
-      return c.json({ error: 'Valid tax year is required (2022-2025 or N/A)' }, 400);
+      return c.json({ error: 'Valid tax year is required (2022-2026 or N/A)' }, 400);
     }
 
     // Year-independent categories should use N/A as tax year

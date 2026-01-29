@@ -684,9 +684,18 @@ export default function CorporateClientIntake() {
               </p>
             </div>
             <div className="flex gap-2">
-              <Link href="/corporate-services-pipeline" className="btn btn-accent btn-sm">
-                🏦 View Pipeline
-              </Link>
+              {selectedCompany ? (
+                <button
+                  onClick={() => router.push(`/corporate-services-pipeline?companyId=${selectedCompany.id}`)}
+                  className="btn btn-accent btn-sm"
+                >
+                  🏦 View Pipeline
+                </button>
+              ) : (
+                <Link href="/corporate-services-pipeline" className="btn btn-accent btn-sm">
+                  🏦 View Pipeline
+                </Link>
+              )}
               <button onClick={handleNewCompany} className="btn btn-primary btn-sm">
                 + New Company
               </button>
@@ -758,6 +767,14 @@ export default function CorporateClientIntake() {
                       className="btn btn-primary btn-sm w-full mt-2"
                     >
                       📄 Go to Documents
+                    </button>
+                    <button
+                      onClick={() => {
+                        router.push(`/corporate-services-pipeline?companyId=${selectedCompany.id}`);
+                      }}
+                      className="btn btn-accent btn-sm w-full mt-2"
+                    >
+                      ⚙️ View Services
                     </button>
                   </>
                 )}

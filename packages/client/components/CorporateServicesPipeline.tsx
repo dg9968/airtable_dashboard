@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useSearchParams, useRouter } from "next/navigation";
 
 interface PipelineCompany {
   id: string;
@@ -26,6 +27,8 @@ interface Processor {
 }
 
 export default function CorporateServicesPipeline() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const [pipelineCompanies, setPipelineCompanies] = useState<PipelineCompany[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -42,6 +45,9 @@ export default function CorporateServicesPipeline() {
   const [selectedCompanyForCompletion, setSelectedCompanyForCompletion] = useState<string | null>(null);
   const [quotedAmount, setQuotedAmount] = useState<string>("");
   const [billingNote, setBillingNote] = useState<string>("");
+  const [corporateIdFilter, setCorporateIdFilter] = useState<string>("");
+  const [filteredByCorporate, setFilteredByCorporate] = useState(false);
+  const [filteredCompanyName, setFilteredCompanyName] = useState<string>("");
 
   // Available services - these match the view names in Airtable
   const services = [
@@ -74,17 +80,59 @@ export default function CorporateServicesPipeline() {
     fetchTeams();
   }, []);
 
-  // Fetch pipeline from Airtable - fetch based on selected service view
+  // Fetch pipeline from Airtable - fetch based on selected service view or corporate filter
   useEffect(() => {
+    let isCancelled = false;
+
     const fetchPipeline = async () => {
       try {
         setLoading(true);
-        // Build URL with view parameter if service is selected
-        const url = serviceFilter
+
+        // Read companyId from URL parameter (support both old and new parameter names)
+        const corporateIdFromUrl = searchParams.get('companyId') || searchParams.get('corporateId');
+
+        // Update state to show/hide filter banner
+        if (corporateIdFromUrl) {
+          // Always update when URL parameter changes
+          if (corporateIdFilter !== corporateIdFromUrl) {
+            setCorporateIdFilter(corporateIdFromUrl);
+            setFilteredByCorporate(true);
+
+            // Fetch company name for the filter banner
+            try {
+              const companyResponse = await fetch(`/api/view/Corporations/${corporateIdFromUrl}`);
+              const companyData = await companyResponse.json();
+              if (companyData.success && companyData.data) {
+                const name = companyData.data.fields?.['Company'] ||
+                            companyData.data.fields?.['Company Name'] ||
+                            'Selected Company';
+                setFilteredCompanyName(name);
+              }
+            } catch (error) {
+              console.error('[Pipeline] Error fetching company name:', error);
+              setFilteredCompanyName('Selected Company');
+            }
+          }
+        } else {
+          // No corporate filter in URL, clear the state
+          if (filteredByCorporate || corporateIdFilter || filteredCompanyName) {
+            setCorporateIdFilter("");
+            setFilteredByCorporate(false);
+            setFilteredCompanyName("");
+          }
+        }
+
+        // Build URL with corporate filter first, then service view, or default to all
+        const url = corporateIdFromUrl
+          ? `/api/subscriptions-corporate/corporate/${corporateIdFromUrl}`
+          : serviceFilter
           ? `/api/subscriptions-corporate?view=${encodeURIComponent(serviceFilter)}`
           : `/api/subscriptions-corporate`;
+
         const response = await fetch(url);
         const data = await response.json();
+
+        if (isCancelled) return;
 
         if (data.success && data.data && data.data.length > 0) {
           const pipeline = data.data.map((record: any, index: number) => {
@@ -93,12 +141,6 @@ export default function CorporateServicesPipeline() {
             const companyNameStr = Array.isArray(companyName)
               ? companyName[0]
               : companyName || "Unknown Company";
-
-            // Debug: Log all available fields for the first record
-            if (index === 0) {
-              console.log("Available fields in Subscriptions Corporate:", Object.keys(record.fields));
-              console.log("Sample record fields:", record.fields);
-            }
 
             // Get EIN - could be a lookup field
             const ein = record.fields["EIN (from Customer)"] ||
@@ -177,10 +219,18 @@ export default function CorporateServicesPipeline() {
             };
           });
 
+          // Debug: Check what we got before filtering
+          console.log(`[DEBUG] Total records from API: ${pipeline.length}`);
+          pipeline.forEach((company: PipelineCompany, idx: number) => {
+            console.log(`[DEBUG] Record ${idx + 1}: Company="${company.companyName}", Service="${company.serviceName}", Status="${company.status}"`);
+          });
+
           // Filter out completed services from active view
           const activePipeline = pipeline.filter((company: PipelineCompany) =>
             company.status !== "Complete Service" && company.status !== "Completed"
           );
+
+          console.log(`[DEBUG] After filtering completed: ${activePipeline.length} active records`);
 
           setPipelineCompanies(activePipeline);
         } else {
@@ -197,7 +247,12 @@ export default function CorporateServicesPipeline() {
     };
 
     fetchPipeline();
-  }, [serviceFilter]);
+
+    return () => {
+      isCancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serviceFilter, searchParams]);
 
   // Filter companies by search term, processor, and status (service filter is handled by view in fetch)
   const filteredCompanies = pipelineCompanies.filter((company) => {
@@ -679,6 +734,32 @@ export default function CorporateServicesPipeline() {
             </div>
           </div>
         </div>
+
+        {/* Corporate Filter Indicator */}
+        {filteredByCorporate && corporateIdFilter && (
+          <div className="alert alert-info mb-6">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" className="stroke-current shrink-0 w-6 h-6">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+            <div className="flex-1">
+              <div className="font-bold">Filtered by Client</div>
+              <div className="text-sm">
+                Showing services for: {filteredCompanyName || 'Selected Company'}
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                setCorporateIdFilter("");
+                setFilteredByCorporate(false);
+                setFilteredCompanyName("");
+                router.push('/corporate-services-pipeline');
+              }}
+              className="btn btn-sm btn-ghost"
+            >
+              Clear Filter
+            </button>
+          </div>
+        )}
 
         {/* Pipeline Table */}
         <div className="card bg-base-100 shadow-xl overflow-visible">

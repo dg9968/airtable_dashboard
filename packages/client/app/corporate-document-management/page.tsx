@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { useRequireRole } from '@/hooks/useAuth';
 import DocumentUpload from '../../components/DocumentUpload';
 import DocumentBrowser from '../../components/DocumentBrowser';
@@ -23,6 +23,7 @@ interface CorporateClient {
 function CorporateDocumentManagementContent() {
   const { session, status } = useRequireRole(['staff', 'admin']);
   const searchParams = useSearchParams();
+  const router = useRouter();
   const [refreshKey, setRefreshKey] = useState(0);
   const [useGoogleDrive, setUseGoogleDrive] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState('');
@@ -215,6 +216,20 @@ function CorporateDocumentManagementContent() {
                 </div>
                 <div className="text-sm">
                   Category: <strong>{documentCategories.find(cat => cat.value === selectedCategory)?.label}</strong>
+                </div>
+                <div className="flex gap-2 mt-2">
+                  <button
+                    onClick={() => router.push(`/corporate-client-intake?id=${selectedClient.id}`)}
+                    className="btn btn-sm btn-primary"
+                  >
+                    🏢 View Client Details
+                  </button>
+                  <button
+                    onClick={() => router.push(`/corporate-services-pipeline?companyId=${selectedClient.id}`)}
+                    className="btn btn-sm btn-accent"
+                  >
+                    ⚙️ View Services
+                  </button>
                 </div>
               </div>
             </div>
