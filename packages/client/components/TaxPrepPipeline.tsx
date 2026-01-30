@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 
 interface PipelineClient {
@@ -25,6 +26,8 @@ interface TaxPreparer {
 }
 
 export default function TaxPrepPipeline() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const [pipelineClients, setPipelineClients] = useState<PipelineClient[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -40,6 +43,9 @@ export default function TaxPrepPipeline() {
   const [selectedClientForFiling, setSelectedClientForFiling] = useState<string | null>(null);
   const [quotedAmount, setQuotedAmount] = useState<string>("");
   const [billingNote, setBillingNote] = useState<string>("");
+  const [personalIdFilter, setPersonalIdFilter] = useState<string>("");
+  const [filteredByPersonal, setFilteredByPersonal] = useState(false);
+  const [filteredClientName, setFilteredClientName] = useState<string>("");
 
   // Fetch tax preparers from Teams table
   useEffect(() => {
@@ -62,12 +68,55 @@ export default function TaxPrepPipeline() {
 
   // Fetch pipeline from Airtable
   useEffect(() => {
+    let isCancelled = false;
+
     const fetchPipeline = async () => {
       try {
         setLoading(true);
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-        const response = await fetch(`${apiUrl}/api/subscriptions-personal`);
+
+        // Read personalId from URL parameter
+        const personalIdFromUrl = searchParams.get('personalId');
+
+        // Update state to show/hide filter banner
+        if (personalIdFromUrl) {
+          if (personalIdFilter !== personalIdFromUrl) {
+            setPersonalIdFilter(personalIdFromUrl);
+            setFilteredByPersonal(true);
+
+            // Fetch client name for the filter banner
+            try {
+              const clientResponse = await fetch(`${apiUrl}/api/personal/${personalIdFromUrl}`);
+              const clientData = await clientResponse.json();
+              if (clientData.success && clientData.data) {
+                const name = clientData.data.fields?.['Full Name'] ||
+                            `${clientData.data.fields?.['First Name'] || ''} ${clientData.data.fields?.['Last Name'] || ''}`.trim() ||
+                            'Selected Client';
+                setFilteredClientName(name);
+              }
+            } catch (error) {
+              console.error('[Pipeline] Error fetching client name:', error);
+              setFilteredClientName('Selected Client');
+            }
+          }
+        } else {
+          // No personal filter in URL, clear the state
+          if (filteredByPersonal || personalIdFilter || filteredClientName) {
+            setPersonalIdFilter("");
+            setFilteredByPersonal(false);
+            setFilteredClientName("");
+          }
+        }
+
+        // Build URL with personal filter or default to all
+        const url = personalIdFromUrl
+          ? `${apiUrl}/api/subscriptions-personal/personal/${personalIdFromUrl}`
+          : `${apiUrl}/api/subscriptions-personal`;
+
+        const response = await fetch(url);
         const data = await response.json();
+
+        if (isCancelled) return;
 
         if (data.success) {
           const pipeline = data.data.map((record: any) => {
@@ -150,7 +199,11 @@ export default function TaxPrepPipeline() {
     };
 
     fetchPipeline();
-  }, []);
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [searchParams]);
 
   // Filter clients by search term, tax preparer, and status
   const filteredClients = pipelineClients.filter((client) => {
@@ -464,13 +517,25 @@ export default function TaxPrepPipeline() {
         throw new Error(servicesRenderedData.error || "Failed to create service record");
       }
 
-      // Subscription will be deleted when the service is billed and recorded in ledger
+      // Delete the subscription record from Subscriptions Personal table
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+      const deleteResponse = await fetch(`${apiUrl}/api/subscriptions-personal/${clientId}`, {
+        method: "DELETE",
+      });
+
+      const deleteData = await deleteResponse.json();
+
+      if (!deleteResponse.ok) {
+        console.error("Warning: Failed to delete subscription record:", deleteData.error);
+        // Continue even if delete fails - the service was still rendered
+      }
+
       // Remove from local state
       setPipelineClients((prevClients) =>
         prevClients.filter((c) => c.id !== clientId)
       );
 
-      alert("✅ Return filed and moved to billing queue!");
+      alert("✅ Return filed, service recorded, and removed from pipeline!");
     } catch (error) {
       console.error("Error handling file return:", error);
       alert(error instanceof Error ? error.message : "Failed to process file return");
@@ -627,6 +692,32 @@ export default function TaxPrepPipeline() {
             </div>
           </div>
         </div>
+
+        {/* Client Filter Indicator */}
+        {filteredByPersonal && personalIdFilter && (
+          <div className="alert alert-info mb-6">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" className="stroke-current shrink-0 w-6 h-6">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+            <div className="flex-1">
+              <div className="font-bold">Filtered by Client</div>
+              <div className="text-sm">
+                Showing pipeline for: {filteredClientName || 'Selected Client'}
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                setPersonalIdFilter("");
+                setFilteredByPersonal(false);
+                setFilteredClientName("");
+                router.push('/tax-prep-pipeline');
+              }}
+              className="btn btn-sm btn-ghost"
+            >
+              Clear Filter
+            </button>
+          </div>
+        )}
 
         {/* Pipeline Table */}
         <div className="card bg-base-100 shadow-xl">

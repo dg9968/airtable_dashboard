@@ -592,6 +592,21 @@ export default function ClientIntake() {
         return;
       }
 
+      // Check if client is already in the pipeline
+      const checkResponse = await fetch(`/api/subscriptions-personal/personal/${selectedClient.id}`);
+      const checkData = await checkResponse.json();
+
+      if (checkData.success && checkData.data.length > 0) {
+        // Client already has subscriptions (is in pipeline)
+        const fullName = `${formData["First Name"] || ""} ${formData["Last Name"] || ""}`.trim();
+        setSuccessMessage(
+          `✅ ${fullName} is already in the Tax Prep Pipeline!\nClick "View Tax Pipeline" to see their entry.`
+        );
+        setTimeout(() => setSuccessMessage(null), 5000);
+        setAddingToPipeline(false);
+        return;
+      }
+
       // Create the junction record in Subscriptions Personal
       const subscriptionResponse = await fetch("/api/subscriptions-personal", {
         method: "POST",
@@ -1622,6 +1637,34 @@ export default function ClientIntake() {
                           </>
                         )}
                       </button>
+                    )}
+
+                    {!isNewClient && selectedClient && (
+                      <>
+                        <button
+                          onClick={() => {
+                            const ssn = formData.SSN || selectedClient.fields.SSN || "";
+                            const clientCode = ssn.replace(/-/g, "").slice(-4);
+                            if (clientCode) {
+                              router.push(`/document-management?personalId=${selectedClient.id}&clientCode=${clientCode}`);
+                            } else {
+                              router.push(`/document-management?personalId=${selectedClient.id}`);
+                            }
+                          }}
+                          className="btn btn-info"
+                        >
+                          📄 View Documents
+                        </button>
+
+                        <button
+                          onClick={() => {
+                            router.push(`/tax-prep-pipeline?personalId=${selectedClient.id}`);
+                          }}
+                          className="btn btn-accent"
+                        >
+                          💼 View Tax Pipeline
+                        </button>
+                      </>
                     )}
                   </div>
                 </div>

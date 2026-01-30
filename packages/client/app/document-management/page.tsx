@@ -2,7 +2,7 @@
 'use client';
 
 import { Suspense, useState, useEffect } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { useRequireRole } from '@/hooks/useAuth';
 import ClientSearch from '../../components/ClientSearch';
 import DocumentUpload from '../../components/DocumentUpload';
@@ -11,10 +11,12 @@ import DocumentBrowser from '../../components/DocumentBrowser';
 function DocumentManagementContent() {
   const { session, status } = useRequireRole(['staff', 'admin']);
   const searchParams = useSearchParams();
+  const router = useRouter();
   const [refreshKey, setRefreshKey] = useState(0);
   const [useGoogleDrive, setUseGoogleDrive] = useState(true); // Default to Google Drive
   const [selectedClientCode, setSelectedClientCode] = useState(searchParams.get('clientCode') || '');
   const [selectedPersonalId, setSelectedPersonalId] = useState(searchParams.get('personalId') || '');
+  const [clientName, setClientName] = useState('');
 
   // Auto-load from localStorage if no URL params provided
   useEffect(() => {
@@ -26,6 +28,7 @@ function DocumentManagementContent() {
           if (clientData.clientCode && clientData.id) {
             setSelectedClientCode(clientData.clientCode);
             setSelectedPersonalId(clientData.id);
+            setClientName(clientData.name || '');
           }
         } catch (e) {
           console.error('Failed to parse last selected client:', e);
@@ -33,6 +36,28 @@ function DocumentManagementContent() {
       }
     }
   }, []);
+
+  // Fetch client name when personalId is from URL params
+  useEffect(() => {
+    const fetchClientName = async () => {
+      if (selectedPersonalId && !clientName) {
+        try {
+          const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+          const response = await fetch(`${apiUrl}/api/personal/${selectedPersonalId}`);
+          const data = await response.json();
+          if (data.success && data.data) {
+            const name = data.data.fields?.['Full Name'] ||
+                        `${data.data.fields?.['First Name'] || ''} ${data.data.fields?.['Last Name'] || ''}`.trim() ||
+                        'Selected Client';
+            setClientName(name);
+          }
+        } catch (error) {
+          console.error('Failed to fetch client name:', error);
+        }
+      }
+    };
+    fetchClientName();
+  }, [selectedPersonalId]);
 
   if (status === 'loading') {
     return (
@@ -113,6 +138,35 @@ function DocumentManagementContent() {
           initialClientCode={selectedClientCode}
         />
       </div>
+
+      {/* Client Context Indicator and Navigation */}
+      {selectedPersonalId && clientName && (
+        <div className="alert alert-info mb-6">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" className="stroke-current shrink-0 w-6 h-6">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+          </svg>
+          <div className="flex-1">
+            <div className="font-bold">Working with Client</div>
+            <div className="text-sm">
+              {clientName} {selectedClientCode && `(Code: ${selectedClientCode})`}
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => router.push(`/client-intake?id=${selectedPersonalId}`)}
+              className="btn btn-sm btn-primary"
+            >
+              👤 View Client Details
+            </button>
+            <button
+              onClick={() => router.push(`/tax-prep-pipeline?personalId=${selectedPersonalId}`)}
+              className="btn btn-sm btn-accent"
+            >
+              💼 View Tax Pipeline
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Upload Section */}

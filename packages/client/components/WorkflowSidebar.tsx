@@ -119,6 +119,42 @@ export default function WorkflowSidebar({
   const handleStepClick = (path: string) => {
     setMobileMenuOpen(false);
 
+    // For personal workflow pages, try to pass the last selected client context
+    const lastClient = localStorage.getItem('lastSelectedClient');
+    let personalId = null;
+    let clientCode = null;
+
+    if (lastClient) {
+      try {
+        const client = JSON.parse(lastClient);
+        personalId = client.id;
+        clientCode = client.clientCode;
+      } catch (e) {
+        console.error('Error parsing last selected client:', e);
+      }
+    }
+
+    // Pass context to personal workflow pages
+    if (personalId && selectedPath === 'personal') {
+      if (path === '/client-intake') {
+        router.push(`${path}?id=${personalId}`);
+        return;
+      }
+      if (path === '/document-management') {
+        // Document Management needs both personalId and clientCode
+        if (clientCode) {
+          router.push(`${path}?personalId=${personalId}&clientCode=${clientCode}`);
+        } else {
+          router.push(`${path}?personalId=${personalId}`);
+        }
+        return;
+      }
+      if (path === '/tax-prep-pipeline') {
+        router.push(`${path}?personalId=${personalId}`);
+        return;
+      }
+    }
+
     // For corporate workflow pages, try to pass the last selected company context
     const lastCompany = localStorage.getItem('lastSelectedCompany');
     let companyId = null;
@@ -133,7 +169,7 @@ export default function WorkflowSidebar({
     }
 
     // Pass context to corporate workflow pages
-    if (companyId) {
+    if (companyId && selectedPath === 'corporate') {
       if (path === '/corporate-document-management') {
         router.push(`${path}?companyId=${companyId}`);
         return;

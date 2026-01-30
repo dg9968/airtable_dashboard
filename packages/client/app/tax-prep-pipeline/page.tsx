@@ -1,9 +1,10 @@
 'use client';
 
+import { Suspense } from 'react';
 import { useRequireRole } from '@/hooks/useAuth';
 import TaxPrepPipeline from '@/components/TaxPrepPipeline';
 
-export default function TaxPrepPipelinePage() {
+function TaxPrepPipelineContent() {
   const { session, status } = useRequireRole(['staff', 'admin']);
 
   if (status === 'loading') {
@@ -28,4 +29,19 @@ export default function TaxPrepPipelinePage() {
   }
 
   return <TaxPrepPipeline />;
+}
+
+export default function TaxPrepPipelinePage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-base-200 flex items-center justify-center">
+        <div className="text-center">
+          <span className="loading loading-spinner loading-lg"></span>
+          <p className="mt-4 text-base-content/70">Loading...</p>
+        </div>
+      </div>
+    }>
+      <TaxPrepPipelineContent />
+    </Suspense>
+  );
 }
