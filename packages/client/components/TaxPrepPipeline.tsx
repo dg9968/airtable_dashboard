@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import PipelineNotes from "./PipelineNotes";
 
 interface PipelineClient {
   id: string;
@@ -17,6 +18,7 @@ interface PipelineClient {
   status?: string; // "Active" | "Hold for Customer" | "Escalate to Manager"
   priority?: number; // Auto-calculated based on addedAt
   notes?: string; // Notes field for tracking client information
+  messageCount?: number; // Count of conversation messages
 }
 
 interface TaxPreparer {
@@ -46,6 +48,8 @@ export default function TaxPrepPipeline() {
   const [personalIdFilter, setPersonalIdFilter] = useState<string>("");
   const [filteredByPersonal, setFilteredByPersonal] = useState(false);
   const [filteredClientName, setFilteredClientName] = useState<string>("");
+  const [showNotesModal, setShowNotesModal] = useState(false);
+  const [selectedClientForNotes, setSelectedClientForNotes] = useState<PipelineClient | null>(null);
 
   // Fetch tax preparers from Teams table
   useEffect(() => {
@@ -741,7 +745,7 @@ export default function TaxPrepPipeline() {
                       <th>Name</th>
                       <th>Phone</th>
                       <th>Tax Preparer</th>
-                      <th>Notes</th>
+                      <th>Conversation</th>
                       <th>Added</th>
                       <th>Actions</th>
                     </tr>
@@ -789,24 +793,20 @@ export default function TaxPrepPipeline() {
                           </select>
                         </td>
                         <td>
-                          <textarea
-                            className="textarea textarea-bordered textarea-xs w-full min-w-[200px] text-xs leading-tight rounded-sm"
-                            placeholder="Add notes..."
-                            value={client.notes || ""}
-                            onChange={(e) => {
-                              // Update local state immediately for responsiveness
-                              setPipelineClients((prevClients) =>
-                                prevClients.map((c) =>
-                                  c.id === client.id ? { ...c, notes: e.target.value } : c
-                                )
-                              );
+                          <button
+                            className="btn btn-ghost btn-sm gap-2"
+                            onClick={() => {
+                              setSelectedClientForNotes(client);
+                              setShowNotesModal(true);
                             }}
-                            onBlur={(e) => {
-                              // Save to server when user finishes editing
-                              updateNotes(client.id, e.target.value);
-                            }}
-                            rows={1}
-                          />
+                          >
+                            💬 View
+                            {client.messageCount !== undefined && client.messageCount > 0 && (
+                              <span className="badge badge-primary badge-sm">
+                                {client.messageCount}
+                              </span>
+                            )}
+                          </button>
                         </td>
                         <td>
                           <div className="text-xs">
@@ -1066,6 +1066,32 @@ export default function TaxPrepPipeline() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Conversation/Notes Modal */}
+      {showNotesModal && selectedClientForNotes && (
+        <div className="modal modal-open">
+          <div className="modal-box max-w-2xl">
+            <button
+              className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2"
+              onClick={() => {
+                setShowNotesModal(false);
+                setSelectedClientForNotes(null);
+              }}
+            >
+              ✕
+            </button>
+
+            <PipelineNotes
+              subscriptionId={selectedClientForNotes.id}
+              clientName={`${selectedClientForNotes.firstName} ${selectedClientForNotes.lastName}`}
+            />
+          </div>
+          <div className="modal-backdrop" onClick={() => {
+            setShowNotesModal(false);
+            setSelectedClientForNotes(null);
+          }} />
         </div>
       )}
     </div>
