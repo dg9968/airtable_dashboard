@@ -592,19 +592,26 @@ export default function ClientIntake() {
         return;
       }
 
-      // Check if client is already in the pipeline
+      // Check if client is already in the Tax Prep Pipeline specifically
       const checkResponse = await fetch(`/api/subscriptions-personal/personal/${selectedClient.id}`);
       const checkData = await checkResponse.json();
 
       if (checkData.success && checkData.data.length > 0) {
-        // Client already has subscriptions (is in pipeline)
-        const fullName = `${formData["First Name"] || ""} ${formData["Last Name"] || ""}`.trim();
-        setSuccessMessage(
-          `✅ ${fullName} is already in the Tax Prep Pipeline!\nClick "View Tax Pipeline" to see their entry.`
-        );
-        setTimeout(() => setSuccessMessage(null), 5000);
-        setAddingToPipeline(false);
-        return;
+        // Only consider it a duplicate if a subscription actually links to the Tax Prep Pipeline service
+        const alreadyInPipeline = checkData.data.some((sub: any) => {
+          const serviceLinks = sub.fields?.Service || [];
+          return serviceLinks.includes(taxPrepService.id);
+        });
+
+        if (alreadyInPipeline) {
+          const fullName = `${formData["First Name"] || ""} ${formData["Last Name"] || ""}`.trim();
+          setSuccessMessage(
+            `✅ ${fullName} is already in the Tax Prep Pipeline!\nClick "View Tax Pipeline" to see their entry.`
+          );
+          setTimeout(() => setSuccessMessage(null), 5000);
+          setAddingToPipeline(false);
+          return;
+        }
       }
 
       // Create the junction record in Subscriptions Personal
