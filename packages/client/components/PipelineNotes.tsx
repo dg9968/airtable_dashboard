@@ -42,10 +42,9 @@ export default function PipelineNotes({ subscriptionId, clientName }: PipelineNo
   const fetchNotes = async () => {
     try {
       setLoading(true);
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
       console.log('[PipelineNotes] Fetching notes for subscription:', subscriptionId);
 
-      const response = await fetch(`${apiUrl}/api/pipeline-notes/subscription/${subscriptionId}`);
+      const response = await fetch(`/api/pipeline-notes/subscription/${subscriptionId}`);
       const data = await response.json();
 
       console.log('[PipelineNotes] Response:', data);
@@ -74,9 +73,8 @@ export default function PipelineNotes({ subscriptionId, clientName }: PipelineNo
 
     try {
       setSubmitting(true);
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
-      const response = await fetch(`${apiUrl}/api/pipeline-notes`, {
+      const response = await fetch(`/api/pipeline-notes`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
