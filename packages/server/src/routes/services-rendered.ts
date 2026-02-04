@@ -535,13 +535,13 @@ app.post('/:id/bill', async (c) => {
       console.log('[Services Rendered API] Subscription ID:', subscriptionId);
 
       // Create Ledger record
+      // Note: Processor is a computed/lookup field in Airtable, so we don't set it directly
       const ledgerData: any = {
         'Service Rendered': serviceType || 'Service',
         'Receipt Date': receiptDate.split('T')[0],
         'Amount Charged': amountCharged,
         'Name of Client': clientName || 'Unknown Client',
         'Payment Method': paymentMethod,
-        'Processor': processor || '',
       };
 
       console.log('[Services Rendered API] Ledger data to be created:', ledgerData);
@@ -692,13 +692,13 @@ app.post('/batch-bill', async (c) => {
         : 'Batch Billing';
 
       // Create Ledger record
+      // Note: Processor is a computed/lookup field in Airtable, so we don't set it directly
       const ledgerData: any = {
         'Service Rendered': serviceDescription,
         'Receipt Date': receiptDate.split('T')[0],
         'Amount Charged': calculatedTotal,
         'Name of Client': clientName || 'Unknown Client',
         'Payment Method': paymentMethod,
-        'Processor': processor || '',
       };
 
       // Only link to subscription if it still exists (not deleted)
