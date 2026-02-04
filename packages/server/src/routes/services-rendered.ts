@@ -514,8 +514,12 @@ app.post('/:id/bill', async (c) => {
       const serviceTypeRaw = serviceRecord.fields['Service Type'];
       const serviceType = Array.isArray(serviceTypeRaw) ? serviceTypeRaw[0] : serviceTypeRaw;
 
+      const processorRaw = serviceRecord.fields['Processor'];
+      const processor = Array.isArray(processorRaw) ? processorRaw[0] : processorRaw;
+
       console.log('[Services Rendered API] Extracted client name:', clientName);
       console.log('[Services Rendered API] Extracted service type:', serviceType);
+      console.log('[Services Rendered API] Extracted processor:', processor);
       console.log('[Services Rendered API] Payment method from request:', paymentMethod);
 
       // Determine subscription type and ID (may be null if subscription was deleted)
@@ -537,6 +541,7 @@ app.post('/:id/bill', async (c) => {
         'Amount Charged': amountCharged,
         'Name of Client': clientName || 'Unknown Client',
         'Payment Method': paymentMethod,
+        'Processor': processor || '',
       };
 
       console.log('[Services Rendered API] Ledger data to be created:', ledgerData);
@@ -665,6 +670,9 @@ app.post('/batch-bill', async (c) => {
       const clientNameRaw = firstService.fields['Client Name'];
       const clientName = Array.isArray(clientNameRaw) ? clientNameRaw[0] : clientNameRaw;
 
+      const processorRaw = firstService.fields['Processor'];
+      const processor = Array.isArray(processorRaw) ? processorRaw[0] : processorRaw;
+
       const subscriptionCorporate = firstService.fields['Subscription Corporate'];
       const subscriptionPersonal = firstService.fields['Subscription Personal'];
 
@@ -690,6 +698,7 @@ app.post('/batch-bill', async (c) => {
         'Amount Charged': calculatedTotal,
         'Name of Client': clientName || 'Unknown Client',
         'Payment Method': paymentMethod,
+        'Processor': processor || '',
       };
 
       // Only link to subscription if it still exists (not deleted)

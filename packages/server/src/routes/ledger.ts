@@ -185,6 +185,9 @@ app.get('/', async (c) => {
       const paymentMethodRaw = record.fields['Payment Method'];
       const paymentMethodStr = Array.isArray(paymentMethodRaw) ? paymentMethodRaw[0] : paymentMethodRaw;
 
+      const processorRaw = record.fields['Processor'];
+      const processorStr = Array.isArray(processorRaw) ? processorRaw[0] : processorRaw;
+
       return {
         id: record.id,
         fields: record.fields,
@@ -193,6 +196,7 @@ app.get('/', async (c) => {
         receiptDate: record.fields['Receipt Date'] || '',
         amountCharged: record.fields['Amount Charged'] || 0,
         paymentMethod: paymentMethodStr || 'Unknown',
+        processor: processorStr || '',
         createdTime: record.fields['Created Time'],
       };
     });
@@ -273,10 +277,32 @@ function groupRecords(records: any[], groupBy: 'client' | 'date' | 'payment') {
     grouped[key].count++;
   });
 
-  // Convert to array and sort by total amount (descending)
-  return Object.values(grouped).sort((a: any, b: any) =>
-    b.totalAmount - a.totalAmount
-  );
+  // Convert to array
+  const groupedArray = Object.values(grouped) as any[];
+
+  // Sort groups based on groupBy type
+  if (groupBy === 'date') {
+    // Sort by date (newest first) - parse the month/year string back to date for comparison
+    groupedArray.sort((a: any, b: any) => {
+      const dateA = new Date(a.groupName);
+      const dateB = new Date(b.groupName);
+      return dateB.getTime() - dateA.getTime();
+    });
+  } else {
+    // Sort by total amount (descending) for client and payment method
+    groupedArray.sort((a: any, b: any) => b.totalAmount - a.totalAmount);
+  }
+
+  // Sort entries within each group by date (newest first)
+  groupedArray.forEach((group: any) => {
+    group.entries.sort((a: any, b: any) => {
+      const dateA = new Date(a.receiptDate);
+      const dateB = new Date(b.receiptDate);
+      return dateB.getTime() - dateA.getTime();
+    });
+  });
+
+  return groupedArray;
 }
 
 export default app;

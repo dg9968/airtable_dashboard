@@ -12,6 +12,7 @@ interface LedgerEntry {
     "Amount Charged": number;
     "Name of Client": string;
     "Payment Method": string;
+    "Processor": string;
     "Created Time": string;
   };
   clientName: string;
@@ -19,6 +20,7 @@ interface LedgerEntry {
   receiptDate: string;
   amountCharged: number;
   paymentMethod: string;
+  processor: string;
   createdTime: string;
 }
 
@@ -318,11 +320,13 @@ export default function LedgerPage() {
                 onChange={(e) => setPaymentMethodFilter(e.target.value)}
               >
                 <option>All</option>
-                <option>Cash</option>
-                <option>Check</option>
                 <option>Credit Card</option>
+                <option>Cash</option>
                 <option>Zelle</option>
-                <option>Bank Transfer</option>
+                <option>Check</option>
+                <option>ACH</option>
+                <option>TPG Bank Product</option>
+                <option>Other</option>
               </select>
             </div>
 
@@ -399,6 +403,7 @@ export default function LedgerPage() {
                         <th>Date</th>
                         <th>Client</th>
                         <th>Service</th>
+                        <th>Processor</th>
                         <th>Payment Method</th>
                         <th className="text-right">Amount</th>
                       </tr>
@@ -409,6 +414,7 @@ export default function LedgerPage() {
                           <td>{new Date(entry.receiptDate).toLocaleDateString()}</td>
                           <td className="font-medium">{entry.clientName}</td>
                           <td>{entry.serviceRendered}</td>
+                          <td>{entry.processor || '-'}</td>
                           <td>
                             <span className="badge badge-outline">
                               {entry.paymentMethod}
