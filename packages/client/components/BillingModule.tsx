@@ -146,8 +146,14 @@ export default function BillingModule() {
       totalAmount: svcs.reduce((sum, s) => sum + (s.amount || 0), 0),
     }));
 
-    // Sort by name
-    groupedArray.sort((a, b) => a.clientName.localeCompare(b.clientName));
+    // Sort groups
+    if (groupBy === 'date') {
+      // Sort dates from newest to oldest
+      groupedArray.sort((a, b) => b.clientName.localeCompare(a.clientName));
+    } else {
+      // Sort alphabetically for client and processor
+      groupedArray.sort((a, b) => a.clientName.localeCompare(b.clientName));
+    }
 
     setGroupedServices(groupedArray);
   };
