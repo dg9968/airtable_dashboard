@@ -552,14 +552,28 @@ export default function CorporateServicesPipeline() {
 
       console.log('[CorporateServicesPipeline] Service record created successfully:', servicesRenderedData.data?.id);
 
-      // Subscription will be deleted when the service is billed and recorded in ledger
+      // Delete the subscription record from Subscriptions Corporate table
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+      const deleteResponse = await fetch(`${apiUrl}/api/subscriptions-corporate/${companyId}`, {
+        method: "DELETE",
+      });
+
+      const deleteData = await deleteResponse.json();
+
+      if (!deleteResponse.ok) {
+        console.error("[CorporateServicesPipeline] Warning: Failed to delete subscription record:", deleteData.error);
+        // Continue even if delete fails - the service was still rendered
+      } else {
+        console.log('[CorporateServicesPipeline] Subscription deleted successfully');
+      }
+
       // Remove from local state
       setPipelineCompanies((prevCompanies) =>
         prevCompanies.filter((c) => c.id !== companyId)
       );
 
       console.log('[CorporateServicesPipeline] Service completion successful');
-      alert("✅ Service completed and moved to billing queue!");
+      alert("✅ Service completed and removed from pipeline!");
     } catch (error) {
       console.error("[CorporateServicesPipeline] Error completing service:", error);
       alert(error instanceof Error ? error.message : "Failed to complete service");
