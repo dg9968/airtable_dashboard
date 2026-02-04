@@ -29,6 +29,9 @@ interface CorporateRecord {
     "Industry"?: string;
     "Website"?: string;
     "Notes"?: string;
+    "ST Certificate Number"?: string[];
+    "ST Certificate"?: string[];
+    "Business Partner (from ST Certificate Number)"?: string[];
   };
   createdTime: string;
 }
@@ -76,6 +79,11 @@ export default function CorporateClientIntake() {
   const [selectedContacts, setSelectedContacts] = useState<CompanyContactRelationship[]>([]);
   const [searchingContacts, setSearchingContacts] = useState(false);
 
+  // ST Certificate search
+  const [stCertSearchTerm, setStCertSearchTerm] = useState("");
+  const [stCertSearchResults, setStCertSearchResults] = useState<any[]>([]);
+  const [searchingStCert, setSearchingStCert] = useState(false);
+
   // Pipeline management
   const [pipelineCompanies, setPipelineCompanies] = useState<any[]>([]);
   const [addingToPipeline, setAddingToPipeline] = useState(false);
@@ -110,7 +118,8 @@ export default function CorporateClientIntake() {
     fiscalYearEnd: "",
     industry: "",
     website: "",
-    notes: ""
+    notes: "",
+    stCertificateNumbers: [] as string[]
   });
 
   // Check authentication and authorization
@@ -232,7 +241,8 @@ export default function CorporateClientIntake() {
       fiscalYearEnd: record.fields["Fiscal Year End"] || "",
       industry: record.fields["Industry"] || "",
       website: record.fields["Website"] || "",
-      notes: record.fields["Notes"] || ""
+      notes: record.fields["Notes"] || "",
+      stCertificateNumbers: record.fields["ST Certificate Number"] || []
     });
   };
 
@@ -303,6 +313,43 @@ export default function CorporateClientIntake() {
     } finally {
       setSearchingContacts(false);
     }
+  };
+
+  const handleSearchStCert = async () => {
+    if (!stCertSearchTerm.trim()) return;
+
+    setSearchingStCert(true);
+    try {
+      const response = await fetch(`/api/view?table=Sales Tax Certificate Info&view=Grid view`);
+      const result = await response.json();
+
+      if (result.success && result.data) {
+        const search = stCertSearchTerm.toLowerCase();
+        const filtered = result.data.records.filter((record: any) => {
+          const stCert = (record.fields["ST Certificate"] || "").toString().toLowerCase();
+          const businessPartner = (record.fields["Business Partner"] || "").toString().toLowerCase();
+          const companyName = (record.fields["Company Name (from Status)"] || "").toString().toLowerCase();
+          return stCert.includes(search) || businessPartner.includes(search) || companyName.includes(search);
+        });
+
+        setStCertSearchResults(filtered);
+      }
+    } catch (err) {
+      console.error("Error searching ST Certificates:", err);
+    } finally {
+      setSearchingStCert(false);
+    }
+  };
+
+  const handleSelectStCert = (record: any) => {
+    if (formData.stCertificateNumbers.includes(record.id)) return;
+    setFormData({ ...formData, stCertificateNumbers: [...formData.stCertificateNumbers, record.id] });
+    setStCertSearchResults([]);
+    setStCertSearchTerm("");
+  };
+
+  const handleRemoveStCert = (recordId: string) => {
+    setFormData({ ...formData, stCertificateNumbers: formData.stCertificateNumbers.filter(id => id !== recordId) });
   };
 
   const handleAddContact = (contact: ContactRecord, isPrimary: boolean = false) => {
@@ -393,6 +440,7 @@ export default function CorporateClientIntake() {
       if (formData.industry) companyData.Industry = formData.industry;
       if (formData.website) companyData.Website = formData.website;
       if (formData.notes) companyData.Notes = formData.notes;
+      if (formData.stCertificateNumbers.length > 0) companyData["ST Certificate Number"] = formData.stCertificateNumbers;
 
       let companyId: string;
 
@@ -506,10 +554,13 @@ export default function CorporateClientIntake() {
       fiscalYearEnd: "",
       industry: "",
       website: "",
-      notes: ""
+      notes: "",
+      stCertificateNumbers: []
     });
     setSearchTerm("");
     setSearchResults([]);
+    setStCertSearchTerm("");
+    setStCertSearchResults([]);
   };
 
   const handleAddToPipeline = async () => {
@@ -1014,6 +1065,75 @@ export default function CorporateClientIntake() {
                           onChange={(e) => setFormData({ ...formData, website: e.target.value })}
                           placeholder="https://example.com"
                         />
+                      </div>
+
+                      <div className="form-control md:col-span-2">
+                        <label className="label">
+                          <span className="label-text">ST Certificate Number</span>
+                        </label>
+
+                        {/* Selected ST Certificates */}
+                        {formData.stCertificateNumbers.length > 0 && (
+                          <div className="space-y-1 mb-2">
+                            {formData.stCertificateNumbers.map((id, index) => {
+                              const stCert = selectedCompany?.fields["ST Certificate"]?.[index];
+                              const bp = selectedCompany?.fields["Business Partner (from ST Certificate Number)"]?.[index];
+                              return (
+                                <div key={id} className="flex items-center justify-between p-2 bg-base-200 rounded-lg">
+                                  <div className="flex gap-4">
+                                    <span className="text-sm"><span className="text-base-content/50 text-xs">ST Cert:</span> {stCert || "—"}</span>
+                                    <span className="text-sm"><span className="text-base-content/50 text-xs">BP:</span> {bp || "—"}</span>
+                                  </div>
+                                  <button onClick={() => handleRemoveStCert(id)} className="btn btn-ghost btn-xs btn-error">✕</button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                        {/* Search input always visible to allow adding more */}
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            placeholder="Search by ST Certificate, Business Partner, or Company Name"
+                            className="input input-bordered flex-1"
+                            value={stCertSearchTerm}
+                            onChange={(e) => setStCertSearchTerm(e.target.value)}
+                            onKeyDown={(e) => e.key === "Enter" && handleSearchStCert()}
+                          />
+                          <button
+                            onClick={handleSearchStCert}
+                            disabled={searchingStCert}
+                            className="btn btn-primary btn-sm"
+                          >
+                            {searchingStCert ? <span className="loading loading-spinner loading-sm"></span> : "Search"}
+                          </button>
+                        </div>
+
+                        {stCertSearchResults.length > 0 && (
+                          <div className="mt-2 space-y-1 max-h-48 overflow-y-auto">
+                            {stCertSearchResults.map((record: any) => {
+                              const alreadySelected = formData.stCertificateNumbers.includes(record.id);
+                              return (
+                                <div
+                                  key={record.id}
+                                  onClick={() => !alreadySelected && handleSelectStCert(record)}
+                                  className={`flex justify-between items-center p-2 rounded-lg transition-colors ${alreadySelected ? "bg-success/20 cursor-default" : "bg-base-200 cursor-pointer hover:bg-base-300"}`}
+                                >
+                                  <div>
+                                    <p className="text-sm font-medium">{record.fields["ST Certificate"]}</p>
+                                    <p className="text-xs text-base-content/50">
+                                      BP: {record.fields["Business Partner"]} · {record.fields["Company Name (from Status)"]}
+                                    </p>
+                                  </div>
+                                  <span className={`btn btn-xs ${alreadySelected ? "btn-success btn-disabled" : "btn-ghost"}`}>
+                                    {alreadySelected ? "Added" : "Select"}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
 
                       <div className="form-control md:col-span-2">

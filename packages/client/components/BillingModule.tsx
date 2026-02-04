@@ -43,6 +43,7 @@ export default function BillingModule() {
   // Modals
   const [showBatchModal, setShowBatchModal] = useState(false);
   const [showIndividualModal, setShowIndividualModal] = useState(false);
+  const [showMarkPaidModal, setShowMarkPaidModal] = useState(false);
   const [selectedService, setSelectedService] = useState<ServiceRendered | null>(null);
 
   // Batch billing form
@@ -57,7 +58,13 @@ export default function BillingModule() {
   const [individualReceiptDate, setIndividualReceiptDate] = useState(new Date().toISOString().split('T')[0]);
   const [individualCreateLedger, setIndividualCreateLedger] = useState(true);
 
+  // Mark as paid form
+  const [markPaidPaymentMethod, setMarkPaidPaymentMethod] = useState('Credit Card');
+  const [markPaidReceiptDate, setMarkPaidReceiptDate] = useState(new Date().toISOString().split('T')[0]);
+  const [markPaidCreateLedger, setMarkPaidCreateLedger] = useState(true);
+
   const paymentMethods = ['Credit Card', 'Cash', 'Zelle', 'Check', 'ACH', 'TPG Bank Product', 'Other', 'Not Paid Yet'];
+  const paidPaymentMethods = ['Credit Card', 'Cash', 'Zelle', 'Check', 'ACH', 'TPG Bank Product', 'Other'];
 
   // Detect client type from query parameter
   useEffect(() => {
@@ -286,6 +293,46 @@ export default function BillingModule() {
     setIndividualReceiptDate(new Date().toISOString().split('T')[0]);
     setIndividualCreateLedger(true);
     setShowIndividualModal(true);
+  };
+
+  const openMarkPaidModal = (service: ServiceRendered) => {
+    setSelectedService(service);
+    setMarkPaidPaymentMethod('Credit Card');
+    setMarkPaidReceiptDate(new Date().toISOString().split('T')[0]);
+    setMarkPaidCreateLedger(true);
+    setShowMarkPaidModal(true);
+  };
+
+  const handleMarkAsPaid = async () => {
+    if (!selectedService) return;
+
+    try {
+      const response = await fetch(`/api/services-rendered/${selectedService.id}/bill`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amountCharged: selectedService.amount || 0,
+          paymentMethod: markPaidPaymentMethod,
+          receiptDate: markPaidReceiptDate,
+          createLedger: markPaidCreateLedger,
+          billingStatus: 'Billed - Paid',
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        alert('Service marked as paid!');
+        setShowMarkPaidModal(false);
+        setSelectedService(null);
+        fetchServices();
+      } else {
+        alert(`Failed to mark as paid: ${data.error || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Error marking service as paid:', error);
+      alert(`Failed to mark as paid: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   };
 
   // Calculate statistics
@@ -579,6 +626,14 @@ export default function BillingModule() {
                                     Bill This
                                   </button>
                                 )}
+                                {service.billingStatus === 'Billed - Unpaid' && (
+                                  <button
+                                    className="btn btn-sm btn-success"
+                                    onClick={() => openMarkPaidModal(service)}
+                                  >
+                                    Mark as Paid
+                                  </button>
+                                )}
                               </td>
                             </tr>
                           ))}
@@ -734,6 +789,68 @@ export default function BillingModule() {
               </button>
               <button className="btn btn-primary" onClick={handleIndividualBill}>
                 Submit
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mark as Paid Modal */}
+      {showMarkPaidModal && selectedService && (
+        <div className="modal modal-open">
+          <div className="modal-box">
+            <h3 className="font-bold text-lg mb-4">Mark as Paid</h3>
+            <p className="mb-4">
+              Client: {selectedService.clientName || 'Unknown'}<br />
+              Service: {selectedService.serviceType || 'N/A'}<br />
+              Amount: ${selectedService.amount?.toLocaleString() || '0'}
+            </p>
+
+            <div className="form-control mb-4">
+              <label className="label">
+                <span className="label-text">Payment Method</span>
+              </label>
+              <select
+                className="select select-bordered"
+                value={markPaidPaymentMethod}
+                onChange={(e) => setMarkPaidPaymentMethod(e.target.value)}
+              >
+                {paidPaymentMethods.map((method) => (
+                  <option key={method} value={method}>{method}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="form-control mb-4">
+              <label className="label">
+                <span className="label-text">Receipt Date</span>
+              </label>
+              <input
+                type="date"
+                className="input input-bordered"
+                value={markPaidReceiptDate}
+                onChange={(e) => setMarkPaidReceiptDate(e.target.value)}
+              />
+            </div>
+
+            <div className="form-control mb-4">
+              <label className="label cursor-pointer">
+                <span className="label-text">Create Ledger Entry</span>
+                <input
+                  type="checkbox"
+                  className="checkbox"
+                  checked={markPaidCreateLedger}
+                  onChange={(e) => setMarkPaidCreateLedger(e.target.checked)}
+                />
+              </label>
+            </div>
+
+            <div className="modal-action">
+              <button className="btn btn-ghost" onClick={() => setShowMarkPaidModal(false)}>
+                Cancel
+              </button>
+              <button className="btn btn-success" onClick={handleMarkAsPaid}>
+                Mark as Paid
               </button>
             </div>
           </div>
