@@ -40,6 +40,10 @@ export default function BillingModule() {
   const [groupBy, setGroupBy] = useState<'client' | 'processor' | 'date'>('client');
   const [clientType, setClientType] = useState<'all' | 'personal' | 'corporate'>('all');
 
+  // URL-based client filter
+  const [filteredByClient, setFilteredByClient] = useState(false);
+  const [filteredClientName, setFilteredClientName] = useState('');
+
   // Modals
   const [showBatchModal, setShowBatchModal] = useState(false);
   const [showIndividualModal, setShowIndividualModal] = useState(false);
@@ -66,11 +70,23 @@ export default function BillingModule() {
   const paymentMethods = ['Credit Card', 'Cash', 'Zelle', 'Check', 'ACH', 'TPG Bank Product', 'Other', 'Not Paid Yet'];
   const paidPaymentMethods = ['Credit Card', 'Cash', 'Zelle', 'Check', 'ACH', 'TPG Bank Product', 'Other'];
 
-  // Detect client type from query parameter
+  // Detect client type and client name from query parameters
   useEffect(() => {
     const type = searchParams.get('type');
     if (type === 'personal' || type === 'corporate') {
       setClientType(type);
+    }
+
+    // Read clientName from URL parameter for filtering
+    const clientNameFromUrl = searchParams.get('clientName');
+    if (clientNameFromUrl) {
+      setFilteredByClient(true);
+      setFilteredClientName(clientNameFromUrl);
+      setClientSearch(clientNameFromUrl);
+    } else {
+      // Clear filter state if no clientName in URL
+      setFilteredByClient(false);
+      setFilteredClientName('');
     }
   }, [searchParams]);
 
@@ -502,6 +518,32 @@ export default function BillingModule() {
           )}
         </div>
       </div>
+
+      {/* Client Filter Banner */}
+      {filteredByClient && (
+        <div className="alert alert-info mb-6">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" className="stroke-current shrink-0 w-6 h-6">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+          </svg>
+          <div className="flex-1">
+            <div className="font-bold">Filtered by Client</div>
+            <div className="text-sm">
+              Showing services for: {filteredClientName}
+            </div>
+          </div>
+          <button
+            className="btn btn-sm btn-ghost"
+            onClick={() => {
+              setFilteredByClient(false);
+              setFilteredClientName('');
+              setClientSearch('');
+              router.push('/billing');
+            }}
+          >
+            Clear Filter
+          </button>
+        </div>
+      )}
 
       {/* Services Table */}
       {loading ? (
