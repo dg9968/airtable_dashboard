@@ -50,8 +50,14 @@ export default function PipelineNotes({ subscriptionId, clientName }: PipelineNo
       console.log('[PipelineNotes] Response:', data);
 
       if (data.success) {
-        setNotes(data.data);
-        console.log('[PipelineNotes] Loaded', data.data.length, 'messages');
+        // Sort notes from oldest to newest by Created Time
+        const sortedNotes = [...data.data].sort((a: PipelineNote, b: PipelineNote) => {
+          const timeA = new Date(a.fields["Created Time"]).getTime();
+          const timeB = new Date(b.fields["Created Time"]).getTime();
+          return timeA - timeB; // Ascending order (oldest first)
+        });
+        setNotes(sortedNotes);
+        console.log('[PipelineNotes] Loaded', sortedNotes.length, 'messages');
       } else {
         console.error('[PipelineNotes] Failed to fetch notes:', data.error);
         // If table doesn't exist, show helpful message
