@@ -118,7 +118,7 @@ export default function KnowledgeBase() {
   }, []);
 
   useEffect(() => {
-    // Debounced search
+    // Debounced search (category filtering is done client-side)
     if (debounceRef.current) {
       clearTimeout(debounceRef.current);
     }
@@ -132,7 +132,7 @@ export default function KnowledgeBase() {
         clearTimeout(debounceRef.current);
       }
     };
-  }, [searchQuery, selectedCategory]);
+  }, [searchQuery]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -164,7 +164,7 @@ export default function KnowledgeBase() {
 
       const params = new URLSearchParams();
       if (searchQuery) params.append('search', searchQuery);
-      if (selectedCategory) params.append('category', selectedCategory);
+      // Category filtering done client-side (Airtable linked records don't filter well by ID)
       // Show all statuses for staff/admin, only Published for others
       params.append('status', canEdit ? 'all' : 'Published');
 
@@ -223,13 +223,18 @@ export default function KnowledgeBase() {
     return articles.filter((a) => a.categoryId === categoryId).length;
   };
 
-  // Separate featured and regular articles
-  const featuredArticles = articles.filter((a) => a.featured);
-  const regularArticles = articles.filter((a) => !a.featured);
+  // Filter articles by selected category (client-side filtering)
+  const filteredArticles = selectedCategory
+    ? articles.filter((a) => a.categoryId === selectedCategory)
+    : articles;
 
-  // Calculate stats
-  const totalArticles = articles.length;
-  const totalViews = articles.reduce((sum, a) => sum + a.viewCount, 0);
+  // Separate featured and regular articles from filtered list
+  const featuredArticles = filteredArticles.filter((a) => a.featured);
+  const regularArticles = filteredArticles.filter((a) => !a.featured);
+
+  // Calculate stats (from filtered articles when category selected)
+  const totalArticles = filteredArticles.length;
+  const totalViews = filteredArticles.reduce((sum, a) => sum + a.viewCount, 0);
 
   if (loading) {
     return (
