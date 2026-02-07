@@ -410,7 +410,7 @@ export default function KnowledgeBase() {
             )}
 
             {/* Featured Articles */}
-            {featuredArticles.length > 0 && !searchQuery && !selectedCategory && (
+            {featuredArticles.length > 0 && !searchQuery && (
               <div className="mb-8">
                 <h2 className="text-xl font-semibold text-base-content mb-4 flex items-center gap-2">
                   <svg className="w-5 h-5 text-warning" fill="currentColor" viewBox="0 0 24 24">
