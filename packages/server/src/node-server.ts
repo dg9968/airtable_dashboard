@@ -36,6 +36,8 @@ import communicationsWebhookRoutes from './routes/communications-webhook';
 import messageTemplatesRoutes from './routes/message-templates';
 import communicationsBatchRoutes from './routes/communications-batch';
 import pipelineNotesRoutes from './routes/pipeline-notes';
+import knowledgeCategoriesRoutes from './routes/knowledge-categories';
+import knowledgeArticlesRoutes from './routes/knowledge-articles';
 
 const app = new Hono();
 
@@ -101,6 +103,8 @@ app.route('/api/communications-webhook', communicationsWebhookRoutes);
 app.route('/api/message-templates', messageTemplatesRoutes);
 app.route('/api/communications', communicationsBatchRoutes);
 app.route('/api/pipeline-notes', pipelineNotesRoutes);
+app.route('/api/knowledge-categories', knowledgeCategoriesRoutes);
+app.route('/api/knowledge-articles', knowledgeArticlesRoutes);
 
 // 404 handler
 app.notFound((c) => {
