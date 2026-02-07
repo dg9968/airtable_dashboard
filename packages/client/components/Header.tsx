@@ -44,14 +44,7 @@ export default function Header() {
                   (session.user as any).role === "admin") && (
                   <>
                     <li>
-                      <Link href="/document-management">
-                        Personal Documents
-                      </Link>
-                    </li>
-                    <li>
-                      <Link href="/corporate-document-management">
-                        Corporate Documents
-                      </Link>
+                      <Link href="/knowledge-base">Knowledge Base</Link>
                     </li>
                     <li>
                       <Link href="/bank-statement-processing">
@@ -106,16 +99,8 @@ export default function Header() {
                 (session.user as any).role === "admin") && (
                 <>
                   <li>
-                    <Link href="/document-management" className="btn btn-ghost">
-                      Personal Documents
-                    </Link>
-                  </li>
-                  <li>
-                    <Link
-                      href="/corporate-document-management"
-                      className="btn btn-ghost"
-                    >
-                      Corporate Documents
+                    <Link href="/knowledge-base" className="btn btn-ghost">
+                      Knowledge Base
                     </Link>
                   </li>
                   <li>
