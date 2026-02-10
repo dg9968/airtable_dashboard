@@ -15,6 +15,7 @@ import {
   getFileMetadata,
   renameFileInGoogleDrive,
 } from '../googleDrive';
+import { fetchAllRecords, createRecords } from '../lib/airtable-helpers';
 
 const airtable = new Airtable({
   apiKey: process.env.AIRTABLE_PERSONAL_ACCESS_TOKEN || 'dummy',
@@ -220,6 +221,99 @@ export async function getDependentClientCodes(clientCode: string): Promise<strin
 }
 
 /**
+ * Get Personal record by client code
+ */
+export async function getPersonalRecordByClientCode(clientCode: string): Promise<{ id: string; fields: any } | null> {
+  try {
+    const PERSONAL_TABLE = 'Personal';
+    const records = await base(PERSONAL_TABLE)
+      .select({
+        filterByFormula: `{Client Code} = '${clientCode}'`,
+        maxRecords: 1
+      })
+      .firstPage();
+
+    if (records.length > 0) {
+      return { id: records[0].id, fields: records[0].fields };
+    }
+    return null;
+  } catch (error) {
+    console.error('[documentService] Error finding personal record:', error);
+    return null;
+  }
+}
+
+/**
+ * Check if this is the first document for a client
+ */
+export async function isFirstDocumentForClient(clientCode: string): Promise<boolean> {
+  try {
+    const records = await base(DOCUMENTS_TABLE)
+      .select({
+        filterByFormula: `{Client Code} = '${clientCode}'`,
+        maxRecords: 1
+      })
+      .firstPage();
+    return records.length === 0;
+  } catch (error) {
+    console.error('[documentService] Error checking existing documents:', error);
+    return false; // Assume not first to avoid duplicates
+  }
+}
+
+/**
+ * Add client to Tax Prep Pipeline if not already present
+ */
+export async function addClientToPipelineIfNeeded(personalId: string): Promise<boolean> {
+  const SERVICE_NAME = 'Tax Prep Pipeline';
+  const baseId = process.env.AIRTABLE_BASE_ID || '';
+
+  try {
+    // 1. Find the "Tax Prep Pipeline" service
+    const services = await fetchAllRecords(baseId, 'Personal Services');
+    console.log('[documentService] Available services:', services.map(s => ({ id: s.id, fields: s.fields })));
+
+    const service = services.find(s =>
+      s.fields['Service Name'] === SERVICE_NAME
+    );
+
+    if (!service) {
+      console.warn(`[documentService] Service "${SERVICE_NAME}" not found in Personal Services table`);
+      return false;
+    }
+
+    // 2. Check if client already has this subscription
+    const subscriptions = await fetchAllRecords(baseId, 'Subscriptions Personal', {
+      filterByFormula: `FIND("${personalId}", ARRAYJOIN({Last Name})) > 0`
+    });
+
+    const alreadyInPipeline = subscriptions.some(sub => {
+      const linkedServices = sub.fields['Service'] || [];
+      return linkedServices.includes(service.id);
+    });
+
+    if (alreadyInPipeline) {
+      console.log(`[documentService] Client ${personalId} already in ${SERVICE_NAME}`);
+      return true;
+    }
+
+    // 3. Create junction record
+    await createRecords(baseId, 'Subscriptions Personal', [{
+      fields: {
+        'Last Name': [personalId],
+        'Service': [service.id]
+      }
+    }]);
+
+    console.log(`[documentService] Added client ${personalId} to ${SERVICE_NAME}`);
+    return true;
+  } catch (error) {
+    console.error('[documentService] Pipeline addition failed:', error);
+    return false;
+  }
+}
+
+/**
  * Get documents by client code and tax year
  */
 export async function getDocuments(
@@ -324,6 +418,9 @@ export async function saveDocument(
   isCorporate?: boolean,
   bankName?: string
 ): Promise<{ id: string; fileName: string; googleDriveFileId?: string }> {
+  // Check if this is the first document BEFORE saving (for personal docs only)
+  const isFirstUpload = !isCorporate && await isFirstDocumentForClient(clientCode);
+
   // Generate unique filename
   const timestamp = Date.now();
   const fileExtension = path.extname(file.name);
@@ -405,6 +502,20 @@ export async function saveDocument(
   } catch (error) {
     console.error('Airtable save failed:', error);
     // Still return the Google Drive ID if upload succeeded
+  }
+
+  // Add to pipeline if this is the first personal document
+  if (isFirstUpload) {
+    try {
+      const personalRecord = await getPersonalRecordByClientCode(clientCode);
+      if (personalRecord) {
+        await addClientToPipelineIfNeeded(personalRecord.id);
+      } else {
+        console.warn(`[documentService] No Personal record for client ${clientCode}, skipping pipeline addition`);
+      }
+    } catch (pipelineError) {
+      console.error('[documentService] Pipeline addition failed (non-fatal):', pipelineError);
+    }
   }
 
   return { id: recordId, fileName, googleDriveFileId };
