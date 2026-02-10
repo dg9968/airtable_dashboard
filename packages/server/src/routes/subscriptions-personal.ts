@@ -82,14 +82,28 @@ app.post('/', async (c) => {
 
 /**
  * GET /api/subscriptions-personal
- * Get all subscription records from Tax Prep Pipeline view
+ * Get all subscription records (optionally filtered by view)
+ * Defaults to "Tax Prep Pipeline" view for backward compatibility
  */
 app.get('/', async (c) => {
   try {
+    const view = c.req.query('view');
     const baseId = process.env.AIRTABLE_BASE_ID || '';
-    const records = await fetchAllRecords(baseId, 'Subscriptions Personal', {
-      view: 'Tax Prep Pipeline',
-    });
+
+    let records;
+
+    // Use provided view, or default to Tax Prep Pipeline for backward compatibility
+    const targetView = view || 'Tax Prep Pipeline';
+
+    try {
+      records = await fetchAllRecords(baseId, 'Subscriptions Personal', { view: targetView });
+    } catch (viewError) {
+      console.warn(`View "${targetView}" not found, fetching from Tax Prep Pipeline instead`);
+      // Fall back to Tax Prep Pipeline if specified view doesn't exist
+      records = await fetchAllRecords(baseId, 'Subscriptions Personal', {
+        view: 'Tax Prep Pipeline',
+      });
+    }
 
     return c.json({
       success: true,

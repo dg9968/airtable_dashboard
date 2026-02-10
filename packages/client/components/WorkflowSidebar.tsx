@@ -32,10 +32,10 @@ const personalSteps: WorkflowStep[] = [
   },
   {
     number: 3,
-    name: "Tax Pipeline",
-    path: "/tax-prep-pipeline",
+    name: "Services Pipeline",
+    path: "/personal-services-pipeline",
     icon: "📋",
-    description: "Process tax returns",
+    description: "Manage personal services",
   },
   {
     number: 4,
@@ -149,7 +149,7 @@ export default function WorkflowSidebar({
         }
         return;
       }
-      if (path === '/tax-prep-pipeline') {
+      if (path === '/personal-services-pipeline') {
         router.push(`${path}?personalId=${personalId}`);
         return;
       }

@@ -396,8 +396,8 @@ export default function DocumentBrowser({ useGoogleDrive = false, documentCatego
           {/* Navigation Links */}
           {!isCorporate && (
             <div className="flex gap-2">
-              <Link href="/tax-prep-pipeline" className="btn btn-sm btn-ghost">
-                Tax Prep Pipeline
+              <Link href="/personal-services-pipeline" className="btn btn-sm btn-ghost">
+                Services Pipeline
               </Link>
               {personalId && (
                 <Link href={`/client-intake?id=${personalId}`} className="btn btn-sm btn-primary">

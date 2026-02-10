@@ -82,9 +82,9 @@ export default function ManageBusiness() {
       stats: `$${stats.monthlyRevenue.toLocaleString()}/mo`
     },
     {
-      title: 'Tax Prep Pipeline',
-      description: 'Track client progress through tax preparation stages',
-      href: '/tax-prep-pipeline',
+      title: 'Personal Services Pipeline',
+      description: 'Track personal client progress through services',
+      href: '/personal-services-pipeline',
       icon: '📋',
       color: 'text-blue-600',
       bgColor: 'bg-blue-50 hover:bg-blue-100 border-blue-200',

@@ -87,6 +87,17 @@ export default function ClientIntake() {
   const [isSearchingSpouse, setIsSearchingSpouse] = useState(false);
   const [showSpouseSearch, setShowSpouseSearch] = useState(false);
   const [linkedSpouseId, setLinkedSpouseId] = useState<string | null>(null);
+  const [selectedService, setSelectedService] = useState<string>("Tax Prep Pipeline");
+
+  // Available personal services
+  const personalServices = [
+    "Tax Prep Pipeline",
+    "Tax Planning",
+    "IRS Resolution",
+    "Amended Returns",
+    "Prior Year Returns",
+    "File Extension"
+  ];
 
   // Form navigation sections
   const formSections = [
@@ -559,10 +570,10 @@ export default function ClientIntake() {
     }
   };
 
-  // Add client to tax prep pipeline
+  // Add client to selected service
   const handleAddToPipeline = async () => {
     if (!selectedClient) {
-      setError("Please save the client first before adding to pipeline");
+      setError("Please save the client first before adding to service");
       setTimeout(() => setError(null), 3000);
       return;
     }
@@ -570,7 +581,7 @@ export default function ClientIntake() {
     try {
       setAddingToPipeline(true);
 
-      // Fetch all personal services to find "Tax Prep Pipeline" service ID
+      // Fetch all personal services to find the selected service ID
       const servicesResponse = await fetch("/api/services-personal");
       const servicesData = await servicesResponse.json();
 
@@ -578,35 +589,35 @@ export default function ClientIntake() {
         throw new Error("Failed to fetch personal services");
       }
 
-      // Find the Tax Prep Pipeline service
-      const taxPrepService = servicesData.services?.find(
-        (service: any) => service.name === "Tax Prep Pipeline"
+      // Find the selected service
+      const selectedServiceRecord = servicesData.services?.find(
+        (service: any) => service.name === selectedService
       );
 
-      if (!taxPrepService) {
+      if (!selectedServiceRecord) {
         setError(
-          "Tax Prep Pipeline service not found in Personal Services table. Please create it first."
+          `${selectedService} service not found in Personal Services table. Please create it first.`
         );
         setTimeout(() => setError(null), 5000);
         setAddingToPipeline(false);
         return;
       }
 
-      // Check if client is already in the Tax Prep Pipeline specifically
+      // Check if client is already in the selected service
       const checkResponse = await fetch(`/api/subscriptions-personal/personal/${selectedClient.id}`);
       const checkData = await checkResponse.json();
 
       if (checkData.success && checkData.data.length > 0) {
-        // Only consider it a duplicate if a subscription actually links to the Tax Prep Pipeline service
-        const alreadyInPipeline = checkData.data.some((sub: any) => {
+        // Only consider it a duplicate if a subscription actually links to the selected service
+        const alreadyInService = checkData.data.some((sub: any) => {
           const serviceLinks = sub.fields?.Service || [];
-          return serviceLinks.includes(taxPrepService.id);
+          return serviceLinks.includes(selectedServiceRecord.id);
         });
 
-        if (alreadyInPipeline) {
+        if (alreadyInService) {
           const fullName = `${formData["First Name"] || ""} ${formData["Last Name"] || ""}`.trim();
           setSuccessMessage(
-            `✅ ${fullName} is already in the Tax Prep Pipeline!\nClick "View Tax Pipeline" to see their entry.`
+            `✅ ${fullName} is already in ${selectedService}!\nClick "View Services Pipeline" to see their entry.`
           );
           setTimeout(() => setSuccessMessage(null), 5000);
           setAddingToPipeline(false);
@@ -622,7 +633,7 @@ export default function ClientIntake() {
         },
         body: JSON.stringify({
           personalId: selectedClient.id,
-          serviceId: taxPrepService.id,
+          serviceId: selectedServiceRecord.id,
         }),
       });
 
@@ -636,12 +647,12 @@ export default function ClientIntake() {
 
       const fullName = `${formData["First Name"] || ""} ${formData["Last Name"] || ""}`.trim();
       setSuccessMessage(
-        `✅ ${fullName} added to Tax Prep Pipeline!`
+        `✅ ${fullName} added to ${selectedService}!`
       );
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Failed to add to pipeline"
+        err instanceof Error ? err.message : "Failed to add to service"
       );
       setTimeout(() => setError(null), 5000);
     } finally {
@@ -724,8 +735,8 @@ export default function ClientIntake() {
               </p>
             </div>
             <div className="flex gap-2">
-              <Link href="/tax-prep-pipeline" className="btn btn-accent btn-sm">
-                📊 View Pipeline
+              <Link href="/personal-services-pipeline" className="btn btn-accent btn-sm">
+                View Pipeline
               </Link>
               <button onClick={handleNewClient} className="btn btn-primary btn-sm">
                 + New Client
@@ -1609,7 +1620,7 @@ export default function ClientIntake() {
                     </button>
                   </div>
 
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2 items-center">
                     <button
                       onClick={handleSave}
                       disabled={saving}
@@ -1628,26 +1639,33 @@ export default function ClientIntake() {
                     </button>
 
                     {!isNewClient && selectedClient && (
-                      <button
-                        onClick={handleAddToPipeline}
-                        disabled={addingToPipeline}
-                        className="btn btn-success"
-                      >
-                        {addingToPipeline ? (
-                          <>
-                            <span className="loading loading-spinner loading-sm"></span>
-                            Adding...
-                          </>
-                        ) : (
-                          <>
-                            📊 Add to Pipeline
-                          </>
-                        )}
-                      </button>
-                    )}
-
-                    {!isNewClient && selectedClient && (
                       <>
+                        <select
+                          value={selectedService}
+                          onChange={(e) => setSelectedService(e.target.value)}
+                          className="select select-bordered select-sm"
+                          disabled={addingToPipeline}
+                        >
+                          {personalServices.map((service) => (
+                            <option key={service} value={service}>
+                              {service}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          onClick={handleAddToPipeline}
+                          disabled={addingToPipeline}
+                          className="btn btn-success"
+                        >
+                          {addingToPipeline ? (
+                            <>
+                              <span className="loading loading-spinner loading-sm"></span>
+                              Adding...
+                            </>
+                          ) : (
+                            "Add to Service"
+                          )}
+                        </button>
                         <button
                           onClick={() => {
                             const ssn = formData.SSN || selectedClient.fields.SSN || "";
@@ -1660,16 +1678,15 @@ export default function ClientIntake() {
                           }}
                           className="btn btn-info"
                         >
-                          📄 View Documents
+                          View Documents
                         </button>
-
                         <button
                           onClick={() => {
-                            router.push(`/tax-prep-pipeline?personalId=${selectedClient.id}`);
+                            router.push(`/personal-services-pipeline?personalId=${selectedClient.id}`);
                           }}
                           className="btn btn-accent"
                         >
-                          💼 View Tax Pipeline
+                          View Services Pipeline
                         </button>
                       </>
                     )}

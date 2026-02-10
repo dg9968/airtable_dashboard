@@ -159,10 +159,10 @@ function DocumentManagementContent() {
               👤 View Client Details
             </button>
             <button
-              onClick={() => router.push(`/tax-prep-pipeline?personalId=${selectedPersonalId}`)}
+              onClick={() => router.push(`/personal-services-pipeline?personalId=${selectedPersonalId}`)}
               className="btn btn-sm btn-accent"
             >
-              💼 View Tax Pipeline
+              View Services Pipeline
             </button>
           </div>
         </div>

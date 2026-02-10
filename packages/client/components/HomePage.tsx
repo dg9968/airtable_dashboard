@@ -24,8 +24,8 @@ export default function HomePage() {
       buttonClass: "btn-success"
     },
     {
-      title: "Tax Prep Pipeline",
-      href: "/tax-prep-pipeline",
+      title: "Personal Services Pipeline",
+      href: "/personal-services-pipeline",
       icon: "📊",
       buttonClass: "btn-primary"
     },

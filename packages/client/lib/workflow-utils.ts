@@ -11,7 +11,7 @@ export type WorkflowPath = 'personal' | 'corporate';
 export const WORKFLOW_ROUTES = [
   '/client-intake',
   '/corporate-client-intake',
-  '/tax-prep-pipeline',
+  '/personal-services-pipeline',
   '/corporate-services-pipeline',
   '/billing',
   '/document-management',
@@ -44,7 +44,7 @@ export function detectWorkflowStep(pathname: string): number {
   }
 
   // Step 3: Pipeline
-  if (pathname.startsWith('/tax-prep-pipeline')) {
+  if (pathname.startsWith('/personal-services-pipeline')) {
     return 3;
   }
   if (pathname.startsWith('/corporate-services-pipeline')) {
@@ -87,7 +87,7 @@ export function getNextStepPath(currentStep: number, workflowPath: WorkflowPath)
       case 1:
         return '/document-management';
       case 2:
-        return '/tax-prep-pipeline';
+        return '/personal-services-pipeline';
       case 3:
         return '/billing?type=personal';
       case 4:
@@ -123,7 +123,7 @@ export function getPreviousStepPath(currentStep: number, workflowPath: WorkflowP
       case 3:
         return '/document-management';
       case 4:
-        return '/tax-prep-pipeline';
+        return '/personal-services-pipeline';
       case 1:
         return null; // First step
       default:
@@ -157,7 +157,7 @@ export function getStepName(step: number, workflowPath: WorkflowPath): string {
       case 2:
         return 'Documents';
       case 3:
-        return 'Tax Pipeline';
+        return 'Services Pipeline';
       case 4:
         return 'Billing';
       default:
