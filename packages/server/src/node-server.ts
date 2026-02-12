@@ -36,6 +36,7 @@ import communicationsWebhookRoutes from './routes/communications-webhook';
 import messageTemplatesRoutes from './routes/message-templates';
 import communicationsBatchRoutes from './routes/communications-batch';
 import pipelineNotesRoutes from './routes/pipeline-notes';
+import corporatePipelineNotesRoutes from './routes/corporate-pipeline-notes';
 import knowledgeCategoriesRoutes from './routes/knowledge-categories';
 import knowledgeArticlesRoutes from './routes/knowledge-articles';
 
@@ -103,6 +104,7 @@ app.route('/api/communications-webhook', communicationsWebhookRoutes);
 app.route('/api/message-templates', messageTemplatesRoutes);
 app.route('/api/communications', communicationsBatchRoutes);
 app.route('/api/pipeline-notes', pipelineNotesRoutes);
+app.route('/api/corporate-pipeline-notes', corporatePipelineNotesRoutes);
 app.route('/api/knowledge-categories', knowledgeCategoriesRoutes);
 app.route('/api/knowledge-articles', knowledgeArticlesRoutes);
 
