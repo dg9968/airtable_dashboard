@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
+import CorporatePipelineNotes from "./CorporatePipelineNotes";
 
 interface PipelineCompany {
   id: string;
@@ -48,6 +49,10 @@ export default function CorporateServicesPipeline() {
   const [corporateIdFilter, setCorporateIdFilter] = useState<string>("");
   const [filteredByCorporate, setFilteredByCorporate] = useState(false);
   const [filteredCompanyName, setFilteredCompanyName] = useState<string>("");
+  const [createFollowUp, setCreateFollowUp] = useState(false);
+  const [servicesMap, setServicesMap] = useState<Record<string, string>>({});
+  const [showNotesModal, setShowNotesModal] = useState(false);
+  const [selectedCompanyForNotes, setSelectedCompanyForNotes] = useState<PipelineCompany | null>(null);
 
   // Available services - these match the view names in Airtable
   const services = [
@@ -61,6 +66,17 @@ export default function CorporateServicesPipeline() {
     { name: "1099 Filing", view: "1099 Filing" },
     { name: "Corporate Cases", view: "Corporate Cases" }
   ];
+
+  // Follow-up service mappings - easily extensible for future needs
+  const SERVICE_FOLLOW_UP_MAPPINGS: Record<string, {
+    followUpServiceName: string;
+    label: string;
+  }> = {
+    "Reconciling Banks for Tax Prep": {
+      followUpServiceName: "Tax Returns",
+      label: 'Create "Tax Returns" subscription for this company'
+    }
+  };
 
   // Fetch processors from Teams table
   useEffect(() => {
@@ -78,6 +94,29 @@ export default function CorporateServicesPipeline() {
     };
 
     fetchTeams();
+  }, []);
+
+  // Fetch services to get service IDs for follow-up creation
+  useEffect(() => {
+    const fetchServices = async () => {
+      try {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+        const response = await fetch(`${apiUrl}/api/services`);
+        const data = await response.json();
+
+        if (data.success && data.data?.services) {
+          const map: Record<string, string> = {};
+          data.data.services.forEach((service: { id: string; name: string }) => {
+            map[service.name] = service.id;
+          });
+          setServicesMap(map);
+        }
+      } catch (error) {
+        console.error("Failed to fetch services:", error);
+      }
+    };
+
+    fetchServices();
   }, []);
 
   // Fetch pipeline from Airtable - fetch based on selected service view or corporate filter
@@ -465,44 +504,59 @@ export default function CorporateServicesPipeline() {
     }
   };
 
-  const updateNotes = async (companyId: string, newNotes: string) => {
+  // Check if a subscription already exists for a company and service
+  const checkExistingSubscription = async (
+    corporateId: string,
+    serviceId: string
+  ): Promise<{ exists: boolean }> => {
     try {
-      const response = await fetch(`/api/subscriptions-corporate/${companyId}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          fields: {
-            "Notes": newNotes,
-          },
-        }),
-      });
-
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+      const response = await fetch(
+        `${apiUrl}/api/subscriptions-corporate/corporate/${corporateId}`
+      );
       const data = await response.json();
 
-      if (!response.ok) {
-        console.error("Server error response:", data);
-        const errorMsg = data.error || "Failed to update notes";
-        throw new Error(errorMsg);
+      if (data.success && data.data) {
+        const exists = data.data.some((sub: { fields: { Services?: string[] } }) => {
+          const services = sub.fields['Services'] || [];
+          return services.includes(serviceId);
+        });
+        return { exists };
       }
-
-      // Update local state
-      setPipelineCompanies((prevCompanies) =>
-        prevCompanies.map((company) =>
-          company.id === companyId
-            ? { ...company, notes: newNotes }
-            : company
-        )
-      );
+      return { exists: false };
     } catch (error) {
-      console.error("Error updating notes:", error);
-      const errorMessage = error instanceof Error ? error.message : "Failed to update notes. Please try again.";
-      alert(errorMessage);
+      console.error("Error checking existing subscription:", error);
+      return { exists: false };
     }
   };
 
-  const handleCompleteService = async (companyId: string, amount?: number, note?: string) => {
+  // Create a follow-up subscription
+  const createFollowUpSubscription = async (
+    corporateId: string,
+    serviceId: string
+  ): Promise<void> => {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+    const response = await fetch(`${apiUrl}/api/subscriptions-corporate`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        corporateId,
+        serviceId,
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || "Failed to create follow-up subscription");
+    }
+
+    console.log("[Follow-up] Created new subscription:", data.data?.id);
+  };
+
+  const handleCompleteService = async (companyId: string, amount?: number, note?: string, shouldCreateFollowUp?: boolean) => {
     try {
       setUpdating(companyId);
       console.log('[CorporateServicesPipeline] Starting handleCompleteService for:', companyId);
@@ -567,13 +621,43 @@ export default function CorporateServicesPipeline() {
         console.log('[CorporateServicesPipeline] Subscription deleted successfully');
       }
 
+      // Handle follow-up service creation if requested
+      let followUpCreated = false;
+      if (shouldCreateFollowUp && company.serviceName && company.corporateId) {
+        const mapping = SERVICE_FOLLOW_UP_MAPPINGS[company.serviceName];
+        if (mapping) {
+          const followUpServiceId = servicesMap[mapping.followUpServiceName];
+          if (followUpServiceId) {
+            try {
+              // Check if subscription already exists
+              const existingCheck = await checkExistingSubscription(company.corporateId, followUpServiceId);
+              if (!existingCheck.exists) {
+                await createFollowUpSubscription(company.corporateId, followUpServiceId);
+                followUpCreated = true;
+                console.log(`[Follow-up] Created ${mapping.followUpServiceName} subscription for ${company.companyName}`);
+              } else {
+                console.log(`[Follow-up] Subscription already exists for ${mapping.followUpServiceName}`);
+              }
+            } catch (followUpError) {
+              console.error("[Follow-up] Failed to create follow-up subscription:", followUpError);
+              // Don't fail the main operation
+            }
+          } else {
+            console.warn(`[Follow-up] Service ID not found for: ${mapping.followUpServiceName}`);
+          }
+        }
+      }
+
       // Remove from local state
       setPipelineCompanies((prevCompanies) =>
         prevCompanies.filter((c) => c.id !== companyId)
       );
 
       console.log('[CorporateServicesPipeline] Service completion successful');
-      alert("✅ Service completed and removed from pipeline!");
+      const successMessage = followUpCreated
+        ? "✅ Service completed and Tax Returns subscription created!"
+        : "✅ Service completed and removed from pipeline!";
+      alert(successMessage);
     } catch (error) {
       console.error("[CorporateServicesPipeline] Error completing service:", error);
       alert(error instanceof Error ? error.message : "Failed to complete service");
@@ -590,6 +674,9 @@ export default function CorporateServicesPipeline() {
       // Pre-fill with billing amount if available
       setQuotedAmount(company?.billingAmount?.toString() || "");
       setBillingNote("");
+      // Default checkbox to checked if this service has a follow-up mapping
+      const hasFollowUp = company?.serviceName && SERVICE_FOLLOW_UP_MAPPINGS[company.serviceName];
+      setCreateFollowUp(!!hasFollowUp);
       setShowAmountModal(true);
     } else {
       // Update status directly
@@ -601,11 +688,12 @@ export default function CorporateServicesPipeline() {
     if (selectedCompanyForCompletion) {
       const amount = quotedAmount ? parseFloat(quotedAmount) : undefined;
       const note = billingNote.trim() || undefined;
-      handleCompleteService(selectedCompanyForCompletion, amount, note);
+      handleCompleteService(selectedCompanyForCompletion, amount, note, createFollowUp);
       setShowAmountModal(false);
       setSelectedCompanyForCompletion(null);
       setQuotedAmount("");
       setBillingNote("");
+      setCreateFollowUp(false);
     }
   };
 
@@ -807,7 +895,7 @@ export default function CorporateServicesPipeline() {
                       </th>
                       <th className="max-w-[120px]">Service</th>
                       <th>Processor</th>
-                      <th>Notes</th>
+                      <th>Conversation</th>
                       <th>Actions</th>
                     </tr>
                   </thead>
@@ -856,22 +944,15 @@ export default function CorporateServicesPipeline() {
                           </select>
                         </td>
                         <td>
-                          <textarea
-                            className="textarea textarea-bordered textarea-xs w-full min-w-[200px]"
-                            placeholder="Add notes..."
-                            value={company.notes || ""}
-                            onChange={(e) => {
-                              // Update local state immediately for smooth UX
-                              const newNotes = e.target.value;
-                              setPipelineCompanies((prevCompanies) =>
-                                prevCompanies.map((c) =>
-                                  c.id === company.id ? { ...c, notes: newNotes } : c
-                                )
-                              );
+                          <button
+                            className="btn btn-ghost btn-sm gap-2"
+                            onClick={() => {
+                              setSelectedCompanyForNotes(company);
+                              setShowNotesModal(true);
                             }}
-                            onBlur={(e) => updateNotes(company.id, e.target.value)}
-                            rows={1}
-                          />
+                          >
+                            💬 View
+                          </button>
                         </td>
                         <td>
                           <div className="flex gap-2">
@@ -1124,6 +1205,37 @@ export default function CorporateServicesPipeline() {
                 }}
               />
             </div>
+            {/* Follow-up Service Checkbox - only show for eligible services */}
+            {(() => {
+              const company = pipelineCompanies.find(
+                (c) => c.id === selectedCompanyForCompletion
+              );
+              const mapping = company?.serviceName
+                ? SERVICE_FOLLOW_UP_MAPPINGS[company.serviceName]
+                : null;
+
+              if (mapping && servicesMap[mapping.followUpServiceName]) {
+                return (
+                  <div className="form-control mt-4">
+                    <label className="label cursor-pointer justify-start gap-3">
+                      <input
+                        type="checkbox"
+                        className="checkbox checkbox-primary"
+                        checked={createFollowUp}
+                        onChange={(e) => setCreateFollowUp(e.target.checked)}
+                      />
+                      <span className="label-text">{mapping.label}</span>
+                    </label>
+                    <label className="label pt-0">
+                      <span className="label-text-alt opacity-60">
+                        This will add the company to the {mapping.followUpServiceName} pipeline
+                      </span>
+                    </label>
+                  </div>
+                );
+              }
+              return null;
+            })()}
             <div className="modal-action">
               <button
                 className="btn btn-ghost"
@@ -1132,6 +1244,7 @@ export default function CorporateServicesPipeline() {
                   setSelectedCompanyForCompletion(null);
                   setQuotedAmount("");
                   setBillingNote("");
+                  setCreateFollowUp(false);
                 }}
               >
                 Cancel
@@ -1144,6 +1257,32 @@ export default function CorporateServicesPipeline() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Conversation/Notes Modal */}
+      {showNotesModal && selectedCompanyForNotes && (
+        <div className="modal modal-open">
+          <div className="modal-box max-w-2xl">
+            <button
+              className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2"
+              onClick={() => {
+                setShowNotesModal(false);
+                setSelectedCompanyForNotes(null);
+              }}
+            >
+              ✕
+            </button>
+
+            <CorporatePipelineNotes
+              subscriptionId={selectedCompanyForNotes.id}
+              companyName={selectedCompanyForNotes.companyName}
+            />
+          </div>
+          <div className="modal-backdrop" onClick={() => {
+            setShowNotesModal(false);
+            setSelectedCompanyForNotes(null);
+          }} />
         </div>
       )}
     </div>
