@@ -154,6 +154,7 @@ app.post('/', async (c) => {
       'Client Name': clientName,         // Store actual value, not lookup
       'Service Type': serviceType,       // Store actual value, not lookup
       'Processor': processor,            // Store actual value, not lookup
+      'Client Type': subscriptionType,   // Store 'personal' or 'corporate' for filtering
     };
 
     // Link to the appropriate subscription table
@@ -278,6 +279,7 @@ app.get('/', async (c) => {
         clientName: clientNameStr || 'Unknown Client',
         serviceType: serviceTypeStr || 'Unknown Service',
         processor: processorStr || 'Unassigned',
+        clientType: record.fields['Client Type'] || null,
         amount: record.fields['Amount Charged'] || 0,
         serviceDate: record.fields['Service Rendered Date'],
         billingStatus: record.fields['Billing Status'],
@@ -306,14 +308,19 @@ app.get('/', async (c) => {
     // Apply client type filter if provided
     if (clientType && clientType !== 'all') {
       filteredRecords = filteredRecords.filter(r => {
+        // First check the direct Client Type field (persists after subscription deletion)
+        const storedClientType = r.fields['Client Type'];
+        if (storedClientType) {
+          return storedClientType === clientType;
+        }
+
+        // Fallback to checking subscription links for older records
         const hasPersonal = r.fields['Subscription Personal'];
         const hasCorporate = r.fields['Subscription Corporate'];
 
         if (clientType === 'personal') {
-          // Include if has Personal subscription (not empty)
           return hasPersonal && (!Array.isArray(hasPersonal) || hasPersonal.length > 0);
         } else if (clientType === 'corporate') {
-          // Include if has Corporate subscription (not empty)
           return hasCorporate && (!Array.isArray(hasCorporate) || hasCorporate.length > 0);
         }
         return true;
