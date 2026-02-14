@@ -3,6 +3,8 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import SendForSigningModal from './SendForSigningModal';
+import SigningStatusBadge from './SigningStatusBadge';
 
 interface Document {
   id: string;
@@ -12,6 +14,19 @@ interface Document {
   fileSize: number;
   fileType: string;
   clientCode: string;
+  googleDriveFileId?: string;
+}
+
+interface SigningStatus {
+  hasEnvelope: boolean;
+  envelope?: {
+    id: string;
+    status: string;
+    sentAt?: string;
+    completedAt?: string;
+    signerEmail?: string;
+    signerName?: string;
+  };
 }
 
 interface DocumentBrowserProps {
@@ -20,10 +35,12 @@ interface DocumentBrowserProps {
   isCorporate?: boolean;
   clientCode?: string;
   personalId?: string;
+  clientName?: string;
+  clientEmail?: string;
   onCategoryChange?: (category: string) => void;
 }
 
-export default function DocumentBrowser({ useGoogleDrive = false, documentCategory, isCorporate = false, clientCode = '', personalId, onCategoryChange }: DocumentBrowserProps) {
+export default function DocumentBrowser({ useGoogleDrive = false, documentCategory, isCorporate = false, clientCode = '', personalId, clientName = '', clientEmail = '', onCategoryChange }: DocumentBrowserProps) {
   const [taxYear, setTaxYear] = useState('');
   const [bankName, setBankName] = useState('');
   const [existingBanks, setExistingBanks] = useState<string[]>([]);
@@ -47,6 +64,13 @@ export default function DocumentBrowser({ useGoogleDrive = false, documentCatego
   const [includeDependents, setIncludeDependents] = useState(true);
   const [sortColumn, setSortColumn] = useState<'name' | 'size' | 'date'>('name');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+
+  // Signing modal state
+  const [signingModal, setSigningModal] = useState<{ show: boolean; document: Document | null }>({
+    show: false,
+    document: null
+  });
+  const [signingStatuses, setSigningStatuses] = useState<Record<string, SigningStatus>>({});
 
   // Fetch existing banks when client code changes and category is statements
   useEffect(() => {
@@ -334,6 +358,49 @@ export default function DocumentBrowser({ useGoogleDrive = false, documentCatego
       hour: '2-digit',
       minute: '2-digit'
     });
+  };
+
+  // Fetch signing status for documents
+  const fetchSigningStatus = async (documentId: string) => {
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+      const response = await fetch(`${apiUrl}/api/docusign/document/${documentId}/signing-status`);
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          setSigningStatuses(prev => ({
+            ...prev,
+            [documentId]: result
+          }));
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching signing status:', err);
+    }
+  };
+
+  // Fetch signing statuses when documents change
+  useEffect(() => {
+    documents.forEach(doc => {
+      if (doc.fileType?.includes('pdf') && doc.googleDriveFileId) {
+        fetchSigningStatus(doc.id);
+      }
+    });
+  }, [documents]);
+
+  const handleSendForSigning = (doc: Document) => {
+    setSigningModal({ show: true, document: doc });
+  };
+
+  const handleSigningSuccess = () => {
+    // Refresh signing status for the document
+    if (signingModal.document) {
+      fetchSigningStatus(signingModal.document.id);
+    }
+  };
+
+  const isPdf = (doc: Document) => {
+    return doc.fileType?.includes('pdf') || doc.originalName?.toLowerCase().endsWith('.pdf');
   };
 
   const handleSort = (column: 'name' | 'size' | 'date') => {
@@ -699,6 +766,37 @@ export default function DocumentBrowser({ useGoogleDrive = false, documentCatego
                             </svg>
                           </button>
                         </div>
+                        {/* Send for Signing - only for PDFs with Google Drive ID */}
+                        {isPdf(doc) && doc.googleDriveFileId && (
+                          <div className="tooltip" data-tip={
+                            signingStatuses[doc.id]?.hasEnvelope
+                              ? `Signing: ${signingStatuses[doc.id]?.envelope?.status || 'Unknown'}`
+                              : "Send for Signing"
+                          }>
+                            <button
+                              className={`btn btn-ghost btn-xs ${
+                                signingStatuses[doc.id]?.hasEnvelope
+                                  ? signingStatuses[doc.id]?.envelope?.status === 'Completed'
+                                    ? 'text-success'
+                                    : 'text-primary'
+                                  : 'text-primary hover:bg-primary hover:text-primary-content'
+                              }`}
+                              onClick={() => handleSendForSigning(doc)}
+                            >
+                              {signingStatuses[doc.id]?.hasEnvelope ? (
+                                <SigningStatusBadge
+                                  status={signingStatuses[doc.id]?.envelope?.status as any || 'none'}
+                                  size="xs"
+                                  showLabel={false}
+                                />
+                              ) : (
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" />
+                                </svg>
+                              )}
+                            </button>
+                          </div>
+                        )}
                         <div className="tooltip" data-tip="Delete">
                           <button
                             className="btn btn-ghost btn-xs text-error hover:bg-error hover:text-error-content"
@@ -809,6 +907,19 @@ export default function DocumentBrowser({ useGoogleDrive = false, documentCatego
           </div>
         </div>
       )}
+
+      {/* Send for Signing Modal */}
+      <SendForSigningModal
+        isOpen={signingModal.show}
+        onClose={() => setSigningModal({ show: false, document: null })}
+        document={signingModal.document}
+        clientType={isCorporate ? 'corporate' : 'personal'}
+        clientId={personalId}
+        clientName={clientName}
+        clientEmail={clientEmail}
+        taxYear={taxYear}
+        onSuccess={handleSigningSuccess}
+      />
     </div>
   );
 }

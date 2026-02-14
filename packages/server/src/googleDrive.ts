@@ -521,6 +521,210 @@ export async function renameFileInGoogleDrive(fileId: string, newFileName: strin
   }
 }
 
+/**
+ * Get or create Signed folder for storing signed documents
+ *
+ * For Personal: Personal/Client [Code]/Tax Year [Year]/Signed/
+ * For Corporate: Corporate/Client [Code]/Tax Returns/[Year]/Signed/
+ */
+export async function getOrCreateSignedFolder(
+  clientCode: string,
+  taxYear: string,
+  isCorporate: boolean = false
+): Promise<string> {
+  try {
+    const rootFolderId = await getRootFolderId();
+
+    if (isCorporate) {
+      // Corporate: Corporate/Client [Code]/Tax Returns/[Year]/Signed/
+      const corporateFolderId = await getOrCreateFolderWithLock(
+        `corporate-${rootFolderId}`,
+        'Corporate',
+        rootFolderId
+      );
+
+      const clientFolderName = `Client ${clientCode}`;
+      const clientFolderId = await getOrCreateFolderWithLock(
+        `client-${clientCode}-${corporateFolderId}`,
+        clientFolderName,
+        corporateFolderId
+      );
+
+      const taxReturnsFolderId = await getOrCreateFolderWithLock(
+        `tax-returns-${clientFolderId}`,
+        'Tax Returns',
+        clientFolderId
+      );
+
+      const yearFolderId = await getOrCreateFolderWithLock(
+        `year-${taxYear}-${taxReturnsFolderId}`,
+        taxYear,
+        taxReturnsFolderId
+      );
+
+      const signedFolderId = await getOrCreateFolderWithLock(
+        `signed-${yearFolderId}`,
+        'Signed',
+        yearFolderId
+      );
+
+      return signedFolderId;
+    } else {
+      // Personal: Personal/Client [Code]/Tax Year [Year]/Signed/
+      const personalFolderId = await getOrCreateFolderWithLock(
+        `personal-${rootFolderId}`,
+        'Personal',
+        rootFolderId
+      );
+
+      const clientFolderName = `Client ${clientCode}`;
+      const clientFolderId = await getOrCreateFolderWithLock(
+        `personal-client-${clientCode}-${personalFolderId}`,
+        clientFolderName,
+        personalFolderId
+      );
+
+      const taxYearFolderName = `Tax Year ${taxYear}`;
+      const taxYearFolderId = await getOrCreateFolderWithLock(
+        `personal-year-${taxYear}-${clientFolderId}`,
+        taxYearFolderName,
+        clientFolderId
+      );
+
+      const signedFolderId = await getOrCreateFolderWithLock(
+        `signed-${taxYearFolderId}`,
+        'Signed',
+        taxYearFolderId
+      );
+
+      return signedFolderId;
+    }
+  } catch (error) {
+    console.error('Error getting/creating signed folder:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get or create Tax Returns folder for corporate clients
+ *
+ * Structure: Corporate/Client [Code]/Tax Returns/[Year]/
+ * Includes Outgoing subfolder for documents sent for signing
+ */
+export async function getOrCreateTaxReturnsFolder(
+  clientCode: string,
+  taxYear: string,
+  subfolder?: 'Outgoing' | 'Signed'
+): Promise<string> {
+  try {
+    const rootFolderId = await getRootFolderId();
+
+    // Create/get "Corporate" folder
+    const corporateFolderId = await getOrCreateFolderWithLock(
+      `corporate-${rootFolderId}`,
+      'Corporate',
+      rootFolderId
+    );
+
+    // Create/get client folder under Corporate
+    const clientFolderName = `Client ${clientCode}`;
+    const clientFolderId = await getOrCreateFolderWithLock(
+      `client-${clientCode}-${corporateFolderId}`,
+      clientFolderName,
+      corporateFolderId
+    );
+
+    // Create/get "Tax Returns" folder
+    const taxReturnsFolderId = await getOrCreateFolderWithLock(
+      `tax-returns-${clientFolderId}`,
+      'Tax Returns',
+      clientFolderId
+    );
+
+    // Create/get year folder under Tax Returns
+    const yearFolderId = await getOrCreateFolderWithLock(
+      `year-${taxYear}-${taxReturnsFolderId}`,
+      taxYear,
+      taxReturnsFolderId
+    );
+
+    // If subfolder specified, create it
+    if (subfolder) {
+      const subFolderId = await getOrCreateFolderWithLock(
+        `${subfolder.toLowerCase()}-${yearFolderId}`,
+        subfolder,
+        yearFolderId
+      );
+      return subFolderId;
+    }
+
+    return yearFolderId;
+  } catch (error) {
+    console.error('Error getting/creating tax returns folder:', error);
+    throw error;
+  }
+}
+
+/**
+ * Upload signed document to the Signed folder
+ */
+export async function uploadSignedDocument(
+  file: Buffer,
+  fileName: string,
+  mimeType: string,
+  clientCode: string,
+  taxYear: string,
+  isCorporate: boolean = false
+): Promise<{ fileId: string; webViewLink: string; webContentLink: string }> {
+  try {
+    const signedFolderId = await getOrCreateSignedFolder(clientCode, taxYear, isCorporate);
+
+    // Generate unique filename with timestamp
+    const timestamp = Date.now();
+    const uniqueFileName = `${timestamp}_${fileName}`;
+
+    const uploadResponse = await drive.files.create({
+      requestBody: {
+        name: uniqueFileName,
+        parents: [signedFolderId],
+      },
+      media: {
+        mimeType: mimeType,
+        body: Readable.from(file),
+      },
+      supportsAllDrives: true,
+    });
+
+    const fileId = uploadResponse.data.id!;
+
+    // Make file accessible with link sharing
+    await drive.permissions.create({
+      fileId: fileId,
+      requestBody: {
+        role: 'reader',
+        type: 'anyone',
+      },
+      supportsAllDrives: true,
+    });
+
+    // Get file links
+    const fileResponse = await drive.files.get({
+      fileId: fileId,
+      fields: 'webViewLink, webContentLink',
+      supportsAllDrives: true,
+    });
+
+    return {
+      fileId,
+      webViewLink: fileResponse.data.webViewLink!,
+      webContentLink: fileResponse.data.webContentLink!,
+    };
+  } catch (error) {
+    console.error('Error uploading signed document:', error);
+    throw error;
+  }
+}
+
 // Test Google Drive connection
 export async function testGoogleDriveConnection() {
   try {
