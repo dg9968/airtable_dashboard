@@ -225,14 +225,17 @@ app.post('/webhook', async (c) => {
       errorMessage,
     } = payload;
 
-    console.log('Received DocuSign webhook:', { envelopeId, airtableRecordId, status });
+    console.log('Received DocuSign webhook - full payload:', JSON.stringify(payload, null, 2));
+    console.log('Extracted values:', { envelopeId, airtableRecordId, status });
 
     // Validate payload
     if (!airtableRecordId && !envelopeId) {
+      console.log('Webhook rejected: missing both airtableRecordId and envelopeId');
       return c.json(
         {
           success: false,
           error: 'Either airtableRecordId or envelopeId is required',
+          receivedPayload: payload,
         },
         400
       );
@@ -240,22 +243,43 @@ app.post('/webhook', async (c) => {
 
     // Find the envelope record
     let recordId = airtableRecordId;
+
+    // If airtableRecordId provided, verify it exists
+    if (recordId) {
+      console.log(`Looking up record by airtableRecordId: ${recordId}`);
+      const existingRecord = await getRecord(ENVELOPES_TABLE, recordId);
+      if (!existingRecord) {
+        console.log(`Record ${recordId} not found in Airtable`);
+        // Clear recordId so we can try searching by envelopeId
+        recordId = undefined;
+      } else {
+        console.log(`Found record: ${recordId}`);
+      }
+    }
+
+    // If no valid recordId yet, search by envelope ID
     if (!recordId && envelopeId) {
-      // Search by envelope ID
+      console.log(`Searching by Envelope ID: ${envelopeId}`);
       const records = await getAllRecords(ENVELOPES_TABLE, {
         filterByFormula: `{Envelope ID} = '${envelopeId}'`,
         maxRecords: 1,
       });
       if (records.length > 0) {
         recordId = records[0].id;
+        console.log(`Found record by Envelope ID: ${recordId}`);
+      } else {
+        console.log(`No record found with Envelope ID: ${envelopeId}`);
       }
     }
 
     if (!recordId) {
+      console.log('Webhook failed: no matching record found');
       return c.json(
         {
           success: false,
           error: 'Envelope record not found',
+          searchedAirtableId: airtableRecordId,
+          searchedEnvelopeId: envelopeId,
         },
         404
       );
@@ -583,6 +607,8 @@ app.post('/resend/:envelopeId', async (c) => {
         action: 'resend',
         envelopeId: record.fields['Envelope ID'],
         airtableRecordId: envelopeId,
+        signerEmail: record.fields['Signer Email'],
+        signerName: record.fields['Signer Name'],
         timestamp: new Date().toISOString(),
       }),
     });
