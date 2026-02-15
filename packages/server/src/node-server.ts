@@ -39,6 +39,7 @@ import pipelineNotesRoutes from './routes/pipeline-notes';
 import corporatePipelineNotesRoutes from './routes/corporate-pipeline-notes';
 import knowledgeCategoriesRoutes from './routes/knowledge-categories';
 import knowledgeArticlesRoutes from './routes/knowledge-articles';
+import docusignEnvelopesRoutes from './routes/docusign-envelopes';
 
 const app = new Hono();
 
@@ -107,6 +108,7 @@ app.route('/api/pipeline-notes', pipelineNotesRoutes);
 app.route('/api/corporate-pipeline-notes', corporatePipelineNotesRoutes);
 app.route('/api/knowledge-categories', knowledgeCategoriesRoutes);
 app.route('/api/knowledge-articles', knowledgeArticlesRoutes);
+app.route('/api/docusign', docusignEnvelopesRoutes);
 
 // 404 handler
 app.notFound((c) => {
