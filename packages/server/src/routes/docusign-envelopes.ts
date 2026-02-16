@@ -876,11 +876,13 @@ app.get('/templates/:id', async (c) => {
  *
  * This endpoint allows n8n to upload signed PDFs through the app's Google Drive credentials,
  * solving the 403 permission error when n8n tries to upload directly.
+ *
+ * If clientCode/taxYear not provided, looks them up from the envelope record.
  */
 app.post('/upload-signed', async (c) => {
   try {
     const body = await c.req.json();
-    const {
+    let {
       airtableRecordId,
       signatureRequestId,
       fileBase64,
@@ -901,11 +903,39 @@ app.post('/upload-signed', async (c) => {
       );
     }
 
+    // If clientCode/taxYear not provided, look up from envelope record
+    if ((!clientCode || !taxYear) && airtableRecordId) {
+      console.log(`Looking up client info from envelope record: ${airtableRecordId}`);
+      const envelopeRecord = await getRecord(ENVELOPES_TABLE, airtableRecordId);
+
+      if (envelopeRecord) {
+        taxYear = taxYear || envelopeRecord.fields['Tax Year'];
+        clientType = clientType || envelopeRecord.fields['Client Type'];
+
+        // Get client code from linked Personal or Corporation record
+        const personalIds = envelopeRecord.fields['Personal'] as string[] | undefined;
+        const corporationIds = envelopeRecord.fields['Corporation'] as string[] | undefined;
+
+        if (personalIds && personalIds.length > 0) {
+          const personalRecord = await getRecord('Personal', personalIds[0]);
+          if (personalRecord) {
+            clientCode = personalRecord.fields['Client Code'] || personalRecord.fields['Code'];
+          }
+        } else if (corporationIds && corporationIds.length > 0) {
+          const corpRecord = await getRecord('Corporations', corporationIds[0]);
+          if (corpRecord) {
+            clientCode = corpRecord.fields['Client Code'] || corpRecord.fields['Code'];
+          }
+        }
+      }
+    }
+
+    // Still missing required fields?
     if (!clientCode || !taxYear) {
       return c.json(
         {
           success: false,
-          error: 'Missing required fields: clientCode and taxYear',
+          error: 'Missing required fields: clientCode and taxYear. Provide them directly or include airtableRecordId to look them up.',
         },
         400
       );
@@ -978,11 +1008,12 @@ app.post('/upload-signed', async (c) => {
  * 3. Update Airtable record
  *
  * Note: This requires HELLOSIGN_API_KEY to be configured
+ * If clientCode/taxYear not provided, looks them up from the envelope record.
  */
 app.post('/download-and-upload', async (c) => {
   try {
     const body = await c.req.json();
-    const {
+    let {
       airtableRecordId,
       signatureRequestId,
       clientCode,
@@ -1002,11 +1033,39 @@ app.post('/download-and-upload', async (c) => {
       );
     }
 
+    // If clientCode/taxYear not provided, look up from envelope record
+    if ((!clientCode || !taxYear) && airtableRecordId) {
+      console.log(`Looking up client info from envelope record: ${airtableRecordId}`);
+      const envelopeRecord = await getRecord(ENVELOPES_TABLE, airtableRecordId);
+
+      if (envelopeRecord) {
+        taxYear = taxYear || envelopeRecord.fields['Tax Year'];
+        clientType = clientType || envelopeRecord.fields['Client Type'];
+
+        // Get client code from linked Personal or Corporation record
+        const personalIds = envelopeRecord.fields['Personal'] as string[] | undefined;
+        const corporationIds = envelopeRecord.fields['Corporation'] as string[] | undefined;
+
+        if (personalIds && personalIds.length > 0) {
+          const personalRecord = await getRecord('Personal', personalIds[0]);
+          if (personalRecord) {
+            clientCode = personalRecord.fields['Client Code'] || personalRecord.fields['Code'];
+          }
+        } else if (corporationIds && corporationIds.length > 0) {
+          const corpRecord = await getRecord('Corporations', corporationIds[0]);
+          if (corpRecord) {
+            clientCode = corpRecord.fields['Client Code'] || corpRecord.fields['Code'];
+          }
+        }
+      }
+    }
+
+    // Still missing required fields?
     if (!clientCode || !taxYear) {
       return c.json(
         {
           success: false,
-          error: 'Missing required fields: clientCode and taxYear',
+          error: 'Missing required fields: clientCode and taxYear. Provide them directly or include airtableRecordId to look them up.',
         },
         400
       );
