@@ -10,8 +10,11 @@ interface Envelope {
   'Client Type': string;
   'Signer Email': string;
   'Signer Name': string;
+  'Signer 2 Email'?: string;
+  'Signer 2 Name'?: string;
   'Tax Year': string;
   'Document Type': string;
+  'Template Used'?: string;
   'Sent At'?: string;
   'Completed At'?: string;
   'Error Message'?: string;
@@ -270,6 +273,7 @@ export default function SigningDashboard() {
                     <th>Status</th>
                     <th>Signer</th>
                     <th>Document Type</th>
+                    <th>Template</th>
                     <th>Tax Year</th>
                     <th>Client Type</th>
                     <th>Sent</th>
@@ -293,8 +297,21 @@ export default function SigningDashboard() {
                       <td>
                         <div className="font-medium">{envelope['Signer Name']}</div>
                         <div className="text-sm opacity-60">{envelope['Signer Email']}</div>
+                        {envelope['Signer 2 Name'] && (
+                          <>
+                            <div className="font-medium text-sm mt-1">{envelope['Signer 2 Name']}</div>
+                            <div className="text-xs opacity-60">{envelope['Signer 2 Email']}</div>
+                          </>
+                        )}
                       </td>
                       <td>{envelope['Document Type']}</td>
+                      <td>
+                        {envelope['Template Used'] ? (
+                          <span className="text-sm">{envelope['Template Used']}</span>
+                        ) : (
+                          <span className="text-xs opacity-50">-</span>
+                        )}
+                      </td>
                       <td>{envelope['Tax Year']}</td>
                       <td>
                         <span className={`badge badge-sm ${envelope['Client Type'] === 'Personal' ? 'badge-primary' : 'badge-secondary'}`}>

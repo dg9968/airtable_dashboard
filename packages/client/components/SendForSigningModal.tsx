@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import SigningTemplateSelector, { SigningTemplate } from './SigningTemplateSelector';
 
 interface Document {
   id: string;
@@ -47,18 +48,27 @@ export default function SendForSigningModal({
 }: SendForSigningModalProps) {
   const [signerName, setSignerName] = useState(clientName);
   const [signerEmail, setSignerEmail] = useState(clientEmail);
+  const [signer2Name, setSigner2Name] = useState('');
+  const [signer2Email, setSigner2Email] = useState('');
   const [documentType, setDocumentType] = useState<DocumentType>('1040');
+  const [selectedTemplate, setSelectedTemplate] = useState<SigningTemplate | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
 
   // Reset form when modal opens with new data
-  useState(() => {
+  useEffect(() => {
     if (isOpen) {
       setSignerName(clientName);
       setSignerEmail(clientEmail);
+      setSigner2Name('');
+      setSigner2Email('');
+      setSelectedTemplate(null);
       setError('');
     }
-  });
+  }, [isOpen, clientName, clientEmail]);
+
+  // Check if template requires 2 signers
+  const requiresTwoSigners = selectedTemplate?.numberOfSigners === 2;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -81,26 +91,52 @@ export default function SendForSigningModal({
       return;
     }
 
+    // Validate second signer if required
+    if (requiresTwoSigners) {
+      if (!signer2Email || !signer2Name) {
+        setError('This template requires two signers. Please enter both signer details.');
+        return;
+      }
+      if (!emailRegex.test(signer2Email)) {
+        setError('Please enter a valid email address for the second signer');
+        return;
+      }
+    }
+
     setIsSubmitting(true);
 
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+
+      const payload: Record<string, any> = {
+        documentRecordId: document.id,
+        clientType,
+        clientId: clientId || '',
+        signerEmail,
+        signerName,
+        taxYear,
+        documentType,
+        driveFileId: document.googleDriveFileId,
+        triggeredBy: 'user',
+      };
+
+      // Add template ID if selected
+      if (selectedTemplate) {
+        payload.templateId = selectedTemplate.id;
+      }
+
+      // Add second signer if template requires it
+      if (requiresTwoSigners && signer2Email && signer2Name) {
+        payload.signer2Email = signer2Email;
+        payload.signer2Name = signer2Name;
+      }
+
       const response = await fetch(`${apiUrl}/api/docusign/send`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          documentRecordId: document.id,
-          clientType,
-          clientId: clientId || '',
-          signerEmail,
-          signerName,
-          taxYear,
-          documentType,
-          driveFileId: document.googleDriveFileId,
-          triggeredBy: 'user', // TODO: Get from auth context
-        }),
+        body: JSON.stringify(payload),
       });
 
       const result = await response.json();
@@ -122,7 +158,7 @@ export default function SendForSigningModal({
 
   return (
     <div className="modal modal-open">
-      <div className="modal-box">
+      <div className="modal-box max-w-lg">
         <h3 className="font-bold text-lg flex items-center gap-2">
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -157,7 +193,11 @@ export default function SendForSigningModal({
             <select
               className="select select-bordered w-full"
               value={documentType}
-              onChange={(e) => setDocumentType(e.target.value as DocumentType)}
+              onChange={(e) => {
+                setDocumentType(e.target.value as DocumentType);
+                // Reset template when document type changes
+                setSelectedTemplate(null);
+              }}
             >
               {documentTypeOptions.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -167,42 +207,105 @@ export default function SendForSigningModal({
             </select>
           </div>
 
-          {/* Signer Name */}
-          <div className="form-control w-full">
-            <label className="label">
-              <span className="label-text">Signer Name</span>
-              <span className="label-text-alt text-error">*Required</span>
-            </label>
-            <input
-              type="text"
-              placeholder="Enter signer's full name"
-              className="input input-bordered w-full"
-              value={signerName}
-              onChange={(e) => setSignerName(e.target.value)}
-              required
-            />
+          {/* Signing Template Selector */}
+          <SigningTemplateSelector
+            documentType={documentType}
+            clientType={clientType}
+            selectedTemplateId={selectedTemplate?.id || null}
+            onTemplateSelect={setSelectedTemplate}
+            disabled={isSubmitting}
+          />
+
+          {/* Primary Signer Section */}
+          <div className={requiresTwoSigners ? 'p-3 bg-base-200 rounded-lg space-y-3' : 'space-y-4'}>
+            {requiresTwoSigners && (
+              <p className="text-sm font-medium">Primary Signer (Taxpayer)</p>
+            )}
+
+            {/* Signer Name */}
+            <div className="form-control w-full">
+              <label className="label">
+                <span className="label-text">{requiresTwoSigners ? 'Name' : 'Signer Name'}</span>
+                <span className="label-text-alt text-error">*Required</span>
+              </label>
+              <input
+                type="text"
+                placeholder="Enter signer's full name"
+                className="input input-bordered w-full"
+                value={signerName}
+                onChange={(e) => setSignerName(e.target.value)}
+                required
+              />
+            </div>
+
+            {/* Signer Email */}
+            <div className="form-control w-full">
+              <label className="label">
+                <span className="label-text">{requiresTwoSigners ? 'Email' : 'Signer Email'}</span>
+                <span className="label-text-alt text-error">*Required</span>
+              </label>
+              <input
+                type="email"
+                placeholder="Enter signer's email address"
+                className="input input-bordered w-full"
+                value={signerEmail}
+                onChange={(e) => setSignerEmail(e.target.value)}
+                required
+              />
+            </div>
           </div>
 
-          {/* Signer Email */}
-          <div className="form-control w-full">
-            <label className="label">
-              <span className="label-text">Signer Email</span>
-              <span className="label-text-alt text-error">*Required</span>
-            </label>
-            <input
-              type="email"
-              placeholder="Enter signer's email address"
-              className="input input-bordered w-full"
-              value={signerEmail}
-              onChange={(e) => setSignerEmail(e.target.value)}
-              required
-            />
-            <label className="label">
-              <span className="label-text-alt">
-                The signer will receive an email from DocuSign with a link to sign the document
-              </span>
-            </label>
-          </div>
+          {/* Second Signer Section - only shown for 2-signer templates */}
+          {requiresTwoSigners && (
+            <div className="p-3 bg-base-200 rounded-lg space-y-3">
+              <p className="text-sm font-medium">Second Signer (Spouse)</p>
+
+              {/* Signer 2 Name */}
+              <div className="form-control w-full">
+                <label className="label">
+                  <span className="label-text">Name</span>
+                  <span className="label-text-alt text-error">*Required</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="Enter spouse's full name"
+                  className="input input-bordered w-full"
+                  value={signer2Name}
+                  onChange={(e) => setSigner2Name(e.target.value)}
+                  required={requiresTwoSigners}
+                />
+              </div>
+
+              {/* Signer 2 Email */}
+              <div className="form-control w-full">
+                <label className="label">
+                  <span className="label-text">Email</span>
+                  <span className="label-text-alt text-error">*Required</span>
+                </label>
+                <input
+                  type="email"
+                  placeholder="Enter spouse's email address"
+                  className="input input-bordered w-full"
+                  value={signer2Email}
+                  onChange={(e) => setSigner2Email(e.target.value)}
+                  required={requiresTwoSigners}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Help Text */}
+          {!requiresTwoSigners && (
+            <p className="text-xs opacity-60">
+              The signer will receive an email from Dropbox Sign with a link to sign the document.
+            </p>
+          )}
+
+          {requiresTwoSigners && (
+            <p className="text-xs opacity-60">
+              Both signers will receive separate emails from Dropbox Sign with links to sign the document.
+            </p>
+          )}
 
           {/* Error Message */}
           {error && (

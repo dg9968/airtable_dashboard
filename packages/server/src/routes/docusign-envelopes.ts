@@ -12,6 +12,7 @@ import {
   type AirtableRecord,
   type SelectOptions
 } from '../lib/airtable-service';
+import { uploadSignedDocument } from '../googleDrive';
 
 const app = new Hono();
 
@@ -38,8 +39,9 @@ async function getAllRecords(tableName: string, options?: SelectOptions): Promis
   return fetchRecords(tableName, options);
 }
 
-// Table name for signing envelopes - create this table in Airtable
+// Table names
 const ENVELOPES_TABLE = 'Signing Envelopes';
+const TEMPLATES_TABLE = 'Signing Templates';
 
 // Status values for envelopes
 export type EnvelopeStatus = 'Created' | 'Sent' | 'Delivered' | 'Viewed' | 'Signed' | 'Completed' | 'Declined' | 'Voided';
@@ -47,15 +49,32 @@ export type EnvelopeStatus = 'Created' | 'Sent' | 'Delivered' | 'Viewed' | 'Sign
 // Document types
 export type DocumentType = '1040' | '1120' | '1120S' | '1065' | '990' | '8879' | 'Other';
 
+// Template interface
+export interface SigningTemplate {
+  id: string;
+  templateName: string;
+  templateCode: string;
+  dropboxSignTemplateId: string;
+  documentTypes: string[];
+  clientType: 'Personal' | 'Corporate' | 'Both';
+  numberOfSigners: number;
+  description?: string;
+  status: 'Active' | 'Draft' | 'Archived';
+  sortOrder?: number;
+}
+
 interface SendForSigningRequest {
   documentRecordId: string;
   clientType: 'personal' | 'corporate';
   clientId: string;
   signerEmail: string;
   signerName: string;
+  // Second signer for MFJ templates
+  signer2Email?: string;
+  signer2Name?: string;
   taxYear: string;
   documentType: DocumentType;
-  templateId?: string;
+  templateId?: string;  // Airtable record ID of the template
   triggeredBy: string;
   driveFileId: string;
 }
@@ -83,6 +102,8 @@ app.post('/send', async (c) => {
       clientId,
       signerEmail,
       signerName,
+      signer2Email,
+      signer2Name,
       taxYear,
       documentType,
       templateId,
@@ -113,6 +134,29 @@ app.post('/send', async (c) => {
       );
     }
 
+    // Look up template to get Dropbox Sign template ID
+    let dropboxSignTemplateId: string | undefined;
+    let numberOfSigners = 1;
+    if (templateId) {
+      const templateRecord = await getRecord(TEMPLATES_TABLE, templateId);
+      if (templateRecord) {
+        dropboxSignTemplateId = templateRecord.fields['Dropbox Sign Template ID'];
+        numberOfSigners = templateRecord.fields['Number of Signers'] || 1;
+        console.log(`Using template: ${templateRecord.fields['Template Name']}, Dropbox Sign ID: ${dropboxSignTemplateId}`);
+      }
+    }
+
+    // Validate second signer if template requires 2 signers
+    if (numberOfSigners === 2 && (!signer2Email || !signer2Name)) {
+      return c.json(
+        {
+          success: false,
+          error: 'This template requires two signers. Please provide signer2Email and signer2Name.',
+        },
+        400
+      );
+    }
+
     // Create envelope record in Airtable with "Created" status
     const envelopeFields: Record<string, any> = {
       'Status': 'Created',
@@ -125,6 +169,12 @@ app.post('/send', async (c) => {
       'Created By': triggeredBy,
       'Document': [documentRecordId], // Link to Documents table
     };
+
+    // Add second signer info if provided
+    if (signer2Email && signer2Name) {
+      envelopeFields['Signer 2 Email'] = signer2Email;
+      envelopeFields['Signer 2 Name'] = signer2Name;
+    }
 
     // Link to appropriate client table
     if (clientType === 'personal') {
@@ -141,7 +191,7 @@ app.post('/send', async (c) => {
     console.log(`Created envelope record: ${envelopeRecord.id}`);
 
     // Prepare webhook payload for n8n
-    const webhookPayload = {
+    const webhookPayload: Record<string, any> = {
       action: 'send',
       airtableRecordId: envelopeRecord.id,
       documentRecordId,
@@ -152,12 +202,20 @@ app.post('/send', async (c) => {
       taxYear,
       documentType: documentType || 'Other',
       templateId,
+      dropboxSignTemplateId,  // The actual Dropbox Sign template ID for n8n to use
+      numberOfSigners,
       driveFileId,
       triggeredBy,
       timestamp: new Date().toISOString(),
     };
 
-    console.log('Triggering n8n DocuSign workflow:', { airtableRecordId: envelopeRecord.id, signerEmail });
+    // Add second signer to payload if provided
+    if (signer2Email && signer2Name) {
+      webhookPayload.signer2Email = signer2Email;
+      webhookPayload.signer2Name = signer2Name;
+    }
+
+    console.log('Triggering n8n Dropbox Sign workflow:', { airtableRecordId: envelopeRecord.id, signerEmail, dropboxSignTemplateId });
 
     // Trigger n8n webhook
     const response = await fetch(webhookUrl, {
@@ -694,6 +752,349 @@ app.get('/document/:documentId/signing-status', async (c) => {
       {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to fetch signing status',
+      },
+      500
+    );
+  }
+});
+
+/**
+ * GET /api/docusign/templates
+ * List all active signing templates with optional filtering
+ */
+app.get('/templates', async (c) => {
+  try {
+    const documentType = c.req.query('documentType');
+    const clientType = c.req.query('clientType');
+
+    const filterParts: string[] = [];
+
+    // Always filter for active templates
+    filterParts.push(`{Status} = 'Active'`);
+
+    // Filter by document type if provided
+    if (documentType) {
+      filterParts.push(`FIND('${documentType}', ARRAYJOIN({Document Types}, ','))`);
+    }
+
+    // Filter by client type if provided (Personal, Corporate, or Both)
+    if (clientType) {
+      const formattedType = clientType === 'personal' ? 'Personal' : 'Corporate';
+      filterParts.push(`OR({Client Type} = '${formattedType}', {Client Type} = 'Both')`);
+    }
+
+    const options: SelectOptions = {
+      filterByFormula: filterParts.length === 1
+        ? filterParts[0]
+        : `AND(${filterParts.join(', ')})`,
+      sort: [{ field: 'Sort Order', direction: 'asc' }],
+    };
+
+    const records = await getAllRecords(TEMPLATES_TABLE, options);
+
+    const templates: SigningTemplate[] = records.map(record => ({
+      id: record.id,
+      templateName: record.fields['Template Name'] || '',
+      templateCode: record.fields['Template Code'] || '',
+      dropboxSignTemplateId: record.fields['Dropbox Sign Template ID'] || '',
+      documentTypes: record.fields['Document Types'] || [],
+      clientType: record.fields['Client Type'] || 'Both',
+      numberOfSigners: record.fields['Number of Signers'] || 1,
+      description: record.fields['Description'] || '',
+      status: record.fields['Status'] || 'Draft',
+      sortOrder: record.fields['Sort Order'] || 0,
+    }));
+
+    return c.json({
+      success: true,
+      templates,
+      total: templates.length,
+    });
+  } catch (error) {
+    console.error('Error fetching signing templates:', error);
+    return c.json(
+      {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to fetch templates',
+      },
+      500
+    );
+  }
+});
+
+/**
+ * GET /api/docusign/templates/:id
+ * Get single template details
+ */
+app.get('/templates/:id', async (c) => {
+  try {
+    const id = c.req.param('id');
+    const record = await getRecord(TEMPLATES_TABLE, id);
+
+    if (!record) {
+      return c.json(
+        {
+          success: false,
+          error: 'Template not found',
+        },
+        404
+      );
+    }
+
+    const template: SigningTemplate = {
+      id: record.id,
+      templateName: record.fields['Template Name'] || '',
+      templateCode: record.fields['Template Code'] || '',
+      dropboxSignTemplateId: record.fields['Dropbox Sign Template ID'] || '',
+      documentTypes: record.fields['Document Types'] || [],
+      clientType: record.fields['Client Type'] || 'Both',
+      numberOfSigners: record.fields['Number of Signers'] || 1,
+      description: record.fields['Description'] || '',
+      status: record.fields['Status'] || 'Draft',
+      sortOrder: record.fields['Sort Order'] || 0,
+    };
+
+    return c.json({
+      success: true,
+      template,
+    });
+  } catch (error) {
+    console.error('Error fetching template:', error);
+    return c.json(
+      {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to fetch template',
+      },
+      500
+    );
+  }
+});
+
+/**
+ * POST /api/docusign/upload-signed
+ * Upload signed document to Google Drive (called by n8n workflow)
+ *
+ * This endpoint allows n8n to upload signed PDFs through the app's Google Drive credentials,
+ * solving the 403 permission error when n8n tries to upload directly.
+ */
+app.post('/upload-signed', async (c) => {
+  try {
+    const body = await c.req.json();
+    const {
+      airtableRecordId,
+      signatureRequestId,
+      fileBase64,
+      fileName,
+      clientCode,
+      taxYear,
+      clientType,
+    } = body;
+
+    // Validate required fields
+    if (!fileBase64) {
+      return c.json(
+        {
+          success: false,
+          error: 'Missing required field: fileBase64 (base64-encoded PDF)',
+        },
+        400
+      );
+    }
+
+    if (!clientCode || !taxYear) {
+      return c.json(
+        {
+          success: false,
+          error: 'Missing required fields: clientCode and taxYear',
+        },
+        400
+      );
+    }
+
+    console.log(`Uploading signed document for client ${clientCode}, tax year ${taxYear}`);
+
+    // Decode base64 to buffer
+    const fileBuffer = Buffer.from(fileBase64, 'base64');
+
+    // Generate filename if not provided
+    const finalFileName = fileName || `signed_${Date.now()}.pdf`;
+
+    // Determine if corporate based on clientType
+    const isCorporate = clientType === 'corporate' || clientType === 'Corporate';
+
+    // Upload to Google Drive using the app's credentials
+    const uploadResult = await uploadSignedDocument(
+      fileBuffer,
+      finalFileName,
+      'application/pdf',
+      clientCode,
+      taxYear,
+      isCorporate
+    );
+
+    console.log(`Signed document uploaded: ${uploadResult.fileId}`);
+
+    // If airtableRecordId provided, update the envelope record
+    if (airtableRecordId) {
+      try {
+        await updateRecord(ENVELOPES_TABLE, airtableRecordId, {
+          'Signed Drive File ID': uploadResult.fileId,
+          'Status': 'Completed',
+          'Completed At': new Date().toISOString(),
+        });
+        console.log(`Updated envelope record ${airtableRecordId} with signed document`);
+      } catch (updateError) {
+        console.error('Failed to update envelope record:', updateError);
+        // Don't fail the whole request if Airtable update fails
+      }
+    }
+
+    return c.json({
+      success: true,
+      fileId: uploadResult.fileId,
+      webViewLink: uploadResult.webViewLink,
+      webContentLink: uploadResult.webContentLink,
+      message: 'Signed document uploaded successfully',
+    });
+  } catch (error) {
+    console.error('Error uploading signed document:', error);
+    return c.json(
+      {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to upload signed document',
+      },
+      500
+    );
+  }
+});
+
+/**
+ * POST /api/docusign/download-and-upload
+ * Download signed document from HelloSign and upload to Google Drive
+ *
+ * Alternative endpoint that handles the full flow:
+ * 1. Download signed PDF from HelloSign using signature_request_id
+ * 2. Upload to Google Drive
+ * 3. Update Airtable record
+ *
+ * Note: This requires HELLOSIGN_API_KEY to be configured
+ */
+app.post('/download-and-upload', async (c) => {
+  try {
+    const body = await c.req.json();
+    const {
+      airtableRecordId,
+      signatureRequestId,
+      clientCode,
+      taxYear,
+      clientType,
+      fileName,
+    } = body;
+
+    // Validate required fields
+    if (!signatureRequestId) {
+      return c.json(
+        {
+          success: false,
+          error: 'Missing required field: signatureRequestId',
+        },
+        400
+      );
+    }
+
+    if (!clientCode || !taxYear) {
+      return c.json(
+        {
+          success: false,
+          error: 'Missing required fields: clientCode and taxYear',
+        },
+        400
+      );
+    }
+
+    const helloSignApiKey = process.env.HELLOSIGN_API_KEY;
+    if (!helloSignApiKey) {
+      return c.json(
+        {
+          success: false,
+          error: 'HELLOSIGN_API_KEY not configured. Use /upload-signed with base64 data instead.',
+        },
+        500
+      );
+    }
+
+    console.log(`Downloading signed document from HelloSign: ${signatureRequestId}`);
+
+    // Download from HelloSign API
+    const helloSignResponse = await fetch(
+      `https://api.hellosign.com/v3/signature_request/files/${signatureRequestId}?file_type=pdf`,
+      {
+        headers: {
+          'Authorization': `Basic ${Buffer.from(helloSignApiKey + ':').toString('base64')}`,
+        },
+      }
+    );
+
+    if (!helloSignResponse.ok) {
+      const errorText = await helloSignResponse.text();
+      console.error('HelloSign download failed:', errorText);
+      return c.json(
+        {
+          success: false,
+          error: `Failed to download from HelloSign: ${helloSignResponse.statusText}`,
+        },
+        500
+      );
+    }
+
+    const fileBuffer = Buffer.from(await helloSignResponse.arrayBuffer());
+    console.log(`Downloaded ${fileBuffer.length} bytes from HelloSign`);
+
+    // Generate filename
+    const finalFileName = fileName || `signed_${signatureRequestId}.pdf`;
+
+    // Determine if corporate
+    const isCorporate = clientType === 'corporate' || clientType === 'Corporate';
+
+    // Upload to Google Drive
+    const uploadResult = await uploadSignedDocument(
+      fileBuffer,
+      finalFileName,
+      'application/pdf',
+      clientCode,
+      taxYear,
+      isCorporate
+    );
+
+    console.log(`Signed document uploaded: ${uploadResult.fileId}`);
+
+    // Update Airtable record if provided
+    if (airtableRecordId) {
+      try {
+        await updateRecord(ENVELOPES_TABLE, airtableRecordId, {
+          'Signed Drive File ID': uploadResult.fileId,
+          'Status': 'Completed',
+          'Completed At': new Date().toISOString(),
+        });
+        console.log(`Updated envelope record ${airtableRecordId}`);
+      } catch (updateError) {
+        console.error('Failed to update envelope record:', updateError);
+      }
+    }
+
+    return c.json({
+      success: true,
+      fileId: uploadResult.fileId,
+      webViewLink: uploadResult.webViewLink,
+      webContentLink: uploadResult.webContentLink,
+      message: 'Signed document downloaded and uploaded successfully',
+    });
+  } catch (error) {
+    console.error('Error in download-and-upload:', error);
+    return c.json(
+      {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to process signed document',
       },
       500
     );
