@@ -73,8 +73,9 @@ export default function DocumentBrowser({ useGoogleDrive = false, documentCatego
   const [signingStatuses, setSigningStatuses] = useState<Record<string, SigningStatus>>({});
 
   // Fetch existing banks when client code changes and category is statements
+  // Accept both 4-digit (legacy) and 6-digit (new) client codes
   useEffect(() => {
-    if (isCorporate && documentCategory === 'statements' && clientCode && /^\d{4}$/.test(clientCode)) {
+    if (isCorporate && documentCategory === 'statements' && clientCode && /^\d{4,6}$/.test(clientCode)) {
       fetchExistingBanks();
     } else {
       setExistingBanks([]);

@@ -5,7 +5,8 @@
       "Bash(find:*)",
       "Bash(findstr:*)",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(bun run build:*)"
     ],
     "deny": [],
     "ask": []
