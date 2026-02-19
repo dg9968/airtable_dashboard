@@ -46,10 +46,10 @@ function SigningDashboardContent() {
       {/* Help Section */}
       <div className="card bg-base-100 shadow mt-8">
         <div className="card-body">
-          <h3 className="card-title text-lg">About DocuSign Integration</h3>
+          <h3 className="card-title text-lg">About SignNow Integration</h3>
           <div className="prose prose-sm max-w-none">
             <p>
-              This dashboard shows all documents sent for digital signing through DocuSign.
+              This dashboard shows all documents sent for digital signing through SignNow.
               The integration works with n8n to automate the signing workflow.
             </p>
             <div className="grid md:grid-cols-2 gap-4 mt-4">

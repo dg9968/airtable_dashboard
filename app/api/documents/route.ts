@@ -168,8 +168,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Client code is required' }, { status: 400 });
     }
 
-    if (!/^\d{4}$/.test(clientCode.trim())) {
-      return NextResponse.json({ error: 'Client code must be exactly 4 digits' }, { status: 400 });
+    // Accept both 4-digit (legacy) and 6-digit (new) client codes
+    if (!/^\d{4,6}$/.test(clientCode.trim())) {
+      return NextResponse.json({ error: 'Client code must be 4-6 digits' }, { status: 400 });
     }
 
     // Validate tax year is provided and valid (except for business credentials)

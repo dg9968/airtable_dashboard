@@ -146,8 +146,9 @@ export default function DocumentBrowser({ useGoogleDrive = false, documentCatego
       return;
     }
 
-    if (!/^\d{4}$/.test(clientCode.trim())) {
-      setError('Client code must be exactly 4 digits');
+    // Accept both 4-digit (legacy) and 6-digit (new) client codes
+    if (!/^\d{4,6}$/.test(clientCode.trim())) {
+      setError('Client code must be 4-6 digits');
       return;
     }
 

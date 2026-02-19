@@ -63,6 +63,7 @@ app.use('*', cors({
     return process.env.CLIENT_URL || 'http://localhost:3000';
   },
   credentials: true,
+  exposeHeaders: ['Content-Disposition'],
 }));
 
 // Note: API authentication is handled by individual routes using JWT/session

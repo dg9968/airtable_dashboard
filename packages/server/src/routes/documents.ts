@@ -92,7 +92,7 @@ app.post('/', async (c) => {
     }
 
     if (!isValidClientCode(clientCode)) {
-      return c.json({ error: 'Client code must be exactly 4 digits' }, 400);
+      return c.json({ error: 'Client code must be 4-6 digits' }, 400);
     }
 
     if (!isValidTaxYear(taxYear)) {

@@ -43,6 +43,58 @@ async function getAllRecords(tableName: string, options?: SelectOptions): Promis
 const ENVELOPES_TABLE = 'Signing Envelopes';
 const TEMPLATES_TABLE = 'Signing Templates';
 
+// SignNow OAuth token cache
+let signNowAccessToken: string | null = null;
+let signNowTokenExpiry: number = 0;
+
+/**
+ * Get a valid SignNow access token, refreshing if needed
+ * Uses OAuth 2.0 password grant flow
+ */
+async function getSignNowAccessToken(): Promise<string> {
+  // Return cached token if still valid
+  if (signNowAccessToken && Date.now() < signNowTokenExpiry) {
+    return signNowAccessToken;
+  }
+
+  const clientId = process.env.SIGNNOW_CLIENT_ID;
+  const clientSecret = process.env.SIGNNOW_CLIENT_SECRET;
+  const username = process.env.SIGNNOW_USERNAME;
+  const password = process.env.SIGNNOW_PASSWORD;
+  const apiUrl = process.env.SIGNNOW_API_URL || 'https://api.signnow.com';
+
+  if (!clientId || !clientSecret || !username || !password) {
+    throw new Error('SignNow credentials not configured');
+  }
+
+  const response = await fetch(`${apiUrl}/oauth2/token`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: new URLSearchParams({
+      grant_type: 'password',
+      username,
+      password,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('SignNow auth failed:', errorText);
+    throw new Error(`SignNow auth failed: ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  signNowAccessToken = data.access_token;
+  // Expire token 1 minute early to avoid edge cases
+  signNowTokenExpiry = Date.now() + (data.expires_in * 1000) - 60000;
+
+  console.log('SignNow access token obtained successfully');
+  return signNowAccessToken;
+}
+
 // Status values for envelopes
 export type EnvelopeStatus = 'Created' | 'Sent' | 'Delivered' | 'Viewed' | 'Signed' | 'Completed' | 'Declined' | 'Voided';
 
@@ -1000,14 +1052,14 @@ app.post('/upload-signed', async (c) => {
 
 /**
  * POST /api/docusign/download-and-upload
- * Download signed document from HelloSign and upload to Google Drive
+ * Download signed document from SignNow and upload to Google Drive
  *
  * Alternative endpoint that handles the full flow:
- * 1. Download signed PDF from HelloSign using signature_request_id
+ * 1. Download signed PDF from SignNow using document ID
  * 2. Upload to Google Drive
  * 3. Update Airtable record
  *
- * Note: This requires HELLOSIGN_API_KEY to be configured
+ * Note: This requires SignNow credentials to be configured
  * If clientCode/taxYear not provided, looks them up from the envelope record.
  */
 app.post('/download-and-upload', async (c) => {
@@ -1071,43 +1123,47 @@ app.post('/download-and-upload', async (c) => {
       );
     }
 
-    const helloSignApiKey = process.env.HELLOSIGN_API_KEY;
-    if (!helloSignApiKey) {
+    const signNowConfigured = process.env.SIGNNOW_CLIENT_ID && process.env.SIGNNOW_CLIENT_SECRET;
+    if (!signNowConfigured) {
       return c.json(
         {
           success: false,
-          error: 'HELLOSIGN_API_KEY not configured. Use /upload-signed with base64 data instead.',
+          error: 'SignNow credentials not configured. Use /upload-signed with base64 data instead.',
         },
         500
       );
     }
 
-    console.log(`Downloading signed document from HelloSign: ${signatureRequestId}`);
+    console.log(`Downloading signed document from SignNow: ${signatureRequestId}`);
 
-    // Download from HelloSign API
-    const helloSignResponse = await fetch(
-      `https://api.hellosign.com/v3/signature_request/files/${signatureRequestId}?file_type=pdf`,
+    // Get SignNow access token and download PDF
+    const signNowApiUrl = process.env.SIGNNOW_API_URL || 'https://api.signnow.com';
+    const accessToken = await getSignNowAccessToken();
+
+    // In SignNow, signatureRequestId is the document ID
+    const signNowResponse = await fetch(
+      `${signNowApiUrl}/document/${signatureRequestId}/download?type=collapsed`,
       {
         headers: {
-          'Authorization': `Basic ${Buffer.from(helloSignApiKey + ':').toString('base64')}`,
+          'Authorization': `Bearer ${accessToken}`,
         },
       }
     );
 
-    if (!helloSignResponse.ok) {
-      const errorText = await helloSignResponse.text();
-      console.error('HelloSign download failed:', errorText);
+    if (!signNowResponse.ok) {
+      const errorText = await signNowResponse.text();
+      console.error('SignNow download failed:', errorText);
       return c.json(
         {
           success: false,
-          error: `Failed to download from HelloSign: ${helloSignResponse.statusText}`,
+          error: `Failed to download from SignNow: ${signNowResponse.statusText}`,
         },
         500
       );
     }
 
-    const fileBuffer = Buffer.from(await helloSignResponse.arrayBuffer());
-    console.log(`Downloaded ${fileBuffer.length} bytes from HelloSign`);
+    const fileBuffer = Buffer.from(await signNowResponse.arrayBuffer());
+    console.log(`Downloaded ${fileBuffer.length} bytes from SignNow`);
 
     // Generate filename
     const finalFileName = fileName || `signed_${signatureRequestId}.pdf`;

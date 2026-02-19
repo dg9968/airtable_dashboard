@@ -18,6 +18,7 @@ import {
   type FamilyMemberData,
   type DependentData,
 } from "../lib/family-record-helpers";
+import { generateUniqueClientCode } from "../utils/helpers";
 
 const app = new Hono();
 
@@ -114,6 +115,33 @@ app.get("/search", async (c) => {
           error instanceof Error
             ? error.message
             : "Failed to search personal records",
+      },
+      500
+    );
+  }
+});
+
+/**
+ * GET /api/personal/generate-code
+ * Generate a unique 6-digit client code
+ */
+app.get("/generate-code", async (c) => {
+  try {
+    const code = await generateUniqueClientCode();
+
+    return c.json({
+      success: true,
+      code,
+    });
+  } catch (error) {
+    console.error("Error generating unique client code:", error);
+    return c.json(
+      {
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to generate unique client code",
       },
       500
     );
@@ -226,6 +254,14 @@ app.post("/", async (c) => {
           cleanedFields[key] = value;
         }
       }
+    }
+
+    // Generate unique 6-digit client code for new clients
+    // This gets stored in "Client Code Override" field which the formula uses
+    if (!cleanedFields["Client Code Override"]) {
+      const uniqueCode = await generateUniqueClientCode();
+      cleanedFields["Client Code Override"] = uniqueCode;
+      console.log("Generated unique client code:", uniqueCode);
     }
 
     console.log(

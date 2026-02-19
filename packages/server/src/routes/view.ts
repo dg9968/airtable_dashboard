@@ -165,9 +165,11 @@ app.get('/:tableName/:recordId', async (c) => {
     const tableName = c.req.param('tableName');
     const recordId = c.req.param('recordId');
 
-    console.log(`Fetching record ${recordId} from table "${tableName}"`);
+    console.log(`[View API] Fetching record ${recordId} from table "${tableName}"`);
 
     const record = await findRecord(tableName, recordId);
+
+    console.log(`[View API] Successfully fetched record ${recordId}`);
 
     return c.json({
       success: true,
@@ -175,13 +177,20 @@ app.get('/:tableName/:recordId', async (c) => {
     });
 
   } catch (error) {
-    console.error('Error fetching record:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to fetch record';
+    console.error(`[View API] Error fetching record ${c.req.param('recordId')} from table "${c.req.param('tableName')}":`, errorMessage);
+
+    // Check if it's a "not found" error vs other errors
+    const isNotFound = errorMessage.includes('NOT_FOUND') || errorMessage.includes('Could not find');
+
     return c.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : 'Failed to fetch record'
+        error: errorMessage,
+        table: c.req.param('tableName'),
+        recordId: c.req.param('recordId')
       },
-      404
+      isNotFound ? 404 : 500
     );
   }
 });

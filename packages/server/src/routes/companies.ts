@@ -4,7 +4,8 @@
  */
 
 import { Hono } from "hono";
-import { fetchRecords, findRecord } from "../lib/airtable-service";
+import { fetchRecords, findRecord, createRecords } from "../lib/airtable-service";
+import { generateUniqueClientCode } from "../utils/helpers";
 
 const app = new Hono();
 
@@ -247,6 +248,74 @@ app.get("/:id", async (c) => {
         error: error instanceof Error ? error.message : "Company not found",
       },
       404
+    );
+  }
+});
+
+/**
+ * POST /api/companies
+ * Create a new company with auto-generated unique client code
+ */
+app.post("/", async (c) => {
+  try {
+    const body = await c.req.json();
+    const fields = body.fields || body;
+
+    // List of computed/formula fields that Airtable doesn't accept
+    const computedFields = [
+      "Client Code", // Formula field
+      "Created time",
+      "Last modified time",
+      "Record ID",
+    ];
+
+    // Clean the fields - remove computed fields and empty values
+    const cleanedFields: Record<string, any> = {};
+    for (const [key, value] of Object.entries(fields)) {
+      if (computedFields.includes(key)) {
+        continue;
+      }
+      if (value !== "" && value !== undefined && value !== null) {
+        cleanedFields[key] = value;
+      }
+    }
+
+    // Generate unique 6-digit client code for new corporations
+    // This gets stored in "Client Code Override" field which the formula uses
+    if (!cleanedFields["Client Code Override"]) {
+      const uniqueCode = await generateUniqueClientCode();
+      cleanedFields["Client Code Override"] = uniqueCode;
+      console.log("Generated unique client code for corporation:", uniqueCode);
+    }
+
+    console.log(
+      "Creating corporation with fields:",
+      Object.keys(cleanedFields)
+    );
+
+    const records = await createRecords(COMPANIES_TABLE, [{ fields: cleanedFields }]);
+    const record = records[0];
+
+    return c.json({
+      success: true,
+      data: {
+        id: record.id,
+        clientCode: record.fields["Client Code"] || cleanedFields["Client Code Override"],
+        name:
+          record.fields["Company"] ||
+          record.fields["Company Name"] ||
+          record.fields["Name"],
+        fields: record.fields,
+      },
+    });
+  } catch (error) {
+    console.error("Error creating company:", error);
+    return c.json(
+      {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to create company",
+      },
+      500
     );
   }
 });

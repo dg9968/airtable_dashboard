@@ -24,8 +24,9 @@ export default function DocumentUpload({ onUploadComplete, useGoogleDrive = fals
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Fetch existing banks when client code changes and category is statements
+  // Accept both 4-digit (legacy) and 6-digit (new) client codes
   useEffect(() => {
-    if (isCorporate && documentCategory === 'statements' && clientCode && /^\d{4}$/.test(clientCode)) {
+    if (isCorporate && documentCategory === 'statements' && clientCode && /^\d{4,6}$/.test(clientCode)) {
       fetchExistingBanks();
     } else {
       setExistingBanks([]);
@@ -97,8 +98,9 @@ export default function DocumentUpload({ onUploadComplete, useGoogleDrive = fals
       return;
     }
 
-    if (!/^\d{4}$/.test(clientCode.trim())) {
-      setError('Client code must be exactly 4 digits');
+    // Accept both 4-digit (legacy) and 6-digit (new) client codes
+    if (!/^\d{4,6}$/.test(clientCode.trim())) {
+      setError('Client code must be 4-6 digits');
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
@@ -390,7 +392,7 @@ export default function DocumentUpload({ onUploadComplete, useGoogleDrive = fals
             className="file-input file-input-bordered w-full"
             accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png,.gif,.csv,.xls,.xlsx,.qbo"
             onChange={handleFileUpload}
-            disabled={isUploading || !clientCode.trim() || !/^\d{4}$/.test(clientCode.trim()) || (!taxYear && !(isCorporate && (documentCategory === 'business-credentials' || documentCategory === 'notices-letters'))) || (isCorporate && !documentCategory) || (isCorporate && documentCategory === 'statements' && !bankName.trim())}
+            disabled={isUploading || !clientCode.trim() || !/^\d{4,6}$/.test(clientCode.trim()) || (!taxYear && !(isCorporate && (documentCategory === 'business-credentials' || documentCategory === 'notices-letters'))) || (isCorporate && !documentCategory) || (isCorporate && documentCategory === 'statements' && !bankName.trim())}
           />
           <label className="label">
             <span className="label-text-alt">
@@ -399,7 +401,7 @@ export default function DocumentUpload({ onUploadComplete, useGoogleDrive = fals
           </label>
         </div>
 
-        {clientCode && /^\d{4}$/.test(clientCode) && (taxYear || (isCorporate && (documentCategory === 'business-credentials' || documentCategory === 'notices-letters'))) && (!isCorporate || documentCategory) && (
+        {clientCode && /^\d{4,6}$/.test(clientCode) && (taxYear || (isCorporate && (documentCategory === 'business-credentials' || documentCategory === 'notices-letters'))) && (!isCorporate || documentCategory) && (
           <div className="alert alert-success">
             <div className="flex items-center">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" className="stroke-current shrink-0 w-6 h-6">

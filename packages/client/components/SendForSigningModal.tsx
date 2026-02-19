@@ -297,13 +297,13 @@ export default function SendForSigningModal({
           {/* Help Text */}
           {!requiresTwoSigners && (
             <p className="text-xs opacity-60">
-              The signer will receive an email from Dropbox Sign with a link to sign the document.
+              The signer will receive an email from SignNow with a link to sign the document.
             </p>
           )}
 
           {requiresTwoSigners && (
             <p className="text-xs opacity-60">
-              Both signers will receive separate emails from Dropbox Sign with links to sign the document.
+              Both signers will receive separate emails from SignNow with links to sign the document.
             </p>
           )}
 

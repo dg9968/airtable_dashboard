@@ -21,6 +21,8 @@ interface PersonalRecord {
     "Full Name"?: string;
     "Last modified time"?: string;
     "last name first name"?: string;
+    "Client Code"?: string;
+    "Client Code Override"?: string;
     SSN?: string;
     "Date of Birth"?: string;
     Occupation?: string;
@@ -252,8 +254,9 @@ export default function ClientIntake() {
   // Save selected client to localStorage for cross-page context
   useEffect(() => {
     if (selectedClient?.id) {
-      const ssn = selectedClient.fields.SSN || "";
-      const clientCode = ssn.replace(/-/g, "").slice(-4);
+      // Use Client Code field from Airtable (preferred) or fall back to SSN last 4 (legacy)
+      const clientCode = selectedClient.fields["Client Code"] ||
+        (selectedClient.fields.SSN ? selectedClient.fields.SSN.replace(/-/g, "").slice(-4) : "");
       if (clientCode) {
         localStorage.setItem("lastSelectedClient", JSON.stringify({
           id: selectedClient.id,
@@ -817,8 +820,9 @@ export default function ClientIntake() {
                     </div>
                     <button
                       onClick={() => {
-                        const ssn = selectedClient.fields.SSN || "";
-                        const clientCode = ssn.replace(/-/g, "").slice(-4);
+                        // Use Client Code field from Airtable (preferred) or fall back to SSN last 4 (legacy)
+                        const clientCode = selectedClient.fields["Client Code"] ||
+                          (selectedClient.fields.SSN ? selectedClient.fields.SSN.replace(/-/g, "").slice(-4) : "");
                         if (clientCode) {
                           router.push(`/document-management?clientCode=${clientCode}&personalId=${selectedClient.id}`);
                         } else {
@@ -1668,8 +1672,9 @@ export default function ClientIntake() {
                         </button>
                         <button
                           onClick={() => {
-                            const ssn = formData.SSN || selectedClient.fields.SSN || "";
-                            const clientCode = ssn.replace(/-/g, "").slice(-4);
+                            // Use Client Code field from Airtable (preferred) or fall back to SSN last 4 (legacy)
+                            const clientCode = selectedClient.fields["Client Code"] ||
+                              (formData.SSN || selectedClient.fields.SSN ? (formData.SSN || selectedClient.fields.SSN || "").replace(/-/g, "").slice(-4) : "");
                             if (clientCode) {
                               router.push(`/document-management?personalId=${selectedClient.id}&clientCode=${clientCode}`);
                             } else {

@@ -445,8 +445,8 @@ export default function CorporateClientIntake() {
       let companyId: string;
 
       if (isNewCompany) {
-        // Create new company
-        const response = await fetch(`${apiUrl}/api/view/Corporations`, {
+        // Create new company via /api/companies (auto-generates unique client code)
+        const response = await fetch(`${apiUrl}/api/companies`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ fields: companyData })

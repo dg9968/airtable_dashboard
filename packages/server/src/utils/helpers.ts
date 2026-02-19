@@ -2,18 +2,67 @@
  * Helper utilities for server
  */
 
+import { fetchAllRecords } from "../lib/airtable-helpers";
+
 /**
- * Generate a random 4-digit code
+ * Generate a random 6-digit code (100000-999999)
  */
 export function generateClientCode(): string {
-  return Math.floor(1000 + Math.random() * 9000).toString();
+  return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
 /**
- * Validate if a string is a valid 4-digit client code
+ * Validate if a string is a valid client code
+ * Supports both legacy 4-digit codes and new 6-digit codes
  */
 export function isValidClientCode(code: string): boolean {
-  return /^\d{4}$/.test(code.trim());
+  const trimmed = code.trim();
+  return /^\d{4}$/.test(trimmed) || /^\d{6}$/.test(trimmed);
+}
+
+/**
+ * Check if a client code already exists in Airtable
+ * Checks both the "Client Code" formula field and "Client Code Override" field
+ */
+export async function isClientCodeUnique(code: string): Promise<boolean> {
+  const baseId = process.env.AIRTABLE_BASE_ID || "";
+
+  // Check Personal table - check both formula result and override field
+  const personalRecords = await fetchAllRecords(baseId, "Personal", {
+    filterByFormula: `OR({Client Code} = '${code}', {Client Code Override} = '${code}')`,
+    maxRecords: 1,
+  });
+
+  if (personalRecords.length > 0) {
+    return false;
+  }
+
+  // Check Corporations table - check both formula result and override field
+  const corporateRecords = await fetchAllRecords(baseId, "Corporations", {
+    filterByFormula: `OR({Client Code} = '${code}', {Client Code Override} = '${code}')`,
+    maxRecords: 1,
+  });
+
+  return corporateRecords.length === 0;
+}
+
+/**
+ * Generate a unique client code that doesn't exist in Airtable
+ * Retries up to 10 times to find a unique code
+ */
+export async function generateUniqueClientCode(): Promise<string> {
+  const maxAttempts = 10;
+
+  for (let i = 0; i < maxAttempts; i++) {
+    const code = generateClientCode();
+    const isUnique = await isClientCodeUnique(code);
+
+    if (isUnique) {
+      return code;
+    }
+  }
+
+  throw new Error("Failed to generate unique client code after multiple attempts");
 }
 
 /**
