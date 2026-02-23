@@ -481,6 +481,13 @@ export default function CorporateServicesPipeline() {
             <span className="text-xs whitespace-nowrap">On Hold</span>
           </div>
         );
+      case "Ready for Customer Review":
+        return (
+          <div className="flex items-center gap-2">
+            <span className="w-3 h-3 rounded-full bg-secondary"></span>
+            <span className="text-xs whitespace-nowrap">Ready for Review</span>
+          </div>
+        );
       case "Escalate to Manager":
         return (
           <div className="flex items-center gap-2">
@@ -831,6 +838,7 @@ export default function CorporateServicesPipeline() {
                   <option value="">All Statuses</option>
                   <option value="Active">Active</option>
                   <option value="Hold for Customer">Hold for Customer</option>
+                  <option value="Ready for Customer Review">Ready for Customer Review</option>
                   <option value="Escalate to Manager">Escalate to Manager</option>
                   <option value="Complete Service">Complete Service</option>
                 </select>
@@ -1153,6 +1161,16 @@ export default function CorporateServicesPipeline() {
                 }}
               >
                 ⏸️ Hold for Customer
+              </button>
+              <button
+                className="btn btn-outline btn-block justify-start"
+                onClick={() => {
+                  handleStatusChange(selectedCompanyForStatus, "Ready for Customer Review");
+                  setShowStatusModal(false);
+                  setSelectedCompanyForStatus(null);
+                }}
+              >
+                👀 Ready for Customer Review
               </button>
               <button
                 className="btn btn-outline btn-block justify-start"

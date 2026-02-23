@@ -428,6 +428,13 @@ export default function PersonalServicesPipeline() {
             <span className="text-xs whitespace-nowrap">On Hold</span>
           </div>
         );
+      case "Ready for Customer Review":
+        return (
+          <div className="flex items-center gap-2">
+            <span className="w-3 h-3 rounded-full bg-secondary"></span>
+            <span className="text-xs whitespace-nowrap">Ready for Review</span>
+          </div>
+        );
       case "Escalate to Manager":
         return (
           <div className="flex items-center gap-2">
@@ -665,6 +672,7 @@ export default function PersonalServicesPipeline() {
                   <option value="">All Statuses</option>
                   <option value="Active">Active</option>
                   <option value="Hold for Customer">Hold for Customer</option>
+                  <option value="Ready for Customer Review">Ready for Customer Review</option>
                   <option value="Escalate to Manager">Escalate to Manager</option>
                   <option value="File Return">File Return</option>
                 </select>
@@ -981,7 +989,7 @@ export default function PersonalServicesPipeline() {
                   setSelectedClientForStatus(null);
                 }}
               >
-                Set Active
+                ▶️ Set Active
               </button>
               <button
                 className="btn btn-outline btn-block justify-start"
@@ -991,7 +999,17 @@ export default function PersonalServicesPipeline() {
                   setSelectedClientForStatus(null);
                 }}
               >
-                Hold for Customer
+                ⏸️ Hold for Customer
+              </button>
+              <button
+                className="btn btn-outline btn-block justify-start"
+                onClick={() => {
+                  handleStatusChange(selectedClientForStatus, "Ready for Customer Review");
+                  setShowStatusModal(false);
+                  setSelectedClientForStatus(null);
+                }}
+              >
+                👀 Ready for Customer Review
               </button>
               <button
                 className="btn btn-outline btn-block justify-start"
@@ -1001,7 +1019,7 @@ export default function PersonalServicesPipeline() {
                   setSelectedClientForStatus(null);
                 }}
               >
-                Escalate to Manager
+                ⬆️ Escalate to Manager
               </button>
               <button
                 className="btn btn-success btn-block justify-start font-semibold"
@@ -1011,7 +1029,7 @@ export default function PersonalServicesPipeline() {
                   setSelectedClientForStatus(null);
                 }}
               >
-                Complete Service
+                ✅ Complete Service
               </button>
             </div>
             <div className="modal-action">
