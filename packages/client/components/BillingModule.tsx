@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import BillingStatusBadge from './BillingStatusBadge';
+import BillingNotes from './BillingNotes';
 
 interface ServiceRendered {
   id: string;
@@ -14,30 +16,21 @@ interface ServiceRendered {
   paymentMethod?: string;
   receiptDate?: string;
   notes?: string;
-}
-
-interface GroupedServices {
-  clientName: string;
-  services: ServiceRendered[];
-  totalAmount: number;
+  clientType?: string;
 }
 
 export default function BillingModule() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [services, setServices] = useState<ServiceRendered[]>([]);
-  const [groupedServices, setGroupedServices] = useState<GroupedServices[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedServices, setSelectedServices] = useState<Set<string>>(new Set());
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
   // Filters
-  const [statusFilter, setStatusFilter] = useState('Unbilled');
+  const [statusFilter, setStatusFilter] = useState('All');
   const [clientSearch, setClientSearch] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [processorFilter, setProcessorFilter] = useState('');
-  const [groupBy, setGroupBy] = useState<'client' | 'processor' | 'date'>('client');
   const [clientType, setClientType] = useState<'all' | 'personal' | 'corporate'>('all');
 
   // URL-based client filter
@@ -48,6 +41,7 @@ export default function BillingModule() {
   const [showBatchModal, setShowBatchModal] = useState(false);
   const [showIndividualModal, setShowIndividualModal] = useState(false);
   const [showMarkPaidModal, setShowMarkPaidModal] = useState(false);
+  const [showNotesModal, setShowNotesModal] = useState(false);
   const [selectedService, setSelectedService] = useState<ServiceRendered | null>(null);
 
   // Batch billing form
@@ -77,14 +71,12 @@ export default function BillingModule() {
       setClientType(type);
     }
 
-    // Read clientName from URL parameter for filtering
     const clientNameFromUrl = searchParams.get('clientName');
     if (clientNameFromUrl) {
       setFilteredByClient(true);
       setFilteredClientName(clientNameFromUrl);
       setClientSearch(clientNameFromUrl);
     } else {
-      // Clear filter state if no clientName in URL
       setFilteredByClient(false);
       setFilteredClientName('');
     }
@@ -92,11 +84,7 @@ export default function BillingModule() {
 
   useEffect(() => {
     fetchServices();
-  }, [statusFilter, startDate, endDate, processorFilter, clientType]);
-
-  useEffect(() => {
-    groupServices();
-  }, [services, groupBy, clientSearch]);
+  }, [statusFilter, startDate, endDate, clientType]);
 
   const fetchServices = async () => {
     setLoading(true);
@@ -105,7 +93,6 @@ export default function BillingModule() {
       if (statusFilter && statusFilter !== 'All') params.append('status', statusFilter);
       if (startDate) params.append('startDate', startDate);
       if (endDate) params.append('endDate', endDate);
-      if (processorFilter) params.append('processor', processorFilter);
       if (clientType !== 'all') params.append('clientType', clientType);
 
       const response = await fetch(`/api/services-rendered?${params.toString()}`);
@@ -125,178 +112,38 @@ export default function BillingModule() {
     }
   };
 
-  const groupServices = () => {
-    let filtered = services;
-
-    // Apply client search filter
-    if (clientSearch) {
-      filtered = filtered.filter((s) =>
-        s.clientName.toLowerCase().includes(clientSearch.toLowerCase())
-      );
+  // Filter services by client search and status
+  // "Need Review" (default) shows only actionable items: Unbilled and Billed - Unpaid
+  const filteredServices = services.filter((s) => {
+    // Client search filter
+    if (clientSearch && !s.clientName.toLowerCase().includes(clientSearch.toLowerCase())) {
+      return false;
     }
-
-    // Group services
-    const grouped: { [key: string]: ServiceRendered[] } = {};
-
-    filtered.forEach((service) => {
-      let key = '';
-
-      if (groupBy === 'client') {
-        key = service.clientName || 'Unknown Client';
-      } else if (groupBy === 'processor') {
-        key = service.processor || 'Unknown Processor';
-      } else {
-        key = service.serviceDate || 'Unknown Date';
+    // "Need Review" mode - only show actionable items
+    if (statusFilter === 'All') {
+      const actionableStatuses = ['Unbilled', 'Billed - Unpaid'];
+      if (!actionableStatuses.includes(s.billingStatus)) {
+        return false;
       }
-
-      if (!grouped[key]) {
-        grouped[key] = [];
-      }
-      grouped[key].push(service);
-    });
-
-    // Convert to array and calculate totals
-    const groupedArray: GroupedServices[] = Object.entries(grouped).map(([name, svcs]) => ({
-      clientName: name,
-      services: svcs,
-      totalAmount: svcs.reduce((sum, s) => sum + (s.amount || 0), 0),
-    }));
-
-    // Sort groups
-    if (groupBy === 'date') {
-      // Sort dates from newest to oldest
-      groupedArray.sort((a, b) => b.clientName.localeCompare(a.clientName));
-    } else {
-      // Sort alphabetically for client and processor
-      groupedArray.sort((a, b) => a.clientName.localeCompare(b.clientName));
     }
+    return true;
+  });
 
-    setGroupedServices(groupedArray);
-  };
-
-  const toggleSelection = (serviceId: string) => {
+  const toggleSelection = (id: string) => {
     const newSelected = new Set(selectedServices);
-    if (newSelected.has(serviceId)) {
-      newSelected.delete(serviceId);
+    if (newSelected.has(id)) {
+      newSelected.delete(id);
     } else {
-      newSelected.add(serviceId);
+      newSelected.add(id);
     }
     setSelectedServices(newSelected);
   };
 
-  const toggleGroupSelection = (group: GroupedServices) => {
-    const newSelected = new Set(selectedServices);
-    const allSelected = group.services.every((s) => newSelected.has(s.id));
-
-    if (allSelected) {
-      // Deselect all
-      group.services.forEach((s) => newSelected.delete(s.id));
+  const toggleSelectAll = () => {
+    if (selectedServices.size === filteredServices.length) {
+      setSelectedServices(new Set());
     } else {
-      // Select all
-      group.services.forEach((s) => newSelected.add(s.id));
-    }
-
-    setSelectedServices(newSelected);
-  };
-
-  const toggleGroupExpanded = (groupName: string) => {
-    const newExpanded = new Set(expandedGroups);
-    if (newExpanded.has(groupName)) {
-      newExpanded.delete(groupName);
-    } else {
-      newExpanded.add(groupName);
-    }
-    setExpandedGroups(newExpanded);
-  };
-
-  const handleBatchBill = async () => {
-    if (selectedServices.size === 0) {
-      alert('Please select at least one service to bill');
-      return;
-    }
-
-    try {
-      const selectedList = Array.from(selectedServices);
-      const totalAmount = services
-        .filter((s) => selectedList.includes(s.id))
-        .reduce((sum, s) => sum + (s.amount || 0), 0);
-
-      const response = await fetch('/api/services-rendered/batch-bill', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          serviceIds: selectedList,
-          paymentMethod: batchPaymentMethod,
-          receiptDate: batchReceiptDate,
-          totalAmount,
-          createLedger: batchCreateLedger,
-          billingStatus: batchPaymentMethod === 'Not Paid Yet' ? 'Billed - Unpaid' : 'Billed - Paid',
-          notes: batchNotes,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        alert(`Successfully billed ${selectedList.length} services!`);
-        setShowBatchModal(false);
-        setSelectedServices(new Set());
-        setBatchNotes('');
-        fetchServices();
-      } else {
-        alert(`Failed to bill services: ${data.error}`);
-      }
-    } catch (error) {
-      console.error('Error batch billing:', error);
-      alert('Failed to bill services');
-    }
-  };
-
-  const handleIndividualBill = async () => {
-    if (!selectedService) return;
-
-    const amount = individualAmount || selectedService.amount || 0;
-
-    if (amount <= 0) {
-      alert('Please enter a valid amount');
-      return;
-    }
-
-    try {
-      console.log('[BillingModule] Billing service:', selectedService.id);
-      console.log('[BillingModule] Amount:', amount);
-      console.log('[BillingModule] Payment method:', individualPaymentMethod);
-      console.log('[BillingModule] Receipt date:', individualReceiptDate);
-
-      const response = await fetch(`/api/services-rendered/${selectedService.id}/bill`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          amountCharged: amount,
-          paymentMethod: individualPaymentMethod,
-          receiptDate: individualReceiptDate,
-          createLedger: individualCreateLedger,
-          billingStatus: individualPaymentMethod === 'Not Paid Yet' ? 'Billed - Unpaid' : 'Billed - Paid',
-        }),
-      });
-
-      console.log('[BillingModule] Response status:', response.status);
-      const data = await response.json();
-      console.log('[BillingModule] Response data:', data);
-
-      if (data.success) {
-        alert('Service billed successfully!');
-        setShowIndividualModal(false);
-        setSelectedService(null);
-        setIndividualAmount(null);
-        fetchServices();
-      } else {
-        console.error('[BillingModule] Billing failed:', data.error);
-        alert(`Failed to bill service: ${data.error || 'Unknown error'}`);
-      }
-    } catch (error) {
-      console.error('[BillingModule] Error billing service:', error);
-      alert(`Failed to bill service: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setSelectedServices(new Set(filteredServices.map((s) => s.id)));
     }
   };
 
@@ -323,6 +170,47 @@ export default function BillingModule() {
     setMarkPaidReceiptDate(new Date().toISOString().split('T')[0]);
     setMarkPaidCreateLedger(true);
     setShowMarkPaidModal(true);
+  };
+
+  const openNotesModal = (service: ServiceRendered) => {
+    setSelectedService(service);
+    setShowNotesModal(true);
+  };
+
+  const handleIndividualBill = async () => {
+    if (!selectedService || !individualAmount) {
+      alert('Please enter an amount');
+      return;
+    }
+
+    try {
+      const billingStatus = individualPaymentMethod === 'Not Paid Yet' ? 'Billed - Unpaid' : 'Billed - Paid';
+      const response = await fetch(`/api/services-rendered/${selectedService.id}/bill`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amountCharged: individualAmount,
+          paymentMethod: individualPaymentMethod,
+          receiptDate: individualReceiptDate,
+          createLedger: individualCreateLedger,
+          billingStatus,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        alert('Service billed successfully!');
+        setShowIndividualModal(false);
+        setSelectedService(null);
+        fetchServices();
+      } else {
+        alert(`Failed to bill service: ${data.error || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Error billing service:', error);
+      alert(`Failed to bill service: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   };
 
   const handleMarkAsPaid = async () => {
@@ -357,10 +245,94 @@ export default function BillingModule() {
     }
   };
 
-  // Calculate statistics
-  const totalUnbilled = services.filter((s) => s.billingStatus === 'Unbilled').length;
-  const totalAmount = services.reduce((sum, s) => sum + (s.amount || 0), 0);
-  const uniqueClients = new Set(services.map((s) => s.clientName || 'Unknown')).size;
+  const handleWaive = async (service: ServiceRendered) => {
+    if (!confirm('Are you sure you want to waive this service?')) return;
+
+    try {
+      const response = await fetch(`/api/services-rendered/${service.id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ billingStatus: 'Waived' }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        fetchServices();
+      } else {
+        alert(`Failed to waive service: ${data.error || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Error waiving service:', error);
+      alert('Failed to waive service');
+    }
+  };
+
+  const handleBatchBill = async () => {
+    if (selectedServices.size === 0) {
+      alert('No services selected');
+      return;
+    }
+
+    try {
+      const billingStatus = batchPaymentMethod === 'Not Paid Yet' ? 'Billed - Unpaid' : 'Billed - Paid';
+      const response = await fetch('/api/services-rendered/batch-bill', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          serviceIds: Array.from(selectedServices),
+          paymentMethod: batchPaymentMethod,
+          receiptDate: batchReceiptDate,
+          createLedger: batchCreateLedger,
+          billingStatus,
+          notes: batchNotes || undefined,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        alert(`Successfully billed ${selectedServices.size} service(s)!`);
+        setShowBatchModal(false);
+        setSelectedServices(new Set());
+        setBatchNotes('');
+        fetchServices();
+      } else {
+        alert(`Failed to batch bill: ${data.error || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Error batch billing:', error);
+      alert(`Failed to batch bill: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
+  const clearFilters = () => {
+    setStatusFilter('All');
+    setClientType('all');
+    setClientSearch('');
+    setStartDate('');
+    setEndDate('');
+    setFilteredByClient(false);
+    setFilteredClientName('');
+    router.push('/billing');
+  };
+
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return '-';
+    return new Date(dateString).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  };
+
+  // Calculate statistics for displayed services
+  const totalServices = filteredServices.length;
+  const unbilledCount = filteredServices.filter((s) => s.billingStatus === 'Unbilled').length;
+  const unpaidCount = filteredServices.filter((s) => s.billingStatus === 'Billed - Unpaid').length;
+  const totalAmount = filteredServices.reduce((sum, s) => sum + (s.amount || 0), 0);
+
+  const hasActiveFilters = statusFilter !== 'All' || clientType !== 'all' || clientSearch || startDate || endDate;
 
   return (
     <div className="min-h-screen bg-base-200 p-6">
@@ -371,7 +343,23 @@ export default function BillingModule() {
             <button onClick={() => router.push('/dashboard')} className="btn btn-ghost btn-sm mb-4">
               ← Back to Dashboard
             </button>
-            <h1 className="text-3xl font-bold">Billing Module</h1>
+            <div className="flex items-center gap-3">
+              <h1 className="text-3xl font-bold">Billing Module</h1>
+              <button
+                className="btn btn-ghost btn-sm btn-circle"
+                onClick={() => fetchServices()}
+                disabled={loading}
+                title="Refresh"
+              >
+                {loading ? (
+                  <span className="loading loading-spinner loading-xs"></span>
+                ) : (
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                )}
+              </button>
+            </div>
           </div>
           <button
             onClick={() => router.push('/ledger')}
@@ -382,81 +370,74 @@ export default function BillingModule() {
         </div>
 
         {/* Statistics */}
-        <div className="stats shadow">
+        <div className="stats shadow w-full">
           <div className="stat">
-            <div className="stat-title">Total Unbilled Services</div>
-            <div className="stat-value text-primary">{totalUnbilled}</div>
+            <div className="stat-title">Total</div>
+            <div className="stat-value text-2xl">{totalServices}</div>
+          </div>
+          <div className="stat">
+            <div className="stat-title">Unbilled</div>
+            <div className="stat-value text-2xl text-warning">{unbilledCount}</div>
+          </div>
+          <div className="stat">
+            <div className="stat-title">Unpaid</div>
+            <div className="stat-value text-2xl text-error">{unpaidCount}</div>
           </div>
           <div className="stat">
             <div className="stat-title">Total Amount</div>
-            <div className="stat-value text-secondary">${totalAmount.toLocaleString()}</div>
-          </div>
-          <div className="stat">
-            <div className="stat-title">Unique Clients</div>
-            <div className="stat-value">{uniqueClients}</div>
+            <div className="stat-value text-2xl">${totalAmount.toLocaleString()}</div>
           </div>
         </div>
       </div>
 
-      {/* Filter Bar */}
-      <div className="card bg-base-100 shadow-xl mb-6">
-        <div className="card-body">
-          <h2 className="card-title mb-4">Filters</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      {/* Filters */}
+      <div className="card bg-base-100 shadow mb-6">
+        <div className="card-body py-4">
+          <div className="flex flex-wrap gap-4 items-end">
             {/* Status Filter */}
             <div className="form-control">
-              <label className="label">
-                <span className="label-text">Status</span>
+              <label className="label py-1">
+                <span className="label-text text-xs">Status</span>
               </label>
               <select
-                className="select select-bordered"
+                className="select select-bordered select-sm"
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
               >
+                <option value="All">Need Review</option>
                 <option value="Unbilled">Unbilled</option>
-                <option value="Billed - Paid">Billed - Paid</option>
                 <option value="Billed - Unpaid">Billed - Unpaid</option>
+                <option value="Billed - Paid">Billed - Paid</option>
                 <option value="Waived">Waived</option>
-                <option value="All">All</option>
+                <option value="Part of Subscription">Part of Subscription</option>
               </select>
             </div>
 
             {/* Client Type Filter */}
             <div className="form-control">
-              <label className="label">
-                <span className="label-text">Client Type</span>
+              <label className="label py-1">
+                <span className="label-text text-xs">Client Type</span>
               </label>
-              <div className="btn-group w-full">
-                <button
-                  className={`btn btn-sm flex-1 ${clientType === 'all' ? 'btn-active' : ''}`}
-                  onClick={() => setClientType('all')}
-                >
-                  All
-                </button>
-                <button
-                  className={`btn btn-sm flex-1 ${clientType === 'personal' ? 'btn-active' : ''}`}
-                  onClick={() => setClientType('personal')}
-                >
-                  Personal
-                </button>
-                <button
-                  className={`btn btn-sm flex-1 ${clientType === 'corporate' ? 'btn-active' : ''}`}
-                  onClick={() => setClientType('corporate')}
-                >
-                  Corporate
-                </button>
-              </div>
+              <select
+                className="select select-bordered select-sm"
+                value={clientType}
+                onChange={(e) => setClientType(e.target.value as 'all' | 'personal' | 'corporate')}
+              >
+                <option value="all">All Types</option>
+                <option value="personal">Personal</option>
+                <option value="corporate">Corporate</option>
+              </select>
             </div>
 
             {/* Client Search */}
             <div className="form-control">
-              <label className="label">
-                <span className="label-text">Client Search</span>
+              <label className="label py-1">
+                <span className="label-text text-xs">Client Search</span>
               </label>
               <input
                 type="text"
-                placeholder="Search client name..."
-                className="input input-bordered"
+                placeholder="Search..."
+                className="input input-bordered input-sm w-40"
                 value={clientSearch}
                 onChange={(e) => setClientSearch(e.target.value)}
               />
@@ -464,12 +445,12 @@ export default function BillingModule() {
 
             {/* Start Date */}
             <div className="form-control">
-              <label className="label">
-                <span className="label-text">Start Date</span>
+              <label className="label py-1">
+                <span className="label-text text-xs">Start Date</span>
               </label>
               <input
                 type="date"
-                className="input input-bordered"
+                className="input input-bordered input-sm"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
               />
@@ -477,45 +458,34 @@ export default function BillingModule() {
 
             {/* End Date */}
             <div className="form-control">
-              <label className="label">
-                <span className="label-text">End Date</span>
+              <label className="label py-1">
+                <span className="label-text text-xs">End Date</span>
               </label>
               <input
                 type="date"
-                className="input input-bordered"
+                className="input input-bordered input-sm"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
               />
             </div>
 
-            {/* Group By */}
-            <div className="form-control">
-              <label className="label">
-                <span className="label-text">Group By</span>
-              </label>
-              <select
-                className="select select-bordered"
-                value={groupBy}
-                onChange={(e) => setGroupBy(e.target.value as 'client' | 'processor' | 'date')}
-              >
-                <option value="client">Client/Company</option>
-                <option value="processor">Processor</option>
-                <option value="date">Date</option>
-              </select>
-            </div>
-          </div>
+            {/* Clear Filters */}
+            {hasActiveFilters && (
+              <button className="btn btn-ghost btn-sm" onClick={clearFilters}>
+                Clear Filters
+              </button>
+            )}
 
-          {/* Batch Bill Button */}
-          {selectedServices.size > 0 && (
-            <div className="mt-4">
+            {/* Batch Bill Button */}
+            {selectedServices.size > 0 && (
               <button
-                className="btn btn-primary"
+                className="btn btn-primary btn-sm ml-auto"
                 onClick={() => setShowBatchModal(true)}
               >
-                Batch Bill Selected ({selectedServices.size})
+                Batch Bill ({selectedServices.size})
               </button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
 
@@ -527,172 +497,166 @@ export default function BillingModule() {
           </svg>
           <div className="flex-1">
             <div className="font-bold">Filtered by Client</div>
-            <div className="text-sm">
-              Showing services for: {filteredClientName}
-            </div>
+            <div className="text-sm">Showing services for: {filteredClientName}</div>
           </div>
-          <button
-            className="btn btn-sm btn-ghost"
-            onClick={() => {
-              setFilteredByClient(false);
-              setFilteredClientName('');
-              setClientSearch('');
-              router.push('/billing');
-            }}
-          >
+          <button className="btn btn-sm btn-ghost" onClick={clearFilters}>
             Clear Filter
           </button>
         </div>
       )}
 
       {/* Services Table */}
-      {loading ? (
-        <div className="flex justify-center items-center h-64">
-          <span className="loading loading-spinner loading-lg"></span>
-        </div>
-      ) : groupedServices.length === 0 ? (
-        <div className="card bg-base-100 shadow-xl">
-          <div className="card-body">
-            <p className="text-center text-gray-500">No services found with the selected filters.</p>
-          </div>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {groupedServices.map((group) => {
-            const isExpanded = expandedGroups.has(group.clientName);
-            const allSelected = group.services.every((s) => selectedServices.has(s.id));
-            const someSelected = group.services.some((s) => selectedServices.has(s.id));
-
-            return (
-              <div key={group.clientName} className="card bg-base-100 shadow-xl">
-                <div className="card-body">
-                  {/* Group Header */}
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
+      <div className="card bg-base-100 shadow">
+        <div className="card-body p-0">
+          {loading ? (
+            <div className="flex justify-center items-center py-12">
+              <span className="loading loading-spinner loading-lg text-primary"></span>
+            </div>
+          ) : filteredServices.length === 0 ? (
+            <div className="text-center py-12 text-base-content/60">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto mb-2 opacity-40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <p>No services found with the selected filters.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="table table-zebra">
+                <thead>
+                  <tr>
+                    <th>
                       <input
                         type="checkbox"
-                        className="checkbox checkbox-primary"
-                        checked={allSelected}
-                        ref={(el) => {
-                          if (el) el.indeterminate = someSelected && !allSelected;
-                        }}
-                        onChange={() => toggleGroupSelection(group)}
+                        className="checkbox checkbox-sm"
+                        checked={selectedServices.size === filteredServices.length && filteredServices.length > 0}
+                        onChange={toggleSelectAll}
                       />
-                      <button
-                        className="btn btn-ghost btn-sm"
-                        onClick={() => toggleGroupExpanded(group.clientName)}
-                      >
-                        {isExpanded ? '▼' : '▶'}
-                      </button>
-                      <div>
-                        <h3 className="text-xl font-bold">{group.clientName}</h3>
-                        <p className="text-sm text-gray-500">
-                          {group.services.length} service{group.services.length !== 1 ? 's' : ''} •
-                          Total: ${group.totalAmount.toLocaleString()}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
+                    </th>
+                    <th>Status</th>
+                    <th>Client</th>
+                    <th>Service Rendered</th>
+                    <th>Processor</th>
+                    <th>Date</th>
+                    <th>Amount</th>
+                    <th>Notes</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredServices.map((service) => (
+                    <tr key={service.id}>
+                      <td>
+                        <input
+                          type="checkbox"
+                          className="checkbox checkbox-sm"
+                          checked={selectedServices.has(service.id)}
+                          onChange={() => toggleSelection(service.id)}
+                        />
+                      </td>
+                      <td>
+                        <BillingStatusBadge status={service.billingStatus} size="sm" />
+                      </td>
+                      <td>
+                        <div className="font-medium">{service.clientName}</div>
+                        {service.clientType && (
+                          <div className="text-xs opacity-60 capitalize">{service.clientType}</div>
+                        )}
+                      </td>
+                      <td>{service.serviceType || 'N/A'}</td>
+                      <td>{service.processor || 'N/A'}</td>
+                      <td className="text-sm">{formatDate(service.serviceDate)}</td>
+                      <td>
+                        {service.billingStatus === 'Unbilled' ? (
+                          <div className="flex items-center gap-1">
+                            <span>$</span>
+                            <input
+                              type="number"
+                              className="input input-bordered input-sm w-20"
+                              value={service.amount || ''}
+                              onChange={(e) => handleAmountChange(service.id, parseFloat(e.target.value) || 0)}
+                              placeholder="0.00"
+                              step="0.01"
+                              min="0"
+                            />
+                          </div>
+                        ) : (
+                          `$${service.amount?.toLocaleString() || '0'}`
+                        )}
+                      </td>
+                      <td>
+                        <button
+                          className="btn btn-ghost btn-xs"
+                          onClick={() => openNotesModal(service)}
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                          </svg>
+                          Notes
+                        </button>
+                      </td>
+                      <td>
+                        <div className="flex gap-1">
+                          {service.billingStatus === 'Unbilled' && (
+                            <>
+                              <button
+                                className="btn btn-primary btn-xs"
+                                onClick={() => openIndividualBillingModal(service)}
+                              >
+                                Bill
+                              </button>
+                              <button
+                                className="btn btn-ghost btn-xs"
+                                onClick={() => handleWaive(service)}
+                              >
+                                Waive
+                              </button>
+                            </>
+                          )}
+                          {service.billingStatus === 'Billed - Unpaid' && (
+                            <button
+                              className="btn btn-success btn-xs"
+                              onClick={() => openMarkPaidModal(service)}
+                            >
+                              Mark Paid
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
 
-                  {/* Group Services */}
-                  {isExpanded && (
-                    <div className="mt-4 overflow-x-auto">
-                      <table className="table table-zebra">
-                        <thead>
-                          <tr>
-                            <th></th>
-                            <th>Service Type</th>
-                            <th>Processor</th>
-                            <th>Service Date</th>
-                            <th>Amount</th>
-                            <th>Notes</th>
-                            <th>Status</th>
-                            <th>Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {group.services.map((service) => (
-                            <tr key={service.id}>
-                              <td>
-                                <input
-                                  type="checkbox"
-                                  className="checkbox checkbox-sm"
-                                  checked={selectedServices.has(service.id)}
-                                  onChange={() => toggleSelection(service.id)}
-                                />
-                              </td>
-                              <td>{service.serviceType || 'N/A'}</td>
-                              <td>{service.processor || 'N/A'}</td>
-                              <td>{service.serviceDate}</td>
-                              <td>
-                                {service.billingStatus === 'Unbilled' ? (
-                                  <div className="flex items-center gap-1">
-                                    <span>$</span>
-                                    <input
-                                      type="number"
-                                      className="input input-bordered input-sm w-24"
-                                      value={service.amount || ''}
-                                      onChange={(e) =>
-                                        handleAmountChange(service.id, parseFloat(e.target.value) || 0)
-                                      }
-                                      placeholder="0.00"
-                                      step="0.01"
-                                      min="0"
-                                    />
-                                  </div>
-                                ) : (
-                                  `$${service.amount?.toLocaleString() || '0'}`
-                                )}
-                              </td>
-                              <td>
-                                {service.notes ? (
-                                  <div className="tooltip tooltip-left" data-tip={service.notes}>
-                                    <span className="text-sm text-base-content/70 line-clamp-2 max-w-xs cursor-help">
-                                      {service.notes}
-                                    </span>
-                                  </div>
-                                ) : (
-                                  <span className="text-sm text-base-content/40 italic">No notes</span>
-                                )}
-                              </td>
-                              <td>
-                                <span className={`badge ${
-                                  service.billingStatus === 'Unbilled' ? 'badge-warning' :
-                                  service.billingStatus === 'Billed - Paid' ? 'badge-success' :
-                                  service.billingStatus === 'Billed - Unpaid' ? 'badge-error' :
-                                  'badge-ghost'
-                                }`}>
-                                  {service.billingStatus}
-                                </span>
-                              </td>
-                              <td>
-                                {service.billingStatus === 'Unbilled' && (
-                                  <button
-                                    className="btn btn-sm btn-primary"
-                                    onClick={() => openIndividualBillingModal(service)}
-                                  >
-                                    Bill This
-                                  </button>
-                                )}
-                                {service.billingStatus === 'Billed - Unpaid' && (
-                                  <button
-                                    className="btn btn-sm btn-success"
-                                    onClick={() => openMarkPaidModal(service)}
-                                  >
-                                    Mark as Paid
-                                  </button>
-                                )}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+      {/* Notes Modal */}
+      {showNotesModal && selectedService && (
+        <div className="modal modal-open">
+          <div className="modal-box max-w-2xl">
+            <button
+              className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2"
+              onClick={() => {
+                setShowNotesModal(false);
+                setSelectedService(null);
+              }}
+            >
+              ✕
+            </button>
+            <BillingNotes
+              serviceRenderedId={selectedService.id}
+              clientName={selectedService.clientName}
+              serviceName={selectedService.serviceType}
+            />
+          </div>
+          <div
+            className="modal-backdrop"
+            onClick={() => {
+              setShowNotesModal(false);
+              setSelectedService(null);
+            }}
+          />
         </div>
       )}
 
@@ -702,7 +666,7 @@ export default function BillingModule() {
           <div className="modal-box">
             <h3 className="font-bold text-lg mb-4">Batch Bill Selected Services</h3>
             <p className="mb-4">
-              Billing {selectedServices.size} service{selectedServices.size !== 1 ? 's' : ''} •
+              Billing {selectedServices.size} service{selectedServices.size !== 1 ? 's' : ''} -
               Total: ${services.filter((s) => selectedServices.has(s.id)).reduce((sum, s) => sum + (s.amount || 0), 0).toLocaleString()}
             </p>
 

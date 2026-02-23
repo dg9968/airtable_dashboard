@@ -52,6 +52,7 @@ export default function PersonalServicesPipeline() {
   const [filteredClientName, setFilteredClientName] = useState<string>("");
   const [showNotesModal, setShowNotesModal] = useState(false);
   const [selectedClientForNotes, setSelectedClientForNotes] = useState<PipelineClient | null>(null);
+  const [billingType, setBillingType] = useState<'standard' | 'subscription' | 'waived'>('standard');
 
   // Available services - these match the view names in Airtable
   const services = [
@@ -451,7 +452,7 @@ export default function PersonalServicesPipeline() {
     }
   };
 
-  const handleFileReturn = async (clientId: string, amount?: number, note?: string) => {
+  const handleFileReturn = async (clientId: string, amount?: number, note?: string, billingStatus?: string) => {
     try {
       setUpdating(clientId);
 
@@ -460,19 +461,33 @@ export default function PersonalServicesPipeline() {
         throw new Error("Client not found");
       }
 
-      // Create Services Rendered entry (unbilled)
+      const requestBody: {
+        subscriptionId: string;
+        subscriptionType: string;
+        serviceDate: string;
+        amountCharged?: number;
+        notes?: string;
+        billingStatus?: string;
+      } = {
+        subscriptionId: clientId,
+        subscriptionType: "personal",
+        serviceDate: new Date().toISOString(),
+        amountCharged: amount,
+        notes: note || undefined,
+      };
+
+      // Add billing status if provided (for Part of Subscription or Waived)
+      if (billingStatus) {
+        requestBody.billingStatus = billingStatus;
+      }
+
+      // Create Services Rendered entry
       const servicesRenderedResponse = await fetch(`/api/services-rendered`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          subscriptionId: clientId,
-          subscriptionType: "personal",
-          serviceDate: new Date().toISOString(),
-          amountCharged: amount,
-          notes: note || undefined,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       const servicesRenderedData = await servicesRenderedResponse.json();
@@ -512,6 +527,7 @@ export default function PersonalServicesPipeline() {
       setSelectedClientForFiling(clientId);
       setQuotedAmount("");
       setBillingNote("");
+      setBillingType('standard');
       setShowAmountModal(true);
     } else {
       updateStatus(clientId, newStatus);
@@ -520,13 +536,28 @@ export default function PersonalServicesPipeline() {
 
   const handleAmountModalSubmit = () => {
     if (selectedClientForFiling) {
-      const amount = quotedAmount ? parseFloat(quotedAmount) : undefined;
+      // Determine amount and billing status based on billing type
+      let amount: number | undefined;
+      let billingStatusValue: string | undefined;
+
+      if (billingType === 'standard') {
+        amount = quotedAmount ? parseFloat(quotedAmount) : undefined;
+        billingStatusValue = undefined; // Will default to 'Unbilled' on server
+      } else if (billingType === 'subscription') {
+        amount = 0;
+        billingStatusValue = 'Part of Subscription';
+      } else if (billingType === 'waived') {
+        amount = 0;
+        billingStatusValue = 'Waived';
+      }
+
       const note = billingNote.trim() || undefined;
-      handleFileReturn(selectedClientForFiling, amount, note);
+      handleFileReturn(selectedClientForFiling, amount, note, billingStatusValue);
       setShowAmountModal(false);
       setSelectedClientForFiling(null);
       setQuotedAmount("");
       setBillingNote("");
+      setBillingType('standard');
     }
   };
 
@@ -1004,31 +1035,74 @@ export default function PersonalServicesPipeline() {
           <div className="modal-box">
             <h3 className="font-bold text-lg mb-4">Complete Service Details</h3>
             <p className="text-sm opacity-70 mb-4">
-              How much was quoted to{" "}
+              Complete service for{" "}
               {(() => {
                 const client = pipelineClients.find((c) => c.id === selectedClientForFiling);
                 return client ? `${client.firstName} ${client.lastName}` : '';
-              })()}?
+              })()}
             </p>
+
+            {/* Billing Type Selection */}
             <div className="form-control mb-4">
               <label className="label">
-                <span className="label-text">Quoted Amount ($)</span>
+                <span className="label-text font-medium">Billing Type</span>
               </label>
-              <input
-                type="number"
-                step="0.01"
-                className="input input-bordered"
-                placeholder="0.00"
-                value={quotedAmount}
-                onChange={(e) => setQuotedAmount(e.target.value)}
-                autoFocus
-              />
-              <label className="label">
-                <span className="label-text-alt opacity-60">
-                  Leave blank if no amount was quoted
-                </span>
-              </label>
+              <div className="flex flex-col gap-2">
+                <label className="label cursor-pointer justify-start gap-3 py-1">
+                  <input
+                    type="radio"
+                    name="billingType"
+                    className="radio radio-primary radio-sm"
+                    checked={billingType === 'standard'}
+                    onChange={() => setBillingType('standard')}
+                  />
+                  <span className="label-text">Standard Billing</span>
+                </label>
+                <label className="label cursor-pointer justify-start gap-3 py-1">
+                  <input
+                    type="radio"
+                    name="billingType"
+                    className="radio radio-info radio-sm"
+                    checked={billingType === 'subscription'}
+                    onChange={() => setBillingType('subscription')}
+                  />
+                  <span className="label-text">Part of Subscription</span>
+                </label>
+                <label className="label cursor-pointer justify-start gap-3 py-1">
+                  <input
+                    type="radio"
+                    name="billingType"
+                    className="radio radio-sm"
+                    checked={billingType === 'waived'}
+                    onChange={() => setBillingType('waived')}
+                  />
+                  <span className="label-text">Waive Fee</span>
+                </label>
+              </div>
             </div>
+
+            {/* Quoted Amount - Only show for standard billing */}
+            {billingType === 'standard' && (
+              <div className="form-control mb-4">
+                <label className="label">
+                  <span className="label-text">Quoted Amount ($)</span>
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  className="input input-bordered"
+                  placeholder="0.00"
+                  value={quotedAmount}
+                  onChange={(e) => setQuotedAmount(e.target.value)}
+                  autoFocus
+                />
+                <label className="label">
+                  <span className="label-text-alt opacity-60">
+                    Leave blank if no amount was quoted
+                  </span>
+                </label>
+              </div>
+            )}
             <div className="form-control">
               <label className="label">
                 <span className="label-text">Billing Note (Optional)</span>
@@ -1054,6 +1128,7 @@ export default function PersonalServicesPipeline() {
                   setSelectedClientForFiling(null);
                   setQuotedAmount("");
                   setBillingNote("");
+                  setBillingType('standard');
                 }}
               >
                 Cancel

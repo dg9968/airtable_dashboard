@@ -39,8 +39,8 @@ app.post('/', async (c) => {
       );
     }
 
-    const { subscriptionId, subscriptionType, serviceDate, amountCharged, notes } = await c.req.json();
-    console.log('[Services Rendered API] Request data:', { subscriptionId, subscriptionType, serviceDate, amountCharged, notes });
+    const { subscriptionId, subscriptionType, serviceDate, amountCharged, notes, billingStatus } = await c.req.json();
+    console.log('[Services Rendered API] Request data:', { subscriptionId, subscriptionType, serviceDate, amountCharged, notes, billingStatus });
 
     // Validate required fields
     if (!subscriptionId || !subscriptionType || !serviceDate) {
@@ -147,10 +147,14 @@ app.post('/', async (c) => {
 
     console.log('[Services Rendered API] Extracted values:', { clientName, serviceType, processor });
 
+    // Validate billing status if provided
+    const validStatuses = ['Unbilled', 'Billed - Paid', 'Billed - Unpaid', 'Waived', 'Part of Subscription'];
+    const finalBillingStatus = billingStatus && validStatuses.includes(billingStatus) ? billingStatus : 'Unbilled';
+
     // Create the Services Rendered record
     const recordData: any = {
       'Service Rendered Date': serviceDate.split('T')[0], // Extract date only
-      'Billing Status': 'Unbilled',
+      'Billing Status': finalBillingStatus,
       'Client Name': clientName,         // Store actual value, not lookup
       'Service Type': serviceType,       // Store actual value, not lookup
       'Processor': processor,            // Store actual value, not lookup
@@ -225,7 +229,7 @@ app.get('/', async (c) => {
     const baseId = process.env.AIRTABLE_BASE_ID || '';
 
     // Get query parameters
-    const status = c.req.query('status') || 'Unbilled';
+    const status = c.req.query('status'); // No default - undefined means "All"
     const clientName = c.req.query('clientName');
     const startDate = c.req.query('startDate');
     const endDate = c.req.query('endDate');
@@ -253,7 +257,7 @@ app.get('/', async (c) => {
     // Fetch all records
     const records = await fetchAllRecords(baseId, 'Services Rendered', {
       filterByFormula,
-      sort: [{ field: 'Service Rendered Date', direction: 'asc' }]
+      sort: [{ field: 'Service Rendered Date', direction: 'desc' }]
     });
 
     console.log(`Fetched ${records.length} Services Rendered records`);
@@ -420,6 +424,66 @@ app.get('/:id', async (c) => {
       {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to fetch service record',
+      },
+      500
+    );
+  }
+});
+
+/**
+ * PATCH /api/services-rendered/:id/status
+ * Quick update of billing status only (for status change buttons)
+ * NOTE: This route MUST be defined before /:id to prevent the generic route from matching first
+ *
+ * Expected body:
+ * {
+ *   billingStatus: "Unbilled" | "Billed - Paid" | "Billed - Unpaid" | "Waived" | "Part of Subscription"
+ * }
+ */
+app.patch('/:id/status', async (c) => {
+  try {
+    const baseId = process.env.AIRTABLE_BASE_ID || '';
+    const recordId = c.req.param('id');
+    const { billingStatus } = await c.req.json();
+
+    if (!billingStatus) {
+      return c.json(
+        {
+          success: false,
+          error: 'Missing required field: billingStatus',
+        },
+        400
+      );
+    }
+
+    // Validate status
+    const validStatuses = ['Unbilled', 'Billed - Paid', 'Billed - Unpaid', 'Waived', 'Part of Subscription'];
+    if (!validStatuses.includes(billingStatus)) {
+      return c.json(
+        {
+          success: false,
+          error: `Invalid billing status. Must be one of: ${validStatuses.join(', ')}`,
+        },
+        400
+      );
+    }
+
+    console.log(`[Services Rendered API] Updating status for ${recordId} to ${billingStatus}`);
+
+    const updatedRecords = await updateRecords(baseId, 'Services Rendered', [
+      { id: recordId, fields: { 'Billing Status': billingStatus } },
+    ]);
+
+    return c.json({
+      success: true,
+      data: updatedRecords[0],
+    });
+  } catch (error) {
+    console.error('Error updating billing status:', error);
+    return c.json(
+      {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to update billing status',
       },
       500
     );

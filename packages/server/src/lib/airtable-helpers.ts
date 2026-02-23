@@ -28,6 +28,14 @@ export async function fetchAllRecords(
     const params = new URLSearchParams();
     if (options?.view) params.append('view', options.view);
     if (options?.filterByFormula) params.append('filterByFormula', options.filterByFormula);
+    if (options?.sort) {
+      options.sort.forEach((sortField, index) => {
+        params.append(`sort[${index}][field]`, sortField.field);
+        if (sortField.direction) {
+          params.append(`sort[${index}][direction]`, sortField.direction);
+        }
+      });
+    }
     if (offset) params.append('offset', offset);
 
     const url = `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(tableName)}?${params}`;

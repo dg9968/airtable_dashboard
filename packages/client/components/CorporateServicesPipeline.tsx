@@ -51,6 +51,7 @@ export default function CorporateServicesPipeline() {
   const [filteredCompanyName, setFilteredCompanyName] = useState<string>("");
   const [createFollowUp, setCreateFollowUp] = useState(false);
   const [servicesMap, setServicesMap] = useState<Record<string, string>>({});
+  const [billingType, setBillingType] = useState<'standard' | 'subscription' | 'waived'>('standard');
   const [showNotesModal, setShowNotesModal] = useState(false);
   const [selectedCompanyForNotes, setSelectedCompanyForNotes] = useState<PipelineCompany | null>(null);
 
@@ -556,7 +557,7 @@ export default function CorporateServicesPipeline() {
     console.log("[Follow-up] Created new subscription:", data.data?.id);
   };
 
-  const handleCompleteService = async (companyId: string, amount?: number, note?: string, shouldCreateFollowUp?: boolean) => {
+  const handleCompleteService = async (companyId: string, amount?: number, note?: string, shouldCreateFollowUp?: boolean, billingStatus?: string) => {
     try {
       setUpdating(companyId);
       console.log('[CorporateServicesPipeline] Starting handleCompleteService for:', companyId);
@@ -572,14 +573,27 @@ export default function CorporateServicesPipeline() {
       // Use provided amount, or fall back to billing amount from subscription
       const billingAmount = amount !== undefined ? amount : (company.billingAmount || null);
       console.log('[CorporateServicesPipeline] Billing amount:', billingAmount);
+      console.log('[CorporateServicesPipeline] Billing status:', billingStatus);
 
-      const requestBody = {
+      const requestBody: {
+        subscriptionId: string;
+        subscriptionType: string;
+        serviceDate: string;
+        amountCharged: number | null;
+        notes?: string;
+        billingStatus?: string;
+      } = {
         subscriptionId: companyId,
         subscriptionType: "corporate",
         serviceDate: new Date().toISOString(),
         amountCharged: billingAmount,
         notes: note || undefined,
       };
+
+      // Add billing status if provided (for Part of Subscription or Waived)
+      if (billingStatus) {
+        requestBody.billingStatus = billingStatus;
+      }
 
       console.log('[CorporateServicesPipeline] Sending POST request to /api/services-rendered');
       console.log('[CorporateServicesPipeline] Request body:', requestBody);
@@ -674,6 +688,7 @@ export default function CorporateServicesPipeline() {
       // Pre-fill with billing amount if available
       setQuotedAmount(company?.billingAmount?.toString() || "");
       setBillingNote("");
+      setBillingType('standard'); // Reset billing type
       // Default checkbox to checked if this service has a follow-up mapping
       const hasFollowUp = company?.serviceName && SERVICE_FOLLOW_UP_MAPPINGS[company.serviceName];
       setCreateFollowUp(!!hasFollowUp);
@@ -686,14 +701,29 @@ export default function CorporateServicesPipeline() {
 
   const handleAmountModalSubmit = () => {
     if (selectedCompanyForCompletion) {
-      const amount = quotedAmount ? parseFloat(quotedAmount) : undefined;
+      // Determine amount and billing status based on billing type
+      let amount: number | undefined;
+      let billingStatusValue: string | undefined;
+
+      if (billingType === 'standard') {
+        amount = quotedAmount ? parseFloat(quotedAmount) : undefined;
+        billingStatusValue = undefined; // Will default to 'Unbilled' on server
+      } else if (billingType === 'subscription') {
+        amount = 0;
+        billingStatusValue = 'Part of Subscription';
+      } else if (billingType === 'waived') {
+        amount = 0;
+        billingStatusValue = 'Waived';
+      }
+
       const note = billingNote.trim() || undefined;
-      handleCompleteService(selectedCompanyForCompletion, amount, note, createFollowUp);
+      handleCompleteService(selectedCompanyForCompletion, amount, note, createFollowUp, billingStatusValue);
       setShowAmountModal(false);
       setSelectedCompanyForCompletion(null);
       setQuotedAmount("");
       setBillingNote("");
       setCreateFollowUp(false);
+      setBillingType('standard');
     }
   };
 
@@ -1166,28 +1196,71 @@ export default function CorporateServicesPipeline() {
           <div className="modal-box">
             <h3 className="font-bold text-lg mb-4">Complete Service Details</h3>
             <p className="text-sm opacity-70 mb-4">
-              How much was quoted to{" "}
-              {pipelineCompanies.find((c) => c.id === selectedCompanyForCompletion)?.companyName}?
+              Complete service for{" "}
+              {pipelineCompanies.find((c) => c.id === selectedCompanyForCompletion)?.companyName}
             </p>
+
+            {/* Billing Type Selection */}
             <div className="form-control mb-4">
               <label className="label">
-                <span className="label-text">Quoted Amount ($)</span>
+                <span className="label-text font-medium">Billing Type</span>
               </label>
-              <input
-                type="number"
-                step="0.01"
-                className="input input-bordered"
-                placeholder="0.00"
-                value={quotedAmount}
-                onChange={(e) => setQuotedAmount(e.target.value)}
-                autoFocus
-              />
-              <label className="label">
-                <span className="label-text-alt opacity-60">
-                  Leave blank if no amount was quoted
-                </span>
-              </label>
+              <div className="flex flex-col gap-2">
+                <label className="label cursor-pointer justify-start gap-3 py-1">
+                  <input
+                    type="radio"
+                    name="billingType"
+                    className="radio radio-primary radio-sm"
+                    checked={billingType === 'standard'}
+                    onChange={() => setBillingType('standard')}
+                  />
+                  <span className="label-text">Standard Billing</span>
+                </label>
+                <label className="label cursor-pointer justify-start gap-3 py-1">
+                  <input
+                    type="radio"
+                    name="billingType"
+                    className="radio radio-info radio-sm"
+                    checked={billingType === 'subscription'}
+                    onChange={() => setBillingType('subscription')}
+                  />
+                  <span className="label-text">Part of Subscription</span>
+                </label>
+                <label className="label cursor-pointer justify-start gap-3 py-1">
+                  <input
+                    type="radio"
+                    name="billingType"
+                    className="radio radio-sm"
+                    checked={billingType === 'waived'}
+                    onChange={() => setBillingType('waived')}
+                  />
+                  <span className="label-text">Waive Fee</span>
+                </label>
+              </div>
             </div>
+
+            {/* Quoted Amount - Only show for standard billing */}
+            {billingType === 'standard' && (
+              <div className="form-control mb-4">
+                <label className="label">
+                  <span className="label-text">Quoted Amount ($)</span>
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  className="input input-bordered"
+                  placeholder="0.00"
+                  value={quotedAmount}
+                  onChange={(e) => setQuotedAmount(e.target.value)}
+                  autoFocus
+                />
+                <label className="label">
+                  <span className="label-text-alt opacity-60">
+                    Leave blank if no amount was quoted
+                  </span>
+                </label>
+              </div>
+            )}
             <div className="form-control">
               <label className="label">
                 <span className="label-text">Billing Note (Optional)</span>
@@ -1245,6 +1318,7 @@ export default function CorporateServicesPipeline() {
                   setQuotedAmount("");
                   setBillingNote("");
                   setCreateFollowUp(false);
+                  setBillingType('standard');
                 }}
               >
                 Cancel
