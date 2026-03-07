@@ -65,7 +65,8 @@ export default function CorporateServicesPipeline() {
     { name: "Sales Tax Quarterly", view: "Quarterly Sales Tax" },
     { name: "Registered Agent", view: "Registered Agent" },
     { name: "1099 Filing", view: "1099 Filing" },
-    { name: "Corporate Cases", view: "Corporate Cases" }
+    { name: "Corporate Cases", view: "Corporate Cases" },
+    { name: "Extensions", view: "Extensions" }
   ];
 
   // Follow-up service mappings - easily extensible for future needs
