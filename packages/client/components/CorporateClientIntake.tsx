@@ -100,7 +100,8 @@ export default function CorporateClientIntake() {
     "Registered Agent",
     "1099 Filing",
     "Corporate Cases",
-    "Tax Returns"
+    "Tax Returns",
+    "Extensions"
   ];
 
   // Form data
