@@ -87,27 +87,9 @@ app.get('/subscription/:subscriptionId', async (c) => {
 
     console.log('[corporate-pipeline-notes] Fetching notes for subscription:', subscriptionId);
 
-    // Fetch all records to filter by subscription
-    const allRecords = await fetchAllRecords(baseId, CORPORATE_PIPELINE_NOTES_TABLE, {
+    const records = await fetchAllRecords(baseId, CORPORATE_PIPELINE_NOTES_TABLE, {
+      filterByFormula: `FIND("${subscriptionId}", ARRAYJOIN({Subscription}))`,
       sort: [{ field: 'Created Time', direction: 'asc' }],
-    });
-
-    console.log('[corporate-pipeline-notes] Total records in table:', allRecords.length);
-
-    // Filter records where the Subscription field contains our subscriptionId
-    const records = allRecords.filter((record: any) => {
-      const subscriptionField = record.fields['Subscription'];
-
-      // Subscription is an array of record IDs
-      if (Array.isArray(subscriptionField)) {
-        const matches = subscriptionField.includes(subscriptionId);
-        if (matches) {
-          console.log('[corporate-pipeline-notes] Found matching record:', record.id);
-        }
-        return matches;
-      }
-
-      return false;
     });
 
     console.log('[corporate-pipeline-notes] Found', records.length, 'notes for subscription', subscriptionId);
