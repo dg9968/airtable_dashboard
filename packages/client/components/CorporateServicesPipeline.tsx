@@ -4,6 +4,16 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import CorporatePipelineNotes from "./CorporatePipelineNotes";
+import ExtensionDetailModal from "./ExtensionDetailModal";
+import {
+  getExtensionDueDate,
+  getDaysUntilDeadline,
+  getDeadlineUrgency,
+  formatDeadlineDate,
+  inferTaxYear,
+  urgencyToBadgeClass,
+  formatDaysLabel,
+} from "@/lib/extensionHelpers";
 
 interface PipelineCompany {
   id: string;
@@ -19,6 +29,11 @@ interface PipelineCompany {
   priority?: number;
   notes?: string;
   billingAmount?: number;
+  // Extension-specific fields (populated when service = "Extensions")
+  entityType?: string;
+  fiscalYearEnd?: string;
+  extensionStatus?: string;
+  extensionTaxYear?: number;
 }
 
 interface Processor {
@@ -54,6 +69,8 @@ export default function CorporateServicesPipeline() {
   const [billingType, setBillingType] = useState<'standard' | 'subscription' | 'waived'>('standard');
   const [showNotesModal, setShowNotesModal] = useState(false);
   const [selectedCompanyForNotes, setSelectedCompanyForNotes] = useState<PipelineCompany | null>(null);
+  const [showExtensionModal, setShowExtensionModal] = useState(false);
+  const [selectedCompanyForExtension, setSelectedCompanyForExtension] = useState<PipelineCompany | null>(null);
 
   // Available services - these match the view names in Airtable
   const services = [
@@ -234,6 +251,22 @@ export default function CorporateServicesPipeline() {
             // Get Billing Amount field
             const billingAmount = record.fields["Billing Amount"] || null;
 
+            // Extension-specific fields (only populated when service = "Extensions")
+            const entityTypeRaw =
+              record.fields["Type of Entity (from Customer)"] ||
+              record.fields["Type of Entity"] ||
+              "";
+            const entityTypeStr = Array.isArray(entityTypeRaw) ? entityTypeRaw[0] : entityTypeRaw;
+
+            const fiscalYearEndRaw =
+              record.fields["Fiscal Year End (from Customer)"] ||
+              record.fields["Fiscal Year End"] ||
+              "";
+            const fiscalYearEndStr = Array.isArray(fiscalYearEndRaw) ? fiscalYearEndRaw[0] : fiscalYearEndRaw;
+
+            const extensionStatusRaw = record.fields["Extension Status"] || "Not Filed";
+            const extensionTaxYearRaw = record.fields["Extension Tax Year"] || undefined;
+
             // Calculate priority (days in pipeline)
             const addedDate = new Date(record.createdTime);
             const today = new Date();
@@ -257,6 +290,10 @@ export default function CorporateServicesPipeline() {
               priority: daysInPipeline,
               notes,
               billingAmount: billingAmount ? parseFloat(billingAmount.toString()) : undefined,
+              entityType: entityTypeStr,
+              fiscalYearEnd: fiscalYearEndStr,
+              extensionStatus: extensionStatusRaw,
+              extensionTaxYear: extensionTaxYearRaw ? parseInt(extensionTaxYearRaw.toString()) : undefined,
             };
           });
 
@@ -925,7 +962,7 @@ export default function CorporateServicesPipeline() {
                       >
                         Priority {sortBy === "priority" && (sortOrder === "asc" ? "↑" : "↓")}
                       </th>
-                      <th>Status</th>
+                      {serviceFilter !== "Extensions" && <th>Status</th>}
                       <th
                         className="cursor-pointer hover:bg-base-200 max-w-[100px]"
                         onClick={() => toggleSort("name")}
@@ -935,6 +972,13 @@ export default function CorporateServicesPipeline() {
                       <th className="max-w-[120px]">Service</th>
                       <th>Processor</th>
                       <th>Conversation</th>
+                      {serviceFilter === "Extensions" && (
+                        <>
+                          <th>Filing Deadline</th>
+                          <th>Days Left</th>
+                          <th>Ext. Status</th>
+                        </>
+                      )}
                       <th>Actions</th>
                     </tr>
                   </thead>
@@ -943,20 +987,22 @@ export default function CorporateServicesPipeline() {
                       <tr key={company.id}>
                         <td>{index + 1}</td>
                         <td>{getPriorityBadge(company.priority || 0)}</td>
-                        <td>
-                          <div className="flex flex-col gap-1">
-                            {getStatusBadge(company.status)}
-                            <button
-                              className="btn btn-xs btn-ghost"
-                              onClick={() => {
-                                setSelectedCompanyForStatus(company.id);
-                                setShowStatusModal(true);
-                              }}
-                            >
-                              Change
-                            </button>
-                          </div>
-                        </td>
+                        {serviceFilter !== "Extensions" && (
+                          <td>
+                            <div className="flex flex-col gap-1">
+                              {getStatusBadge(company.status)}
+                              <button
+                                className="btn btn-xs btn-ghost"
+                                onClick={() => {
+                                  setSelectedCompanyForStatus(company.id);
+                                  setShowStatusModal(true);
+                                }}
+                              >
+                                Change
+                              </button>
+                            </div>
+                          </td>
+                        )}
                         <td className="max-w-[100px]">
                           <div className="font-semibold truncate">
                             {company.companyName}
@@ -993,6 +1039,33 @@ export default function CorporateServicesPipeline() {
                             💬 View
                           </button>
                         </td>
+                        {serviceFilter === "Extensions" && (() => {
+                          const fyEnd = company.fiscalYearEnd || "12/31";
+                          const eType = company.entityType || "";
+                          const year = company.extensionTaxYear || inferTaxYear(fyEnd);
+                          const deadline = eType
+                            ? getExtensionDueDate(eType, fyEnd, year)
+                            : null;
+                          const days = deadline ? getDaysUntilDeadline(deadline) : null;
+                          const urg = days !== null ? getDeadlineUrgency(days) : "safe";
+                          return (
+                            <>
+                              <td className="text-xs whitespace-nowrap">
+                                {deadline ? formatDeadlineDate(deadline) : "—"}
+                              </td>
+                              <td>
+                                {days !== null ? (
+                                  <span className={`badge badge-sm ${urgencyToBadgeClass(urg)}`}>
+                                    {formatDaysLabel(days)}
+                                  </span>
+                                ) : "—"}
+                              </td>
+                              <td className="text-xs">
+                                {company.extensionStatus || "Not Filed"}
+                              </td>
+                            </>
+                          );
+                        })()}
                         <td>
                           <div className="flex gap-2">
                             {company.corporateId && (
@@ -1012,6 +1085,18 @@ export default function CorporateServicesPipeline() {
                                   📄 Docs
                                 </Link>
                               </>
+                            )}
+                            {serviceFilter === "Extensions" && (
+                              <button
+                                className="btn btn-sm btn-primary"
+                                title="Open Form 7004 extension details"
+                                onClick={() => {
+                                  setSelectedCompanyForExtension(company);
+                                  setShowExtensionModal(true);
+                                }}
+                              >
+                                📋 Extension
+                              </button>
                             )}
                           </div>
                         </td>
@@ -1350,6 +1435,46 @@ export default function CorporateServicesPipeline() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Extension Detail Modal */}
+      {showExtensionModal && selectedCompanyForExtension && (
+        <div className="modal modal-open">
+          <div className="modal-box max-w-3xl">
+            <button
+              className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2"
+              onClick={() => {
+                setShowExtensionModal(false);
+                setSelectedCompanyForExtension(null);
+              }}
+            >
+              ✕
+            </button>
+            <h3 className="font-bold text-lg mb-4">Form 7004 — Extension Details</h3>
+            <ExtensionDetailModal
+              subscriptionId={selectedCompanyForExtension.id}
+              companyName={selectedCompanyForExtension.companyName}
+              onClose={() => {
+                setShowExtensionModal(false);
+                setSelectedCompanyForExtension(null);
+              }}
+              onStatusUpdated={(id, newStatus) => {
+                setPipelineCompanies((prev) =>
+                  prev.map((c) => (c.id === id ? { ...c, extensionStatus: newStatus } : c))
+                );
+                setShowExtensionModal(false);
+                setSelectedCompanyForExtension(null);
+              }}
+            />
+          </div>
+          <div
+            className="modal-backdrop"
+            onClick={() => {
+              setShowExtensionModal(false);
+              setSelectedCompanyForExtension(null);
+            }}
+          />
         </div>
       )}
 
