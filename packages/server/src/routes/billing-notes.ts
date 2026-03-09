@@ -87,9 +87,13 @@ app.get('/service/:serviceId', async (c) => {
 
     console.log('[billing-notes] Fetching notes for service:', serviceId);
 
-    const records = await fetchAllRecords(baseId, BILLING_NOTES_TABLE, {
-      filterByFormula: `FIND("${serviceId}", ARRAYJOIN({Services Rendered}))`,
+    const allRecords = await fetchAllRecords(baseId, BILLING_NOTES_TABLE, {
       sort: [{ field: 'Created Time', direction: 'asc' }],
+    });
+
+    const records = allRecords.filter((record: any) => {
+      const servicesField = record.fields['Services Rendered'];
+      return Array.isArray(servicesField) && servicesField.includes(serviceId);
     });
 
     console.log('[billing-notes] Found', records.length, 'notes for service', serviceId);

@@ -87,9 +87,13 @@ app.get('/subscription/:subscriptionId', async (c) => {
 
     console.log('[pipeline-notes] Fetching notes for subscription:', subscriptionId);
 
-    const records = await fetchAllRecords(baseId, PIPELINE_NOTES_TABLE, {
-      filterByFormula: `FIND("${subscriptionId}", ARRAYJOIN({Subscription}))`,
+    const allRecords = await fetchAllRecords(baseId, PIPELINE_NOTES_TABLE, {
       sort: [{ field: 'Created Time', direction: 'asc' }],
+    });
+
+    const records = allRecords.filter((record: any) => {
+      const subscriptionField = record.fields['Subscription'];
+      return Array.isArray(subscriptionField) && subscriptionField.includes(subscriptionId);
     });
 
     console.log('[pipeline-notes] Found', records.length, 'notes for subscription', subscriptionId);
