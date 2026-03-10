@@ -8,15 +8,8 @@
 import { Hono } from 'hono';
 import { PDFDocument } from 'pdf-lib';
 import { readFileSync } from 'fs';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
+import { join } from 'path';
 import { getRecord, updateRecords } from '../lib/airtable-helpers';
-
-// Support both Bun (import.meta.dir) and Node.js (__dirname via ESM shim)
-const _dir: string =
-  (typeof (import.meta as any).dir === 'string'
-    ? (import.meta as any).dir
-    : dirname(fileURLToPath(import.meta.url)));
 
 // ---------------------------------------------------------------------------
 // Form 7004 field mapping (AcroForm fields after XFA strip by pdf-lib)
@@ -68,7 +61,7 @@ async function fillForm7004(data: {
   paymentsCredits: number;
   balanceDue: number;
 }): Promise<Uint8Array> {
-  const pdfPath = join(_dir, '../assets/f7004.pdf');
+  const pdfPath = join(process.cwd(), 'src/assets/f7004.pdf');
   const pdfBytes = readFileSync(pdfPath);
   const pdfDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
   const form = pdfDoc.getForm();
