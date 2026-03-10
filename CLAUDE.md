@@ -99,3 +99,10 @@ GOOGLE_DRIVE_FOLDER_ID
 - Image optimization configured for YouTube thumbnails
 - Deployment configured for Render.com with specific build/start commands
 - API routes migrated from Next.js API routes to Hono server routes
+
+### Adding New Server Routes (CRITICAL)
+When creating a new route file in `packages/server/src/routes/`, you **must** register it in **both** entry points:
+1. `packages/server/src/index.ts` — used locally with Bun
+2. `packages/server/src/node-server.ts` — used in production on Render.com (Node.js)
+
+Failing to update `node-server.ts` will cause 404 errors in production even though the route works locally.
