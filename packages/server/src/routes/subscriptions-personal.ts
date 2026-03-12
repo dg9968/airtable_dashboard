@@ -49,6 +49,27 @@ app.post('/', async (c) => {
 
     const baseId = process.env.AIRTABLE_BASE_ID || '';
 
+    // Guard against duplicates: check if this personalId + serviceId combo already exists.
+    // This is the authoritative server-side check; client-side checks are unreliable due to
+    // Airtable backlink eventual consistency.
+    const existing = await fetchAllRecords(baseId, 'Subscriptions Personal');
+    const duplicate = existing.find(sub => {
+      const linkedPersonals = sub.fields['Last Name'] || [];
+      const linkedServices = sub.fields['Service'] || [];
+      return linkedPersonals.includes(personalId) && linkedServices.includes(serviceId);
+    });
+
+    if (duplicate) {
+      console.log('Subscription already exists, returning existing record:', duplicate.id);
+      return c.json({
+        success: true,
+        data: {
+          id: duplicate.id,
+          fields: duplicate.fields,
+        },
+      });
+    }
+
     // Create the junction record
     // Field names: "Last Name" links to Personal, "Service" links to Personal Services
     const recordData: any = {

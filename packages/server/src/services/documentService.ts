@@ -283,13 +283,14 @@ export async function addClientToPipelineIfNeeded(personalId: string): Promise<b
     }
 
     // 2. Check if client already has this subscription
-    const subscriptions = await fetchAllRecords(baseId, 'Subscriptions Personal', {
-      filterByFormula: `FIND("${personalId}", ARRAYJOIN({Last Name})) > 0`
-    });
+    // Fetch all subscriptions and filter in JS — ARRAYJOIN on link fields returns display names,
+    // not record IDs, making filterByFormula unreliable for this check.
+    const subscriptions = await fetchAllRecords(baseId, 'Subscriptions Personal');
 
     const alreadyInPipeline = subscriptions.some(sub => {
+      const linkedPersonals = sub.fields['Last Name'] || [];
       const linkedServices = sub.fields['Service'] || [];
-      return linkedServices.includes(service.id);
+      return linkedPersonals.includes(personalId) && linkedServices.includes(service.id);
     });
 
     if (alreadyInPipeline) {
