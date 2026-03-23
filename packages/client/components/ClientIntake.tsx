@@ -5,6 +5,28 @@ import { useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
+// Generate or fetch a unique client code, saving it to Airtable if newly generated
+async function getOrGenerateClientCode(
+  clientId: string,
+  fields: PersonalRecord["fields"]
+): Promise<string> {
+  if (fields["Client Code"]) return fields["Client Code"];
+
+  // Generate a new unique code
+  const genRes = await fetch("/api/personal/generate-code");
+  if (!genRes.ok) throw new Error("Failed to generate client code");
+  const { code } = await genRes.json();
+
+  // Persist it to Airtable so it's stable going forward
+  await fetch(`/api/personal/${clientId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ fields: { "Client Code Override": code } }),
+  });
+
+  return code;
+}
+
 // Types
 interface DependentFormData {
   name: string;
@@ -254,16 +276,30 @@ export default function ClientIntake() {
   // Save selected client to localStorage for cross-page context
   useEffect(() => {
     if (selectedClient?.id) {
-      // Use Client Code field from Airtable (preferred) or fall back to SSN last 4 (legacy)
-      const clientCode = selectedClient.fields["Client Code"] ||
-        (selectedClient.fields.SSN ? selectedClient.fields.SSN.replace(/-/g, "").slice(-4) : "");
-      if (clientCode) {
-        localStorage.setItem("lastSelectedClient", JSON.stringify({
-          id: selectedClient.id,
-          clientCode: clientCode,
-          name: selectedClient.fields["Full Name"] || `${selectedClient.fields["First Name"] || ""} ${selectedClient.fields["Last Name"] || ""}`.trim()
-        }));
-      }
+      getOrGenerateClientCode(selectedClient.id, selectedClient.fields)
+        .then((clientCode) => {
+          // Update the in-memory record so subsequent reads use the new code
+          if (!selectedClient.fields["Client Code"]) {
+            selectedClient.fields["Client Code"] = clientCode;
+          }
+          localStorage.setItem("lastSelectedClient", JSON.stringify({
+            id: selectedClient.id,
+            clientCode,
+            name: selectedClient.fields["Full Name"] || `${selectedClient.fields["First Name"] || ""} ${selectedClient.fields["Last Name"] || ""}`.trim()
+          }));
+        })
+        .catch(() => {
+          // Fallback to SSN last 4 if generation fails
+          const ssn = selectedClient.fields.SSN;
+          const clientCode = ssn ? ssn.replace(/-/g, "").slice(-4) : "";
+          if (clientCode) {
+            localStorage.setItem("lastSelectedClient", JSON.stringify({
+              id: selectedClient.id,
+              clientCode,
+              name: selectedClient.fields["Full Name"] || `${selectedClient.fields["First Name"] || ""} ${selectedClient.fields["Last Name"] || ""}`.trim()
+            }));
+          }
+        });
     }
   }, [selectedClient]);
 
@@ -819,14 +855,13 @@ export default function ClientIntake() {
                       </span>
                     </div>
                     <button
-                      onClick={() => {
-                        // Use Client Code field from Airtable (preferred) or fall back to SSN last 4 (legacy)
-                        const clientCode = selectedClient.fields["Client Code"] ||
-                          (selectedClient.fields.SSN ? selectedClient.fields.SSN.replace(/-/g, "").slice(-4) : "");
-                        if (clientCode) {
+                      onClick={async () => {
+                        try {
+                          const clientCode = await getOrGenerateClientCode(selectedClient.id, selectedClient.fields);
+                          if (!selectedClient.fields["Client Code"]) selectedClient.fields["Client Code"] = clientCode;
                           router.push(`/document-management?clientCode=${clientCode}&personalId=${selectedClient.id}`);
-                        } else {
-                          setError("Client code not available");
+                        } catch {
+                          setError("Failed to generate client code");
                           setTimeout(() => setError(null), 3000);
                         }
                       }}
@@ -1671,13 +1706,12 @@ export default function ClientIntake() {
                           )}
                         </button>
                         <button
-                          onClick={() => {
-                            // Use Client Code field from Airtable (preferred) or fall back to SSN last 4 (legacy)
-                            const clientCode = selectedClient.fields["Client Code"] ||
-                              (formData.SSN || selectedClient.fields.SSN ? (formData.SSN || selectedClient.fields.SSN || "").replace(/-/g, "").slice(-4) : "");
-                            if (clientCode) {
+                          onClick={async () => {
+                            try {
+                              const clientCode = await getOrGenerateClientCode(selectedClient.id, selectedClient.fields);
+                              if (!selectedClient.fields["Client Code"]) selectedClient.fields["Client Code"] = clientCode;
                               router.push(`/document-management?personalId=${selectedClient.id}&clientCode=${clientCode}`);
-                            } else {
+                            } catch {
                               router.push(`/document-management?personalId=${selectedClient.id}`);
                             }
                           }}
