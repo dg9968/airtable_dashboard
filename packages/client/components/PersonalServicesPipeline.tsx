@@ -4,6 +4,16 @@ import { useState, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import PipelineNotes from "./PipelineNotes";
+import PersonalExtensionDetailModal from "./PersonalExtensionDetailModal";
+import {
+  getPersonalExtensionDueDate,
+  getDaysUntilDeadline,
+  getDeadlineUrgency,
+  formatDeadlineDate,
+  inferPersonalTaxYear,
+  urgencyToBadgeClass,
+  formatDaysLabel,
+} from "@/lib/extensionHelpers";
 
 interface PipelineClient {
   id: string;
@@ -20,6 +30,9 @@ interface PipelineClient {
   priority?: number;
   notes?: string;
   messageCount?: number;
+  // Extension-specific fields (populated when service = "File Extension")
+  extensionStatus?: string;
+  extensionTaxYear?: number;
 }
 
 interface TaxPreparer {
@@ -53,6 +66,8 @@ export default function PersonalServicesPipeline() {
   const [showNotesModal, setShowNotesModal] = useState(false);
   const [selectedClientForNotes, setSelectedClientForNotes] = useState<PipelineClient | null>(null);
   const [billingType, setBillingType] = useState<'standard' | 'subscription' | 'waived'>('standard');
+  const [showExtensionModal, setShowExtensionModal] = useState(false);
+  const [selectedClientForExtension, setSelectedClientForExtension] = useState<PipelineClient | null>(null);
 
   // Available services - these match the view names in Airtable
   const services = [
@@ -191,6 +206,10 @@ export default function PersonalServicesPipeline() {
                                "";
             const serviceNameStr = Array.isArray(serviceName) ? serviceName[0] : serviceName;
 
+            // Extension-specific fields (only relevant when service = "File Extension")
+            const extensionStatusRaw = record.fields["Extension Status"] || "Not Filed";
+            const extensionTaxYearRaw = record.fields["Extension Tax Year"] || undefined;
+
             // Calculate priority based on how long ago they were added (in days)
             const addedDate = new Date(record.createdTime);
             const today = new Date();
@@ -214,13 +233,20 @@ export default function PersonalServicesPipeline() {
               status,
               priority: daysInPipeline,
               notes,
+              extensionStatus: extensionStatusRaw,
+              extensionTaxYear: extensionTaxYearRaw ? parseInt(extensionTaxYearRaw.toString()) : undefined,
             };
           });
 
-          // Filter out clients with "File Return" or "Filed" status - they should not appear in active pipeline
-          const activePipeline = pipeline.filter((client: PipelineClient) =>
-            client.status !== "File Return" && client.status !== "Filed"
-          );
+          // For extension view, show all records regardless of subscription status —
+          // "Filed" on an extension subscription means the 4868 was submitted (not that
+          // the tax return was filed), so we must not filter those out.
+          // For all other services, hide "File Return" and "Filed" subscriptions.
+          const activePipeline = serviceFilter === "File Extension"
+            ? pipeline
+            : pipeline.filter((client: PipelineClient) =>
+                client.status !== "File Return" && client.status !== "Filed"
+              );
           setPipelineClients(activePipeline);
         }
       } catch (error) {
@@ -774,13 +800,19 @@ export default function PersonalServicesPipeline() {
                     <tr>
                       <th>#</th>
                       <th>Priority</th>
-                      <th>Status</th>
+                      {serviceFilter !== "File Extension" && <th>Status</th>}
                       <th>Name</th>
                       <th>Service</th>
                       <th>Phone</th>
                       <th>Tax Preparer</th>
                       <th>Conversation</th>
-                      <th>Added</th>
+                      {serviceFilter === "File Extension" && (
+                        <>
+                          <th>Filing Deadline</th>
+                          <th>Ext. Status</th>
+                        </>
+                      )}
+                      {serviceFilter !== "File Extension" && <th>Added</th>}
                       <th>Actions</th>
                     </tr>
                   </thead>
@@ -789,20 +821,22 @@ export default function PersonalServicesPipeline() {
                       <tr key={client.id}>
                         <td>{index + 1}</td>
                         <td>{getPriorityBadge(client.priority || 0)}</td>
-                        <td>
-                          <div className="flex flex-col gap-1">
-                            {getStatusBadge(client.status)}
-                            <button
-                              className="btn btn-xs btn-ghost"
-                              onClick={() => {
-                                setSelectedClientForStatus(client.id);
-                                setShowStatusModal(true);
-                              }}
-                            >
-                              Change
-                            </button>
-                          </div>
-                        </td>
+                        {serviceFilter !== "File Extension" && (
+                          <td>
+                            <div className="flex flex-col gap-1">
+                              {getStatusBadge(client.status)}
+                              <button
+                                className="btn btn-xs btn-ghost"
+                                onClick={() => {
+                                  setSelectedClientForStatus(client.id);
+                                  setShowStatusModal(true);
+                                }}
+                              >
+                                Change
+                              </button>
+                            </div>
+                          </td>
+                        )}
                         <td>
                           <div className="font-semibold">
                             {client.firstName} {client.lastName}
@@ -847,11 +881,29 @@ export default function PersonalServicesPipeline() {
                             )}
                           </button>
                         </td>
-                        <td>
-                          <div className="text-xs">
-                            {formatDate(client.addedAt)}
-                          </div>
-                        </td>
+                        {serviceFilter === "File Extension" && (() => {
+                          const year = client.extensionTaxYear || inferPersonalTaxYear();
+                          const deadline = getPersonalExtensionDueDate(year);
+                          const days = getDaysUntilDeadline(deadline);
+                          const urg = getDeadlineUrgency(days);
+                          return (
+                            <>
+                              <td className="text-xs whitespace-nowrap">
+                                {formatDeadlineDate(deadline)}
+                              </td>
+                              <td className="text-xs">
+                                {client.extensionStatus || "Not Filed"}
+                              </td>
+                            </>
+                          );
+                        })()}
+                        {serviceFilter !== "File Extension" && (
+                          <td>
+                            <div className="text-xs">
+                              {formatDate(client.addedAt)}
+                            </div>
+                          </td>
+                        )}
                         <td>
                           <div className="flex gap-2">
                             {client.personalId && (
@@ -866,11 +918,23 @@ export default function PersonalServicesPipeline() {
                             {client.clientCode && (
                               <Link
                                 href={`/document-management?clientCode=${client.clientCode}&personalId=${client.personalId}`}
-                                className="btn btn-sm btn-primary"
+                                className="btn btn-sm btn-info"
                                 title="View client documents"
                               >
                                 Docs
                               </Link>
+                            )}
+                            {serviceFilter === "File Extension" && (
+                              <button
+                                className="btn btn-sm btn-primary"
+                                title="Open Form 4868 extension details"
+                                onClick={() => {
+                                  setSelectedClientForExtension(client);
+                                  setShowExtensionModal(true);
+                                }}
+                              >
+                                📋 Extension
+                              </button>
                             )}
                           </div>
                         </td>
@@ -1185,6 +1249,46 @@ export default function PersonalServicesPipeline() {
             setShowNotesModal(false);
             setSelectedClientForNotes(null);
           }} />
+        </div>
+      )}
+
+      {/* Extension Detail Modal */}
+      {showExtensionModal && selectedClientForExtension && (
+        <div className="modal modal-open">
+          <div className="modal-box max-w-2xl">
+            <button
+              className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2"
+              onClick={() => {
+                setShowExtensionModal(false);
+                setSelectedClientForExtension(null);
+              }}
+            >
+              ✕
+            </button>
+            <h3 className="font-bold text-lg mb-4">Form 4868 — Extension Details</h3>
+            <PersonalExtensionDetailModal
+              subscriptionId={selectedClientForExtension.id}
+              clientName={`${selectedClientForExtension.firstName} ${selectedClientForExtension.lastName}`}
+              onClose={() => {
+                setShowExtensionModal(false);
+                setSelectedClientForExtension(null);
+              }}
+              onStatusUpdated={(id, newStatus) => {
+                setPipelineClients((prev) =>
+                  prev.map((c) => (c.id === id ? { ...c, extensionStatus: newStatus } : c))
+                );
+                setShowExtensionModal(false);
+                setSelectedClientForExtension(null);
+              }}
+            />
+          </div>
+          <div
+            className="modal-backdrop"
+            onClick={() => {
+              setShowExtensionModal(false);
+              setSelectedClientForExtension(null);
+            }}
+          />
         </div>
       )}
     </div>

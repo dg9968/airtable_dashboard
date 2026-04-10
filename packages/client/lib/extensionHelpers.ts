@@ -144,3 +144,34 @@ export function formatDaysLabel(days: number): string {
   if (days === 0) return 'Due today';
   return `${days}d left`;
 }
+
+// ---------------------------------------------------------------------------
+// Personal (Form 4868) extension helpers
+// Individual returns: original due April 15, extension to October 15
+// ---------------------------------------------------------------------------
+
+/**
+ * Original due date for a personal return (Form 1040): April 15 of taxYear+1.
+ */
+export function getPersonalOriginalDueDate(taxYear: number): Date {
+  return new Date(taxYear + 1, 3, 15); // April = month index 3
+}
+
+/**
+ * Extension due date for a personal return (Form 4868): October 15 of taxYear+1.
+ */
+export function getPersonalExtensionDueDate(taxYear: number): Date {
+  return new Date(taxYear + 1, 9, 15); // October = month index 9
+}
+
+/**
+ * Infer the personal tax year being filed based on the current date.
+ * Before October 15: filing for the prior year.
+ * On or after October 15: filing for the current year.
+ */
+export function inferPersonalTaxYear(): number {
+  const today = new Date();
+  const currentYear = today.getFullYear();
+  const oct15 = new Date(currentYear, 9, 15);
+  return today >= oct15 ? currentYear : currentYear - 1;
+}
