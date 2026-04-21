@@ -83,7 +83,8 @@ export default function CorporateServicesPipeline() {
     { name: "Registered Agent", view: "Registered Agent" },
     { name: "1099 Filing", view: "1099 Filing" },
     { name: "Corporate Cases", view: "Corporate Cases" },
-    { name: "Extensions", view: "Extensions" }
+    { name: "Extensions", view: "Extensions" },
+    { name: "Bookkeeping", view: "Bookkeeping" }
   ];
 
   // Follow-up service mappings - easily extensible for future needs
