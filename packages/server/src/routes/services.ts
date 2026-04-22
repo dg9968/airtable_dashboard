@@ -4,6 +4,7 @@
 
 import { Hono } from 'hono';
 import { fetchAllTableData, testConnection } from '../airtable';
+import { createRecords } from '../lib/airtable-helpers';
 
 const app = new Hono();
 
@@ -136,6 +137,35 @@ app.get('/', async (c) => {
         error: error instanceof Error ? error.message : 'Failed to fetch services data',
         suggestion: 'Check your Airtable connection and Services Corporate table'
       },
+      500
+    );
+  }
+});
+
+/**
+ * POST /api/services
+ * Create a new service record in the Services Corporate table
+ *
+ * Expected body: { name: string }
+ */
+app.post('/', async (c) => {
+  try {
+    const { name } = await c.req.json();
+
+    if (!name || !name.trim()) {
+      return c.json({ success: false, error: 'Missing required field: name' }, 400);
+    }
+
+    const baseId = process.env.AIRTABLE_BASE_ID || '';
+    const records = await createRecords(baseId, 'Services Corporate', [
+      { fields: { Services: name.trim() } },
+    ]);
+
+    return c.json({ success: true, data: records[0] });
+  } catch (error) {
+    console.error('Error creating service:', error);
+    return c.json(
+      { success: false, error: error instanceof Error ? error.message : 'Failed to create service' },
       500
     );
   }
