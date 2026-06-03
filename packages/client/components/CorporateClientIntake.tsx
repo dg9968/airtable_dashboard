@@ -257,20 +257,19 @@ export default function CorporateClientIntake() {
     setError(null);
 
     try {
-      const response = await fetch(`/api/view?table=Corporations&view=Grid view`);
+      const response = await fetch(`/api/companies/search?q=${encodeURIComponent(searchTerm.trim())}`);
       const result = await response.json();
 
       if (result.success && result.data) {
-        const filtered = result.data.records.filter((record: CorporateRecord) => {
-          const companyName = (record.fields["Company"] || record.fields["Company Name"] || "").toLowerCase();
-          const ein = (record.fields["EIN"] || "").toLowerCase();
-          const search = searchTerm.toLowerCase();
-          return companyName.includes(search) || ein.includes(search);
-        });
+        const records: CorporateRecord[] = result.data.map((item: any) => ({
+          id: item.id,
+          fields: { "Company": item.name, "EIN": item.ein },
+          createdTime: "",
+        }));
 
-        setSearchResults(filtered);
+        setSearchResults(records);
 
-        if (filtered.length === 0) {
+        if (records.length === 0) {
           setError("No companies found. You can create a new one.");
           setIsNewCompany(true);
         }
@@ -788,7 +787,7 @@ export default function CorporateClientIntake() {
                     {searchResults.map((company) => (
                       <div
                         key={company.id}
-                        onClick={() => handleSelectCompany(company)}
+                        onClick={() => { setSearchResults([]); loadCompanyById(company.id); }}
                         className="p-3 bg-base-200 rounded-lg cursor-pointer hover:bg-base-300 transition-colors"
                       >
                         <p className="font-medium text-sm">

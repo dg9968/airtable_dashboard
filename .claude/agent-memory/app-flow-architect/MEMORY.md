@@ -1,0 +1,2 @@
+- [Client Intake Flow Patterns](project_client_intake.md) — Personal and Corporate intake component architecture, API fan-out patterns, and identified bottlenecks
+- [Auth Pattern](project_auth_pattern.md) — Route protection is client-side only (no middleware.ts); double-checked on first intake analysis

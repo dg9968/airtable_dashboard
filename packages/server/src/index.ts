@@ -53,6 +53,10 @@ app.use('*', cors({
     if (origin && origin.match(/^http:\/\/localhost:\d+$/)) {
       return origin;
     }
+    // Allow local network IPs (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
+    if (origin && origin.match(/^http:\/\/(192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?$/)) {
+      return origin;
+    }
     // Allow any .onrender.com domain
     if (origin && origin.match(/^https:\/\/.*\.onrender\.com$/)) {
       return origin;

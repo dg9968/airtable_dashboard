@@ -575,6 +575,22 @@ export default function ClientIntake() {
         },
         body: JSON.stringify({
           fields: fieldsToSave,
+          ...(isNewClient && {
+            spouse: (formData["Spouse Name"] || formData["Spouse SSN"]) ? {
+              name: formData["Spouse Name"],
+              ssn: formData["Spouse SSN"],
+              dob: formData["Spouse DOB"],
+              occupation: formData["Spouse Occupation"],
+              driverLicense: formData["Spouse Driver License"],
+            } : undefined,
+            dependents: dependents.length > 0 ? dependents.map(d => ({
+              name: d.name,
+              ssn: d.ssn,
+              dob: d.dob,
+              relationshipType: d.relationshipType,
+            })) : undefined,
+            spouseSameAddress,
+          }),
         }),
       });
 

@@ -68,6 +68,9 @@ export default function PersonalServicesPipeline() {
   const [billingType, setBillingType] = useState<'standard' | 'subscription' | 'waived'>('standard');
   const [showExtensionModal, setShowExtensionModal] = useState(false);
   const [selectedClientForExtension, setSelectedClientForExtension] = useState<PipelineClient | null>(null);
+  const [showExtensionActionModal, setShowExtensionActionModal] = useState(false);
+  const [selectedClientForExtensionAction, setSelectedClientForExtensionAction] = useState<PipelineClient | null>(null);
+  const [extensionActionLoading, setExtensionActionLoading] = useState(false);
 
   // Available services - these match the view names in Airtable
   const services = [
@@ -594,6 +597,71 @@ export default function PersonalServicesPipeline() {
     }
   };
 
+  const handleFiledWithSomeoneElse = async (client: PipelineClient) => {
+    try {
+      setExtensionActionLoading(true);
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+      const deleteResponse = await fetch(`${apiUrl}/api/subscriptions-personal/${client.id}`, {
+        method: 'DELETE',
+      });
+      if (!deleteResponse.ok) {
+        const data = await deleteResponse.json();
+        throw new Error(data.error || 'Failed to remove from extension service');
+      }
+      setPipelineClients((prev) => prev.filter((c) => c.id !== client.id));
+      setShowExtensionActionModal(false);
+      setSelectedClientForExtensionAction(null);
+    } catch (error) {
+      console.error('Error removing from extension service:', error);
+      alert(error instanceof Error ? error.message : 'Failed to remove from extension service');
+    } finally {
+      setExtensionActionLoading(false);
+    }
+  };
+
+  const handleMoveToTaxPrepPipeline = async (client: PipelineClient) => {
+    if (!client.personalId) {
+      alert('Cannot move client: missing personal record ID');
+      return;
+    }
+    try {
+      setExtensionActionLoading(true);
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+
+      // Find the Tax Prep Pipeline service ID
+      const servicesResponse = await fetch(`${apiUrl}/api/services-personal`);
+      const servicesData = await servicesResponse.json();
+      if (!servicesData.success) throw new Error('Failed to fetch personal services');
+
+      const taxPrepService = servicesData.services?.find(
+        (s: any) => s.name === 'Tax Prep Pipeline'
+      );
+      if (!taxPrepService) throw new Error('Tax Prep Pipeline service not found');
+
+      // Create the new Tax Prep Pipeline subscription
+      const createResponse = await fetch(`${apiUrl}/api/subscriptions-personal`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ personalId: client.personalId, serviceId: taxPrepService.id }),
+      });
+      const createData = await createResponse.json();
+      if (!createResponse.ok) throw new Error(createData.error || 'Failed to create Tax Prep Pipeline record');
+
+      // Delete the extension subscription
+      await fetch(`${apiUrl}/api/subscriptions-personal/${client.id}`, { method: 'DELETE' });
+
+      setPipelineClients((prev) => prev.filter((c) => c.id !== client.id));
+      setShowExtensionActionModal(false);
+      setSelectedClientForExtensionAction(null);
+      alert(`${client.firstName} ${client.lastName} moved to Tax Prep Pipeline.`);
+    } catch (error) {
+      console.error('Error moving to Tax Prep Pipeline:', error);
+      alert(error instanceof Error ? error.message : 'Failed to move to Tax Prep Pipeline');
+    } finally {
+      setExtensionActionLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-base-200">
       {/* Header */}
@@ -927,10 +995,10 @@ export default function PersonalServicesPipeline() {
                             {serviceFilter === "File Extension" && (
                               <button
                                 className="btn btn-sm btn-primary"
-                                title="Open Form 4868 extension details"
+                                title="Extension options"
                                 onClick={() => {
-                                  setSelectedClientForExtension(client);
-                                  setShowExtensionModal(true);
+                                  setSelectedClientForExtensionAction(client);
+                                  setShowExtensionActionModal(true);
                                 }}
                               >
                                 📋 Extension
@@ -1249,6 +1317,91 @@ export default function PersonalServicesPipeline() {
             setShowNotesModal(false);
             setSelectedClientForNotes(null);
           }} />
+        </div>
+      )}
+
+      {/* Extension Action Modal */}
+      {showExtensionActionModal && selectedClientForExtensionAction && (
+        <div className="modal modal-open">
+          <div className="modal-box max-w-md">
+            <h3 className="font-bold text-lg mb-1">Extension — Select Action</h3>
+            <p className="text-sm text-base-content/70 mb-6">
+              {selectedClientForExtensionAction.firstName} {selectedClientForExtensionAction.lastName}
+            </p>
+
+            <div className="flex flex-col gap-3">
+              <button
+                className="btn btn-outline btn-block justify-start gap-3 h-auto py-3"
+                disabled={extensionActionLoading}
+                onClick={() => {
+                  setShowExtensionActionModal(false);
+                  setSelectedClientForExtension(selectedClientForExtensionAction);
+                  setSelectedClientForExtensionAction(null);
+                  setShowExtensionModal(true);
+                }}
+              >
+                <span className="text-lg">📋</span>
+                <div className="text-left">
+                  <div className="font-medium">View Extension Details</div>
+                  <div className="text-xs opacity-60">Open Form 4868 and manage filing status</div>
+                </div>
+              </button>
+
+              <button
+                className="btn btn-warning btn-block justify-start gap-3 h-auto py-3"
+                disabled={extensionActionLoading}
+                onClick={() => handleFiledWithSomeoneElse(selectedClientForExtensionAction)}
+              >
+                {extensionActionLoading ? (
+                  <span className="loading loading-spinner loading-sm" />
+                ) : (
+                  <span className="text-lg">🚪</span>
+                )}
+                <div className="text-left">
+                  <div className="font-medium">Filed with Someone Else</div>
+                  <div className="text-xs opacity-60">Remove from Extension service — no further action needed</div>
+                </div>
+              </button>
+
+              <button
+                className="btn btn-success btn-block justify-start gap-3 h-auto py-3"
+                disabled={extensionActionLoading}
+                onClick={() => handleMoveToTaxPrepPipeline(selectedClientForExtensionAction)}
+              >
+                {extensionActionLoading ? (
+                  <span className="loading loading-spinner loading-sm" />
+                ) : (
+                  <span className="text-lg">➡️</span>
+                )}
+                <div className="text-left">
+                  <div className="font-medium">Move to Tax Prep Pipeline</div>
+                  <div className="text-xs opacity-60">Remove from Extension and create a Tax Prep Pipeline service</div>
+                </div>
+              </button>
+            </div>
+
+            <div className="modal-action">
+              <button
+                className="btn btn-ghost"
+                disabled={extensionActionLoading}
+                onClick={() => {
+                  setShowExtensionActionModal(false);
+                  setSelectedClientForExtensionAction(null);
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+          <div
+            className="modal-backdrop"
+            onClick={() => {
+              if (!extensionActionLoading) {
+                setShowExtensionActionModal(false);
+                setSelectedClientForExtensionAction(null);
+              }
+            }}
+          />
         </div>
       )}
 

@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\danie\\\\Documents\\\\airtable-dashboard\" -Directory)",
+      "Bash(Select-Object Name)",
+      "Bash(grep -E \"\\(ts|tsx|md\\)$\")"
+    ]
+  }
+}
