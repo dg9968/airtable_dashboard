@@ -1,7 +1,7 @@
 // Fix for app/view-display/page.tsx - Add type assertion
 'use client';
 
-import { useSession } from 'next-auth/react';
+import { authClient } from '@/lib/auth-client'
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import ViewDisplay from '@/components/ViewDisplay';
@@ -15,11 +15,11 @@ interface ExtendedUser {
 }
 
 export default function ViewDisplayPage() {
-  const { data: session, status } = useSession();
+  const { data: session, isPending } = authClient.useSession();
   const router = useRouter();
 
   useEffect(() => {
-    if (status === 'loading') return; // Still loading
+    if (isPending) return; // Still loading
 
     if (!session) {
       // Not authenticated - redirect to login
@@ -34,10 +34,10 @@ export default function ViewDisplayPage() {
       router.push('/?error=unauthorized');
       return;
     }
-  }, [session, status, router]);
+  }, [session, isPending, router]);
 
   // Show loading while checking authentication
-  if (status === 'loading') {
+  if (isPending) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
         <div className="text-center">

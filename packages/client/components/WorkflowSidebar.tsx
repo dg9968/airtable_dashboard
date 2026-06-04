@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useSession } from "next-auth/react";
+import { authClient } from '@/lib/auth-client'
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { WorkflowPath } from "@/lib/workflow-utils";
@@ -88,7 +88,7 @@ export default function WorkflowSidebar({
   currentStep,
   activePath,
 }: WorkflowSidebarProps) {
-  const { data: session } = useSession();
+  const { data: session } = authClient.useSession();
   const pathname = usePathname();
   const router = useRouter();
   const [selectedPath, setSelectedPath] = useState<WorkflowPath>(activePath);

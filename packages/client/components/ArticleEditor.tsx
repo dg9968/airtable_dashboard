@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { useSession } from 'next-auth/react';
+import { authClient } from '@/lib/auth-client'
 
 interface Article {
   id: string;
@@ -98,7 +98,7 @@ function renderMarkdownPreview(content: string): string {
 }
 
 export default function ArticleEditor({ article, categories, onClose, onSave }: ArticleEditorProps) {
-  const { data: session } = useSession();
+  const { data: session } = authClient.useSession();
   const [formData, setFormData] = useState({
     title: '',
     summary: '',

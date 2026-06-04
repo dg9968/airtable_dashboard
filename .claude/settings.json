@@ -3,7 +3,13 @@
     "allow": [
       "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\danie\\\\Documents\\\\airtable-dashboard\" -Directory)",
       "Bash(Select-Object Name)",
-      "Bash(grep -E \"\\(ts|tsx|md\\)$\")"
+      "Bash(grep -E \"\\(ts|tsx|md\\)$\")",
+      "Bash(bun add *)",
+      "Bash(bun remove *)",
+      "Bash(Remove-Item -Recurse -Force \"c:\\\\Users\\\\danie\\\\Documents\\\\airtable-dashboard\\\\packages\\\\client\\\\app\\\\api\\\\auth\\\\[...nextauth]\")"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\danie\\Documents\\airtable-dashboard\\packages\\client\\app\\api\\auth\\[...nextauth]"
     ]
   }
 }

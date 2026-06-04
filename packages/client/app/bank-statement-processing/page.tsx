@@ -1,11 +1,11 @@
 'use client'
 
 import { useState, useRef } from 'react'
-import { useSession } from 'next-auth/react'
+import { authClient } from '@/lib/auth-client'
 import CsvCombiner from '@/components/CsvCombiner'
 
 export default function BankStatementProcessing() {
-  const { data: session } = useSession()
+  const { data: session } = authClient.useSession()
   const [isUploading, setIsUploading] = useState(false)
   const [processingStatus, setProcessingStatus] = useState('')
   const [uploadResult, setUploadResult] = useState<any>(null)

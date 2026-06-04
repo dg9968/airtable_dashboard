@@ -1,7 +1,7 @@
 // components/ProtectedRoute.tsx
 'use client';
 
-import { useSession } from 'next-auth/react';
+import { authClient } from '@/lib/auth-client';
 import { useRouter } from 'next/navigation';
 import { useEffect, ReactNode } from 'react';
 
@@ -18,11 +18,11 @@ export default function ProtectedRoute({
   redirectTo = '/auth/signin',
   fallbackComponent 
 }: ProtectedRouteProps) {
-  const { data: session, status } = useSession();
+  const { data: session, isPending } = authClient.useSession();
   const router = useRouter();
 
   useEffect(() => {
-    if (status === 'loading') return;
+    if (isPending) return;
 
     if (!session) {
       // Store the current path to redirect back after login
@@ -40,10 +40,10 @@ export default function ProtectedRoute({
         return;
       }
     }
-  }, [session, status, router, requiredRole, redirectTo]);
+  }, [session, isPending, router, requiredRole, redirectTo]);
 
   // Loading state
-  if (status === 'loading') {
+  if (isPending) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
         <div className="text-center">

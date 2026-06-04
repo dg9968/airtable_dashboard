@@ -1,10 +1,10 @@
 "use client";
 
-import { useSession, signOut } from "next-auth/react";
+import { authClient } from "@/lib/auth-client";
 import Link from "next/link";
 
 export default function Header() {
-  const { data: session, status } = useSession();
+  const { data: session, isPending } = authClient.useSession();
 
   return (
     <div className="navbar bg-primary text-primary-content shadow-lg">
@@ -141,7 +141,7 @@ export default function Header() {
       </div>
 
       <div className="navbar-end">
-        {status === "loading" ? (
+        {isPending ? (
           <span className="loading loading-spinner loading-sm"></span>
         ) : session ? (
           <div className="flex items-center space-x-3">
@@ -154,7 +154,7 @@ export default function Header() {
               )}
             </div>
             <button
-              onClick={() => signOut({ callbackUrl: "/" })}
+              onClick={() => authClient.signOut().then(() => { window.location.href = '/' })}
               className="btn btn-secondary btn-sm"
             >
               Sign Out

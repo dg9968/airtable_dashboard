@@ -2,6 +2,9 @@
 const nextConfig = {
   reactStrictMode: true,
 
+  // Keep Better Auth server-side packages out of the browser bundle
+  serverExternalPackages: ['pg', 'pg-pool', '@better-auth/kysely-adapter', 'better-auth', 'bcryptjs'],
+
   // Fix for cross-origin request error
   allowedDevOrigins: [
     '10.212.1.117', // Your current development IP

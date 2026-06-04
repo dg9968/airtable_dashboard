@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useSession } from "next-auth/react";
+import { authClient } from '@/lib/auth-client';
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
@@ -59,7 +59,7 @@ interface CompanyContactRelationship {
 }
 
 export default function CorporateClientIntake() {
-  const { data: session, status } = useSession();
+  const { data: session, isPending } = authClient.useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -125,7 +125,7 @@ export default function CorporateClientIntake() {
 
   // Check authentication and authorization
   useEffect(() => {
-    if (status === "loading") return;
+    if (isPending) return;
 
     if (!session) {
       router.push("/auth/signin");
@@ -137,7 +137,7 @@ export default function CorporateClientIntake() {
       router.push("/");
       return;
     }
-  }, [session, status, router]);
+  }, [session, isPending, router]);
 
   // Check for ID in URL params to load existing company
   useEffect(() => {
@@ -698,7 +698,7 @@ export default function CorporateClientIntake() {
     { id: "representatives", label: "Company Representatives", icon: "👥" },
   ];
 
-  if (status === "loading" || loading) {
+  if (isPending || loading) {
     return (
       <div className="min-h-screen bg-base-200 flex items-center justify-center">
         <div className="text-center">

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useSession } from 'next-auth/react';
+import { authClient } from '@/lib/auth-client'
 import Link from 'next/link';
 
 interface BusinessStats {
@@ -25,7 +25,7 @@ interface QuickAction {
 }
 
 export default function ManageBusiness() {
-  const { data: session } = useSession();
+  const { data: session } = authClient.useSession();
   const [stats, setStats] = useState<BusinessStats>({
     totalClients: 0,
     corporateClients: 0,

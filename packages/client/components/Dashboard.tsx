@@ -1,7 +1,7 @@
 // app/dashboard/page.tsx
 'use client';
 
-import { useSession } from 'next-auth/react';
+import { authClient } from '@/lib/auth-client'
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
@@ -43,7 +43,7 @@ interface QuickAction {
 }
 
 export default function Dashboard() {
-  const { data: session, status } = useSession();
+  const { data: session, isPending } = authClient.useSession();
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<DashboardStats>({
@@ -57,7 +57,7 @@ export default function Dashboard() {
 
   // Redirect to login if not authenticated
   useEffect(() => {
-    if (status === 'loading') return; // Still loading
+    if (isPending) return; // Still loading
 
     if (!session) {
       router.push('/auth/signin');
@@ -66,7 +66,7 @@ export default function Dashboard() {
 
     // Load dashboard data
     loadDashboardData();
-  }, [session, status, router]);
+  }, [session, isPending, router]);
 
   const loadDashboardData = async () => {
     try {
@@ -223,7 +223,7 @@ export default function Dashboard() {
   };
 
   // Show loading state
-  if (status === 'loading' || loading) {
+  if (isPending || loading) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
         <div className="text-center">

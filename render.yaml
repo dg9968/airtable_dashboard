@@ -9,19 +9,17 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
-      - key: HONO_API_URL
-        sync: false  # Set this to your Hono server URL (e.g., https://vault-api.onrender.com)
-      - key: API_SECRET_KEY
-        sync: false  # Set this in Render dashboard - must match vault-api API_SECRET_KEY
-      - key: AIRTABLE_PERSONAL_ACCESS_TOKEN
-        sync: false  # Set this in Render dashboard
-      - key: AIRTABLE_BASE_ID
-        sync: false  # Set this in Render dashboard
-      - key: AIRTABLE_USERS_TABLE
-        value: Users
-      - key: NEXTAUTH_SECRET
-        sync: false  # Set this in Render dashboard
-      - key: NEXTAUTH_URL
+      - key: BETTER_AUTH_SECRET
+        sync: false  # Set in Render dashboard (same value as NEXTAUTH_SECRET)
+      - key: BETTER_AUTH_URL
         value: https://airtable-dashboard.onrender.com
+      - key: DATABASE_URL
+        sync: false  # Set in Render dashboard - PostgreSQL connection string
+      - key: NEXTAUTH_SECRET
+        sync: false  # Still needed — signs JWTs for Hono server bridge
       - key: NEXT_PUBLIC_API_URL
         value: https://vault-api.onrender.com
+      - key: HONO_API_URL
+        sync: false
+      - key: API_SECRET_KEY
+        sync: false

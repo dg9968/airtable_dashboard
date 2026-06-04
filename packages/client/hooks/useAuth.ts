@@ -1,28 +1,28 @@
-import { useSession } from 'next-auth/react'
+import { authClient } from '@/lib/auth-client'
 import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
 
 export function useRequireAuth(redirectUrl = '/auth/signin') {
-  const { data: session, status } = useSession()
+  const { data: session, isPending } = authClient.useSession()
   const router = useRouter()
 
   useEffect(() => {
-    if (status === 'loading') return // Still loading
+    if (isPending) return
 
     if (!session) {
       router.push(redirectUrl)
     }
-  }, [session, status, router, redirectUrl])
+  }, [session, isPending, router, redirectUrl])
 
-  return { session, status }
+  return { session, isPending }
 }
 
 export function useRequireRole(requiredRole: string | string[], redirectUrl = '/') {
-  const { data: session, status } = useSession()
+  const { data: session, isPending } = authClient.useSession()
   const router = useRouter()
 
   useEffect(() => {
-    if (status === 'loading') return
+    if (isPending) return
 
     if (!session) {
       router.push('/auth/signin')
@@ -35,7 +35,7 @@ export function useRequireRole(requiredRole: string | string[], redirectUrl = '/
     if (!allowedRoles.includes(userRole)) {
       router.push(redirectUrl)
     }
-  }, [session, status, router, requiredRole, redirectUrl])
+  }, [session, isPending, router, requiredRole, redirectUrl])
 
-  return { session, status }
+  return { session, isPending }
 }

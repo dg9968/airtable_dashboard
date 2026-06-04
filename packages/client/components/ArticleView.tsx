@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useSession } from 'next-auth/react';
+import { authClient } from '@/lib/auth-client'
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import ArticleEditor from './ArticleEditor';
@@ -113,7 +113,7 @@ function renderMarkdown(content: string): string {
 }
 
 export default function ArticleView({ slug }: ArticleViewProps) {
-  const { data: session } = useSession();
+  const { data: session } = authClient.useSession();
   const router = useRouter();
   const [article, setArticle] = useState<Article | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);

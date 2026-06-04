@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useSession } from "next-auth/react";
+import { authClient } from '@/lib/auth-client'
 
 interface Note {
   id: string;
@@ -61,7 +61,7 @@ export default function NotesConversation({
   title,
   subtitle,
 }: NotesConversationProps) {
-  const { data: session } = useSession();
+  const { data: session } = authClient.useSession();
   const [notes, setNotes] = useState<Note[]>([]);
   const [loading, setLoading] = useState(true);
   const [newNote, setNewNote] = useState("");

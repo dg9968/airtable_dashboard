@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useSession } from "next-auth/react";
+import { authClient } from '@/lib/auth-client';
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
@@ -80,7 +80,7 @@ interface PersonalRecord {
 }
 
 export default function ClientIntake() {
-  const { data: session, status } = useSession();
+  const { data: session, isPending } = authClient.useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -136,7 +136,7 @@ export default function ClientIntake() {
 
   // Check authentication and authorization
   useEffect(() => {
-    if (status === "loading") return;
+    if (isPending) return;
 
     if (!session) {
       router.push("/auth/signin");
@@ -148,12 +148,12 @@ export default function ClientIntake() {
       router.push("/");
       return;
     }
-  }, [session, status, router]);
+  }, [session, isPending, router]);
 
   // Load client data if 'id' query parameter is present
   useEffect(() => {
     const clientId = searchParams.get("id");
-    if (clientId && status === "authenticated") {
+    if (clientId && !!session) {
       const loadClient = async () => {
         try {
           setLoading(true);
@@ -271,7 +271,7 @@ export default function ClientIntake() {
 
       loadClient();
     }
-  }, [searchParams, status]);
+  }, [searchParams, isPending]);
 
   // Save selected client to localStorage for cross-page context
   useEffect(() => {
@@ -753,7 +753,7 @@ export default function ClientIntake() {
     }));
   };
 
-  if (status === "loading" || loading) {
+  if (isPending || loading) {
     return (
       <div className="min-h-screen bg-base-200 flex items-center justify-center">
         <div className="text-center">

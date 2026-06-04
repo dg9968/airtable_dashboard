@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { signIn, getSession } from 'next-auth/react'
+import { authClient } from '@/lib/auth-client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
@@ -18,13 +18,9 @@ export default function SignIn() {
     setError('')
 
     try {
-      const result = await signIn('credentials', {
-        email,
-        password,
-        redirect: false,
-      })
+      const result = await authClient.signIn.email({ email, password })
 
-      if (result?.error) {
+      if (result.error) {
         setError('Invalid credentials')
       } else {
         router.push('/dashboard')
@@ -103,15 +99,6 @@ export default function SignIn() {
             </button>
           </div>
 
-          <div className="text-center">
-            <button
-              type="button"
-              onClick={() => signIn('google')}
-              className="w-full flex justify-center py-2 px-4 border border-gray-600 rounded-md shadow-sm bg-gray-800 text-sm font-medium text-gray-300 hover:bg-gray-700"
-            >
-              Sign in with Google
-            </button>
-          </div>
         </form>
       </div>
     </div>

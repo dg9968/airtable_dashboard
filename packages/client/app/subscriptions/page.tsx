@@ -1,25 +1,25 @@
 'use client';
 
-import { useSession } from 'next-auth/react';
+import { authClient } from '@/lib/auth-client'
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import Subscriptions from '@/components/Subscriptions';
 
 export default function SubscriptionsPage() {
-  const { data: session, status } = useSession();
+  const { data: session, isPending } = authClient.useSession();
   const router = useRouter();
 
   useEffect(() => {
-    if (status === 'loading') return; // Still loading
+    if (isPending) return; // Still loading
 
     if (!session) {
       router.push('/auth/signin');
       return;
     }
-  }, [session, status, router]);
+  }, [session, isPending, router]);
 
   // Show loading state
-  if (status === 'loading') {
+  if (isPending) {
     return (
       <div className="min-h-screen bg-base-200 flex items-center justify-center">
         <div className="text-center">

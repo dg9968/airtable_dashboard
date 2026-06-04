@@ -2,7 +2,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useSession } from 'next-auth/react';
+import { authClient } from '@/lib/auth-client'
 
 interface WorkflowItem {
   title: string;
@@ -12,7 +12,7 @@ interface WorkflowItem {
 }
 
 export default function HomePage() {
-  const { data: session } = useSession();
+  const { data: session } = authClient.useSession();
   const userRole = (session?.user as any)?.role;
   const isAuthorized = userRole === 'staff' || userRole === 'admin';
 

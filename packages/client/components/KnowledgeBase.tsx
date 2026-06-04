@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { useSession } from 'next-auth/react';
+import { authClient } from '@/lib/auth-client'
 import Link from 'next/link';
 import ArticleCard from './ArticleCard';
 import ArticleEditor from './ArticleEditor';
@@ -96,7 +96,7 @@ const CategoryIcon = ({ icon, className = 'w-5 h-5' }: { icon: string; className
 };
 
 export default function KnowledgeBase() {
-  const { data: session } = useSession();
+  const { data: session } = authClient.useSession();
   const [articles, setArticles] = useState<Article[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);

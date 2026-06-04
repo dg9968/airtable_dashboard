@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useSession } from "next-auth/react";
+import { authClient } from '@/lib/auth-client';
 import { useRouter } from "next/navigation";
 
 interface LedgerEntry {
@@ -32,7 +32,7 @@ interface GroupedLedger {
 }
 
 export default function LedgerPage() {
-  const { data: session, status } = useSession();
+  const { data: session, isPending } = authClient.useSession();
   const router = useRouter();
   const [entries, setEntries] = useState<LedgerEntry[]>([]);
   const [groupedEntries, setGroupedEntries] = useState<GroupedLedger[]>([]);
@@ -49,7 +49,7 @@ export default function LedgerPage() {
   const [viewMode, setViewMode] = useState<"all" | "thisWeek" | "lastWeek" | "thisMonth" | "lastMonth">("all");
 
   useEffect(() => {
-    if (status === "unauthenticated") {
+    if (!session && !isPending) {
       router.push("/");
     }
   }, [status, router]);
@@ -167,12 +167,12 @@ export default function LedgerPage() {
   };
 
   useEffect(() => {
-    if (status === "authenticated") {
+    if (!!session) {
       fetchLedgerEntries();
     }
   }, [status, startDate, endDate, clientFilter, paymentMethodFilter, groupBy]);
 
-  if (status === "loading" || loading) {
+  if (isPending || loading) {
     return (
       <div className="flex justify-center items-center min-h-screen">
         <span className="loading loading-spinner loading-lg"></span>
@@ -180,7 +180,7 @@ export default function LedgerPage() {
     );
   }
 
-  if (status === "unauthenticated") {
+  if (!session && !isPending) {
     return null;
   }
 
