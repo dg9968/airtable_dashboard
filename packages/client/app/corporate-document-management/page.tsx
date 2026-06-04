@@ -21,7 +21,7 @@ interface CorporateClient {
 }
 
 function CorporateDocumentManagementContent() {
-  const { session, status } = useRequireRole(['staff', 'admin']);
+  const { session, isPending } = useRequireRole(['staff', 'admin']);
   const searchParams = useSearchParams();
   const router = useRouter();
   const [refreshKey, setRefreshKey] = useState(0);
@@ -65,7 +65,7 @@ function CorporateDocumentManagementContent() {
     }
   }, [searchParams, selectedClient, session]);
 
-  if (status === 'loading' || isLoadingClient) {
+  if (isPending || isLoadingClient) {
     return (
       <div className="min-h-screen bg-base-200 flex items-center justify-center">
         <div className="text-center">

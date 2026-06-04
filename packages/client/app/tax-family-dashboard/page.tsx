@@ -36,7 +36,7 @@ interface TaxFamily {
 }
 
 function TaxFamilyDashboardContent() {
-  const { session, status } = useRequireRole(['staff', 'admin']);
+  const { session, isPending } = useRequireRole(['staff', 'admin']);
   const searchParams = useSearchParams();
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState<Person[]>([]);
@@ -163,7 +163,7 @@ function TaxFamilyDashboardContent() {
   }, [searchParams, selectedPerson]);
 
   // Conditional returns after all hooks
-  if (status === 'loading') {
+  if (isPending) {
     return (
       <div className="min-h-screen bg-base-200 flex items-center justify-center">
         <div className="text-center">

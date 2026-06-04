@@ -7,9 +7,9 @@ import ArticleView from '@/components/ArticleView';
 
 export default function ArticlePage() {
   const { slug } = useParams();
-  const { session, status } = useRequireAuth();
+  const { session, isPending } = useRequireAuth();
 
-  if (status === 'loading') {
+  if (isPending) {
     return (
       <div className="min-h-screen bg-base-200 flex items-center justify-center">
         <span className="loading loading-spinner loading-lg"></span>

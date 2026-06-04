@@ -52,7 +52,7 @@ export default function LedgerPage() {
     if (!session && !isPending) {
       router.push("/");
     }
-  }, [status, router]);
+  }, [isPending, router]);
 
   // Debounce client filter input
   useEffect(() => {
@@ -170,7 +170,7 @@ export default function LedgerPage() {
     if (!!session) {
       fetchLedgerEntries();
     }
-  }, [status, startDate, endDate, clientFilter, paymentMethodFilter, groupBy]);
+  }, [isPending, startDate, endDate, clientFilter, paymentMethodFilter, groupBy]);
 
   if (isPending || loading) {
     return (

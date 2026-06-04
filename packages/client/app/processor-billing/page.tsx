@@ -6,9 +6,9 @@ import { useRequireRole } from '@/hooks/useAuth';
 import ProcessorBilling from '@/components/ProcessorBilling';
 
 export default function ProcessorBillingPage() {
-  const { session, status } = useRequireRole(['staff', 'admin']);
+  const { session, isPending } = useRequireRole(['staff', 'admin']);
 
-  if (status === 'loading') {
+  if (isPending) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
         <div className="text-center">

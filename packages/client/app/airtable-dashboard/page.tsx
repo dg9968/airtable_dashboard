@@ -4,9 +4,9 @@ import { useRequireRole } from '@/hooks/useAuth';
 import ManageBusiness from '@/components/ManageBusiness';
 
 export default function AirtableDashboardPage() {
-  const { session, status } = useRequireRole(['staff', 'admin']);
+  const { session, isPending } = useRequireRole(['staff', 'admin']);
 
-  if (status === 'loading') {
+  if (isPending) {
     return (
       <div className="min-h-screen bg-base-200 flex items-center justify-center">
         <div className="text-center">

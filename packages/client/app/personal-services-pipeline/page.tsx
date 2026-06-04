@@ -5,9 +5,9 @@ import { useRequireRole } from '@/hooks/useAuth';
 import PersonalServicesPipeline from '@/components/PersonalServicesPipeline';
 
 function PersonalServicesPipelineContent() {
-  const { session, status } = useRequireRole(['staff', 'admin']);
+  const { session, isPending } = useRequireRole(['staff', 'admin']);
 
-  if (status === 'loading') {
+  if (isPending) {
     return (
       <div className="min-h-screen bg-base-200 flex items-center justify-center">
         <div className="text-center">

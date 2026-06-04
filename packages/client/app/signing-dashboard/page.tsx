@@ -7,9 +7,9 @@ import SigningDashboard from '../../components/SigningDashboard';
 import Link from 'next/link';
 
 function SigningDashboardContent() {
-  const { session, status } = useRequireRole(['staff', 'admin']);
+  const { session, isPending } = useRequireRole(['staff', 'admin']);
 
-  if (status === 'loading') {
+  if (isPending) {
     return (
       <div className="flex justify-center items-center min-h-screen">
         <span className="loading loading-spinner loading-lg text-primary"></span>

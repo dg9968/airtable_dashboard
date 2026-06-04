@@ -1,9 +1,12 @@
-// app/layout.tsx - FIXED VERSION
 import { Providers } from './providers'
 import ClientLayoutWrapper from '@/components/ClientLayoutWrapper'
 import ClientThemeWrapper from '@/components/ClientThemeWrapper'
 import './globals.css'
 import type { Metadata } from 'next'
+
+// Better Auth's React client uses hooks at init time, which breaks SSG.
+// All pages in this app are user-specific anyway, so force dynamic rendering.
+export const dynamic = 'force-dynamic'
 
 export const metadata: Metadata = {
   title: 'Tax Pro Operations',

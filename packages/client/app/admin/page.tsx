@@ -3,9 +3,9 @@
 import { useRequireRole } from '@/hooks/useAuth'
 
 export default function AdminPage() {
-  const { session, status } = useRequireRole('admin')
+  const { session, isPending } = useRequireRole('admin')
 
-  if (status === 'loading') {
+  if (isPending) {
     return <div className="text-white">Loading...</div>
   }
 
