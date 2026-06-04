@@ -12,7 +12,7 @@ services:
       - key: BETTER_AUTH_SECRET
         sync: false  # Set in Render dashboard (same value as NEXTAUTH_SECRET)
       - key: BETTER_AUTH_URL
-        value: https://airtable-dashboard.onrender.com
+        value: https://app.vault1040.com
       - key: DATABASE_URL
         sync: false  # Set in Render dashboard - PostgreSQL connection string
       - key: NEXTAUTH_SECRET

@@ -7,7 +7,7 @@ const appUrl = process.env.BETTER_AUTH_URL || process.env.NEXTAUTH_URL || 'http:
 export const auth = betterAuth({
   secret: process.env.BETTER_AUTH_SECRET || process.env.NEXTAUTH_SECRET,
   baseURL: appUrl,
-  trustedOrigins: [appUrl, 'http://localhost:3000'],
+  trustedOrigins: [appUrl, 'https://app.vault1040.com', 'http://localhost:3000'],
   database: new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: { rejectUnauthorized: false },
