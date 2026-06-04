@@ -2,8 +2,12 @@ import { betterAuth } from 'better-auth'
 import { Pool } from 'pg'
 import { hash, compare } from 'bcryptjs'
 
+const appUrl = process.env.BETTER_AUTH_URL || process.env.NEXTAUTH_URL || 'http://localhost:3000'
+
 export const auth = betterAuth({
   secret: process.env.BETTER_AUTH_SECRET || process.env.NEXTAUTH_SECRET,
+  baseURL: appUrl,
+  trustedOrigins: [appUrl, 'http://localhost:3000'],
   database: new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: { rejectUnauthorized: false },
