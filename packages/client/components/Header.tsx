@@ -44,6 +44,9 @@ export default function Header() {
                   (session.user as any).role === "admin") && (
                   <>
                     <li>
+                      <Link href="/tax-notices">Tax Notices</Link>
+                    </li>
+                    <li>
                       <Link href="/knowledge-base">Knowledge Base</Link>
                     </li>
                     <li>
@@ -98,6 +101,11 @@ export default function Header() {
               {((session.user as any).role === "staff" ||
                 (session.user as any).role === "admin") && (
                 <>
+                  <li>
+                    <Link href="/tax-notices" className="btn btn-ghost">
+                      Tax Notices
+                    </Link>
+                  </li>
                   <li>
                     <Link href="/knowledge-base" className="btn btn-ghost">
                       Knowledge Base

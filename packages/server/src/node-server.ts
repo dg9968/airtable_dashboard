@@ -43,6 +43,8 @@ import knowledgeArticlesRoutes from './routes/knowledge-articles';
 import docusignEnvelopesRoutes from './routes/docusign-envelopes';
 import extensionsRoutes from './routes/extensions';
 import extensionsPersonalRoutes from './routes/extensions-personal';
+import taxNoticesRoutes from './routes/tax-notices';
+import taxNoticeNotesRoutes from './routes/tax-notice-notes';
 
 const app = new Hono();
 
@@ -116,6 +118,8 @@ app.route('/api/knowledge-articles', knowledgeArticlesRoutes);
 app.route('/api/docusign', docusignEnvelopesRoutes);
 app.route('/api/extensions', extensionsRoutes);
 app.route('/api/extensions-personal', extensionsPersonalRoutes);
+app.route('/api/tax-notices', taxNoticesRoutes);
+app.route('/api/tax-notice-notes', taxNoticeNotesRoutes);
 
 // 404 handler
 app.notFound((c) => {

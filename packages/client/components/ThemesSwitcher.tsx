@@ -12,11 +12,10 @@ const themes = [
 ];
 
 export default function ThemeSwitcher() {
-  const [currentTheme, setCurrentTheme] = useState('dark');
+  const [currentTheme, setCurrentTheme] = useState('cupcake');
 
   useEffect(() => {
-    // Get theme from localStorage or default to 'dark'
-    const savedTheme = localStorage.getItem('theme') || 'dark';
+    const savedTheme = localStorage.getItem('app-theme') || 'cupcake';
     setCurrentTheme(savedTheme);
     document.documentElement.setAttribute('data-theme', savedTheme);
   }, []);
@@ -24,7 +23,7 @@ export default function ThemeSwitcher() {
   const changeTheme = (theme: string) => {
     setCurrentTheme(theme);
     document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem('theme', theme);
+    localStorage.setItem('app-theme', theme);
   };
 
   return (

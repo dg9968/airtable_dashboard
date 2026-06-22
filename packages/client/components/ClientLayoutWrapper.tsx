@@ -26,12 +26,16 @@ export default function ClientLayoutWrapper({
     setMounted(true);
   }, []);
 
-  // During server-side rendering or initial client render, show default layout
+  // During SSR / before hydration, render nothing interactive.
+  // Any component calling authClient.useSession() (Header, HomePage, etc.) will
+  // crash on the server because better-auth's ESM bundle calls useRef before
+  // React's hook dispatcher is initialised. Suppress the entire tree until the
+  // client has mounted, then let React hydrate normally.
   if (!mounted) {
     return (
       <div className="min-h-screen flex flex-col">
-        <Header />
-        <main className="flex-1">{children}</main>
+        <div className="navbar bg-primary text-primary-content shadow-lg" />
+        <main className="flex-1" />
         <Footer />
       </div>
     );

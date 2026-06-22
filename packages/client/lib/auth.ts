@@ -10,7 +10,10 @@ export const auth = betterAuth({
   trustedOrigins: [appUrl, 'https://app.vault1040.com', 'http://localhost:3000'],
   database: new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false },
+    // Internal Render connections don't need SSL; external ones do
+    ssl: process.env.DATABASE_URL?.includes('.render.com')
+      ? { rejectUnauthorized: false }
+      : false,
   }),
   emailAndPassword: {
     enabled: true,

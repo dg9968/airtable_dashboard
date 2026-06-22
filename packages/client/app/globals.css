@@ -1,3 +1,53 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  /*
+   * Bridge shadcn utility classes (bg-primary, text-primary, etc.) to DaisyUI's
+   * active-theme CSS variables. DaisyUI sets --p, --s, --b1, --bc, etc. on the
+   * [data-theme] element; :root reads them here so Tailwind's generated utilities
+   * pick up the correct theme color instead of a hard-coded static value.
+   *
+   * Fallback values (after the comma) match the cupcake defaults so that the
+   * worst case is the correct default theme, not an obviously wrong color.
+   */
+  :root {
+    --background: oklch(var(--b1, 1 0 0));
+    --foreground: oklch(var(--bc, 0.239 0.024 304.08));
+    --card: oklch(var(--b1, 1 0 0));
+    --card-foreground: oklch(var(--bc, 0.239 0.024 304.08));
+    --popover: oklch(var(--b1, 1 0 0));
+    --popover-foreground: oklch(var(--bc, 0.239 0.024 304.08));
+    --primary: oklch(var(--p, 0.5991 0.2177 332.09));
+    --primary-foreground: oklch(var(--pc, 0.985 0 0));
+    --secondary: oklch(var(--s, 0.7569 0.1488 193.21));
+    --secondary-foreground: oklch(var(--sc, 0.145 0 0));
+    --muted: oklch(var(--b2, 0.95 0 0));
+    --muted-foreground: oklch(var(--bc, 0.5 0 0) / 0.7);
+    --accent: oklch(var(--a, 0.8475 0.1649 193.21));
+    --accent-foreground: oklch(var(--ac, 0.145 0 0));
+    --destructive: oklch(0.577 0.245 27.325);
+    --border: oklch(var(--b3, 0.9 0 0));
+    --input: oklch(var(--b3, 0.9 0 0));
+    --ring: oklch(var(--p, 0.5991 0.2177 332.09));
+    --radius: 0.625rem;
+    --sidebar: oklch(var(--b2, 0.95 0 0));
+    --sidebar-foreground: oklch(var(--bc, 0.239 0.024 304.08));
+    --sidebar-primary: oklch(var(--p, 0.5991 0.2177 332.09));
+    --sidebar-primary-foreground: oklch(var(--pc, 0.985 0 0));
+    --sidebar-accent: oklch(var(--b3, 0.9 0 0));
+    --sidebar-accent-foreground: oklch(var(--bc, 0.239 0.024 304.08));
+    --sidebar-border: oklch(var(--b3, 0.9 0 0));
+    --sidebar-ring: oklch(var(--p, 0.5991 0.2177 332.09));
+  }
+
+  * {
+    border-color: var(--border);
+  }
+
+  body {
+    background-color: oklch(var(--b1, 1 0 0));
+    color: oklch(var(--bc, 0.239 0.024 304.08));
+  }
+}

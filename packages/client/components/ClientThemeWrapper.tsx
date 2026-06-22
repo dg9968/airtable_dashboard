@@ -1,31 +1,21 @@
-// components/ClientThemeWrapper.tsx
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 
+// The initial data-theme is set synchronously by the inline script in layout.tsx
+// (before first paint, no flash). This component just syncs on mount as a safety net
+// in case the script is blocked (CSP, etc.).
 export default function ClientThemeWrapper({
   children
 }: {
   children: React.ReactNode;
 }) {
-  const [mounted, setMounted] = useState(false);
-
   useEffect(() => {
-    setMounted(true);
-    
-    // Set initial theme from localStorage or default to cupcake
-    const savedTheme = localStorage.getItem('theme') || 'cupcake';
-    document.documentElement.setAttribute('data-theme', savedTheme);
+    if (!document.documentElement.hasAttribute('data-theme')) {
+      const t = localStorage.getItem('app-theme') || 'cupcake';
+      document.documentElement.setAttribute('data-theme', t);
+    }
   }, []);
-
-  // Prevent hydration mismatch by not rendering until mounted
-  if (!mounted) {
-    return (
-      <div data-theme="cupcake">
-        {children}
-      </div>
-    );
-  }
 
   return <>{children}</>;
 }

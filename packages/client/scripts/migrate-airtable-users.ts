@@ -30,7 +30,9 @@ const airtable = new Airtable({ apiKey: AIRTABLE_TOKEN })
 const base = airtable.base(AIRTABLE_BASE_ID)
 const pool = new Pool({
   connectionString: DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
+  ssl: DATABASE_URL?.includes('.render.com')
+    ? { rejectUnauthorized: false }
+    : false,
 })
 
 async function fetchAirtableUsers() {

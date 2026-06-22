@@ -1,0 +1,3 @@
+- [Daniel's Role & Team](user-daniel-role.md) — Owner of Vault 1040 tax firm; team: Genesis (preparer), Javier (intake), Scarlett (client comms), Evelina (coordinator)
+- [Project Architecture Patterns](project-architecture.md) — Airtable helpers (REST API, not library), dual entry point registration, Better Auth roles, shadcn/ui component set
+- [Tax Notices Workflow](tax-notices-workflow.md) — 11 statuses, priority rules, Daniel escalation triggers, role-to-owner assignment map

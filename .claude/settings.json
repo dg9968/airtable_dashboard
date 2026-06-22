@@ -6,7 +6,8 @@
       "Bash(grep -E \"\\(ts|tsx|md\\)$\")",
       "Bash(bun add *)",
       "Bash(bun remove *)",
-      "Bash(Remove-Item -Recurse -Force \"c:\\\\Users\\\\danie\\\\Documents\\\\airtable-dashboard\\\\packages\\\\client\\\\app\\\\api\\\\auth\\\\[...nextauth]\")"
+      "Bash(Remove-Item -Recurse -Force \"c:\\\\Users\\\\danie\\\\Documents\\\\airtable-dashboard\\\\packages\\\\client\\\\app\\\\api\\\\auth\\\\[...nextauth]\")",
+      "Bash(npx shadcn@latest init --defaults --yes)"
     ],
     "additionalDirectories": [
       "c:\\Users\\danie\\Documents\\airtable-dashboard\\packages\\client\\app\\api\\auth\\[...nextauth]"
