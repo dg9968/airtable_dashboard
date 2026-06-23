@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { useRequireRole } from '@/hooks/useAuth'
@@ -61,6 +61,9 @@ interface Notice {
   createdBy: string
   createdTime: string
   validNextStatuses: string[]
+  letterDriveId: string | null
+  letterViewUrl: string | null
+  letterFileName: string | null
 }
 
 export default function TaxNoticeDetailPage() {
@@ -74,6 +77,9 @@ export default function TaxNoticeDetailPage() {
   const [advancing, setAdvancing] = useState(false)
   const [error, setError] = useState('')
   const [successMsg, setSuccessMsg] = useState('')
+  const [uploading, setUploading] = useState(false)
+  const [removing, setRemoving] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [assignedOwner, setAssignedOwner] = useState('')
   const [supportingTeamMember, setSupportingTeamMember] = useState('')
@@ -116,6 +122,35 @@ export default function TaxNoticeDetailPage() {
   const showSuccess = (msg: string) => {
     setSuccessMsg(msg)
     setTimeout(() => setSuccessMsg(''), 3000)
+  }
+
+  const handleLetterUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploading(true)
+    setError('')
+    try {
+      const form = new FormData()
+      form.append('file', file)
+      const res = await fetch(`${API_URL}/api/tax-notices/${id}/letter`, { method: 'POST', body: form })
+      const data = await res.json()
+      if (data.success) { setNotice(data.data); showSuccess('Letter uploaded') }
+      else setError(data.error || 'Upload failed')
+    } catch { setError('Network error during upload') }
+    finally { setUploading(false); if (fileInputRef.current) fileInputRef.current.value = '' }
+  }
+
+  const handleLetterRemove = async () => {
+    if (!confirm('Remove the attached letter?')) return
+    setRemoving(true)
+    setError('')
+    try {
+      const res = await fetch(`${API_URL}/api/tax-notices/${id}/letter`, { method: 'DELETE' })
+      const data = await res.json()
+      if (data.success) { setNotice(data.data); showSuccess('Letter removed') }
+      else setError(data.error || 'Remove failed')
+    } catch { setError('Network error') }
+    finally { setRemoving(false) }
   }
 
   const handleSave = async () => {
@@ -373,6 +408,74 @@ export default function TaxNoticeDetailPage() {
 
                 {notice.status === 'Closed / Archived' && (
                   <p className="text-xs text-base-content/40 mt-4 text-center">Notice is closed.</p>
+                )}
+              </div>
+            </div>
+
+            {/* Notice Letter */}
+            <div className="card bg-base-100 shadow">
+              <div className="card-body space-y-3">
+                <h2 className="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Notice Letter</h2>
+                {notice.letterDriveId ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-sm">
+                      <svg className="w-4 h-4 text-primary flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      <span className="truncate text-base-content/70">{notice.letterFileName || 'notice-letter'}</span>
+                    </div>
+                    <div className="flex gap-2">
+                      <a
+                        href={notice.letterViewUrl!}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="btn btn-sm btn-outline flex-1"
+                      >
+                        View
+                      </a>
+                      <a
+                        href={`${API_URL}/api/tax-notices/${id}/letter/download`}
+                        download
+                        className="btn btn-sm btn-outline flex-1"
+                      >
+                        Download
+                      </a>
+                    </div>
+                    <button
+                      onClick={handleLetterRemove}
+                      disabled={removing}
+                      className="btn btn-sm btn-ghost text-error w-full"
+                    >
+                      {removing ? <span className="loading loading-spinner loading-xs" /> : null}
+                      Remove
+                    </button>
+                  </div>
+                ) : (
+                  <div>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                      className="hidden"
+                      onChange={handleLetterUpload}
+                    />
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploading}
+                      className="btn btn-sm btn-outline w-full"
+                    >
+                      {uploading
+                        ? <><span className="loading loading-spinner loading-xs" /> Uploading…</>
+                        : <>
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                            </svg>
+                            Attach Letter
+                          </>
+                      }
+                    </button>
+                    <p className="text-xs text-base-content/40 mt-1 text-center">PDF, JPG, PNG, DOC</p>
+                  </div>
                 )}
               </div>
             </div>

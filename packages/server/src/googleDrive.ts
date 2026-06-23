@@ -725,6 +725,56 @@ export async function uploadSignedDocument(
   }
 }
 
+// Upload a notice letter to Google Drive under Tax Notices/{noticeId}/
+export async function uploadTaxNoticeLetter(
+  file: Buffer,
+  fileName: string,
+  mimeType: string,
+  noticeId: string,
+): Promise<{ fileId: string; webViewLink: string; webContentLink: string }> {
+  validateGoogleDriveEnvironment();
+  const rootId = await getRootFolderId();
+
+  const taxNoticesFolderId = await getOrCreateFolderWithLock(
+    'tax-notices-root',
+    'Tax Notices',
+    rootId,
+  );
+  const noticeFolderId = await getOrCreateFolderWithLock(
+    `tax-notice-${noticeId}`,
+    noticeId,
+    taxNoticesFolderId,
+  );
+
+  const uniqueFileName = `${Date.now()}_${fileName}`;
+
+  const uploadResponse = await drive.files.create({
+    requestBody: { name: uniqueFileName, parents: [noticeFolderId] },
+    media: { mimeType, body: Readable.from(file) },
+    supportsAllDrives: true,
+  });
+
+  const fileId = uploadResponse.data.id!;
+
+  await drive.permissions.create({
+    fileId,
+    requestBody: { role: 'reader', type: 'anyone' },
+    supportsAllDrives: true,
+  });
+
+  const fileResponse = await drive.files.get({
+    fileId,
+    fields: 'webViewLink, webContentLink',
+    supportsAllDrives: true,
+  });
+
+  return {
+    fileId,
+    webViewLink: fileResponse.data.webViewLink!,
+    webContentLink: fileResponse.data.webContentLink!,
+  };
+}
+
 // Test Google Drive connection
 export async function testGoogleDriveConnection() {
   try {

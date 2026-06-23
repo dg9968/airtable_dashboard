@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { fetchAllRecords, createRecords, updateRecords, getRecord } from '../lib/airtable-helpers';
+import { uploadTaxNoticeLetter, downloadFileFromGoogleDrive, deleteFileFromGoogleDrive, getFileMetadata } from '../googleDrive';
 
 const app = new Hono();
 const BASE_ID = process.env.AIRTABLE_BASE_ID || '';
@@ -83,6 +84,9 @@ function mapRecordToNotice(record: any) {
     proofOfSubmissionUploaded: record.fields['Proof of Submission Uploaded'] || false,
     finalResolution: record.fields['Final Resolution'] || '',
     createdBy: record.fields['Created By'] || '',
+    letterDriveId: record.fields['Letter Drive ID'] || null,
+    letterViewUrl: record.fields['Letter View URL'] || null,
+    letterFileName: record.fields['Letter File Name'] || null,
   };
 }
 
@@ -230,6 +234,82 @@ app.post('/', async (c) => {
       { success: false, error: error instanceof Error ? error.message : 'Failed to create tax notice' },
       500
     );
+  }
+});
+
+// POST /api/tax-notices/:id/letter — upload the notice letter to Google Drive
+app.post('/:id/letter', async (c) => {
+  try {
+    const id = c.req.param('id');
+    const formData = await c.req.formData();
+    const file = formData.get('file') as File | null;
+
+    if (!file) return c.json({ success: false, error: 'No file provided' }, 400);
+
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const { fileId, webViewLink } = await uploadTaxNoticeLetter(buffer, file.name, file.type || 'application/octet-stream', id);
+
+    const updated = await updateRecords(BASE_ID, TABLE, [{
+      id,
+      fields: {
+        'Letter Drive ID': fileId,
+        'Letter View URL': webViewLink,
+        'Letter File Name': file.name,
+      },
+    }]);
+
+    const notice = mapRecordToNotice(updated[0]);
+    return c.json({ success: true, data: { ...notice, validNextStatuses: STATUS_TRANSITIONS[notice.status] || [] } });
+  } catch (error) {
+    console.error('Error uploading notice letter:', error);
+    return c.json({ success: false, error: error instanceof Error ? error.message : 'Upload failed' }, 500);
+  }
+});
+
+// GET /api/tax-notices/:id/letter/download — proxy-download the letter from Google Drive
+app.get('/:id/letter/download', async (c) => {
+  try {
+    const id = c.req.param('id');
+    const record = await getRecord(BASE_ID, TABLE, id);
+    const driveId = record.fields['Letter Drive ID'] as string | undefined;
+    const fileName = record.fields['Letter File Name'] as string | undefined;
+
+    if (!driveId) return c.json({ success: false, error: 'No letter attached to this notice' }, 404);
+
+    const metadata = await getFileMetadata(driveId);
+    const buffer = await downloadFileFromGoogleDrive(driveId);
+
+    c.header('Content-Type', (metadata.mimeType as string) || 'application/octet-stream');
+    c.header('Content-Disposition', `attachment; filename="${encodeURIComponent(fileName || 'notice-letter')}"`);
+    c.header('Content-Length', buffer.length.toString());
+    return c.body(buffer);
+  } catch (error) {
+    console.error('Error downloading notice letter:', error);
+    return c.json({ success: false, error: error instanceof Error ? error.message : 'Download failed' }, 500);
+  }
+});
+
+// DELETE /api/tax-notices/:id/letter — remove the letter from Drive and clear fields
+app.delete('/:id/letter', async (c) => {
+  try {
+    const id = c.req.param('id');
+    const record = await getRecord(BASE_ID, TABLE, id);
+    const driveId = record.fields['Letter Drive ID'] as string | undefined;
+
+    if (driveId) {
+      try { await deleteFileFromGoogleDrive(driveId); } catch { /* file may already be gone */ }
+    }
+
+    const updated = await updateRecords(BASE_ID, TABLE, [{
+      id,
+      fields: { 'Letter Drive ID': null, 'Letter View URL': null, 'Letter File Name': null },
+    }]);
+
+    const notice = mapRecordToNotice(updated[0]);
+    return c.json({ success: true, data: { ...notice, validNextStatuses: STATUS_TRANSITIONS[notice.status] || [] } });
+  } catch (error) {
+    console.error('Error removing notice letter:', error);
+    return c.json({ success: false, error: error instanceof Error ? error.message : 'Remove failed' }, 500);
   }
 });
 
