@@ -350,8 +350,8 @@ app.patch('/:id', async (c) => {
     if (body.dateReceived !== undefined) fields['Date Received'] = body.dateReceived;
     if (body.responseDueDate !== undefined) fields['Response Due Date'] = body.responseDueDate;
     if (body.amountDue !== undefined) fields['Amount Due'] = body.amountDue;
-    if (body.assignedOwner !== undefined) fields['Assigned Owner'] = body.assignedOwner;
-    if (body.supportingTeamMember !== undefined) fields['Supporting Team Member'] = body.supportingTeamMember;
+    if (body.assignedOwner !== undefined) fields['Assigned Owner'] = body.assignedOwner || null;
+    if (body.supportingTeamMember !== undefined) fields['Supporting Team Member'] = body.supportingTeamMember || null;
     if (body.status !== undefined) fields['Status'] = body.status;
     if (body.priority !== undefined) fields['Priority'] = body.priority;
     if (body.danielReviewRequired !== undefined) fields['Daniel Review Required'] = body.danielReviewRequired;
