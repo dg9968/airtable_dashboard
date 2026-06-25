@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { useRequireRole } from '@/hooks/useAuth'
 import TaxNoticeNotes from '@/components/TaxNoticeNotes'
+import TaxNoticeAttachments from '@/components/TaxNoticeAttachments'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
 
@@ -16,6 +17,9 @@ const STATUS_COLOR: Record<string, string> = {
   'Initial Review': 'bg-indigo-600 text-white',
   'Waiting on Client': 'bg-yellow-500 text-black',
   'Research / Drafting': 'bg-purple-600 text-white',
+  'Drafting Response': 'bg-violet-600 text-white',
+  'Awaiting Client Signature': 'bg-amber-500 text-black',
+  'Response Signed': 'bg-teal-500 text-white',
   'Needs Daniel Review': 'bg-red-600 text-white',
   'Ready to Submit': 'bg-green-600 text-white',
   'Submitted': 'bg-teal-600 text-white',
@@ -31,6 +35,16 @@ const PRIORITY_COLOR: Record<string, string> = {
 }
 
 const OWNERS = ['Daniel', 'Genesis', 'Javier', 'Scarlett', 'Evelina']
+
+const LIFECYCLE_STATUSES = new Set([
+  'Research / Drafting', 'Drafting Response', 'Awaiting Client Signature', 'Response Signed',
+  'Needs Daniel Review', 'Ready to Submit', 'Submitted', 'Waiting on Agency', 'Resolved', 'Closed / Archived',
+])
+
+const DRAFT_DONE_STATUSES = new Set([
+  'Awaiting Client Signature', 'Response Signed', 'Ready to Submit',
+  'Submitted', 'Waiting on Agency', 'Resolved', 'Closed / Archived',
+])
 
 const inputCls = 'input input-bordered w-full'
 const selectCls = 'select select-bordered w-full'
@@ -64,6 +78,10 @@ interface Notice {
   letterDriveId: string | null
   letterViewUrl: string | null
   letterFileName: string | null
+  responseSentToClientDate: string
+  clientSignatureDate: string
+  responseSentToAgencyDate: string
+  responseSubmissionMethod: string
 }
 
 export default function TaxNoticeDetailPage() {
@@ -77,10 +95,8 @@ export default function TaxNoticeDetailPage() {
   const [advancing, setAdvancing] = useState(false)
   const [error, setError] = useState('')
   const [successMsg, setSuccessMsg] = useState('')
-  const [uploading, setUploading] = useState(false)
-  const [removing, setRemoving] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
+  // Workflow control state
   const [assignedOwner, setAssignedOwner] = useState('')
   const [supportingTeamMember, setSupportingTeamMember] = useState('')
   const [priority, setPriority] = useState('')
@@ -89,6 +105,10 @@ export default function TaxNoticeDetailPage() {
   const [responseFiledDate, setResponseFiledDate] = useState('')
   const [proofUploaded, setProofUploaded] = useState(false)
   const [finalResolution, setFinalResolution] = useState('')
+  const [responseSentToClientDate, setResponseSentToClientDate] = useState('')
+  const [clientSignatureDate, setClientSignatureDate] = useState('')
+  const [responseSentToAgencyDate, setResponseSentToAgencyDate] = useState('')
+  const [responseSubmissionMethod, setResponseSubmissionMethod] = useState('')
 
   const fetchNotice = async () => {
     setLoading(true)
@@ -106,6 +126,10 @@ export default function TaxNoticeDetailPage() {
         setResponseFiledDate(n.responseFiledDate)
         setProofUploaded(n.proofOfSubmissionUploaded)
         setFinalResolution(n.finalResolution)
+        setResponseSentToClientDate(n.responseSentToClientDate || '')
+        setClientSignatureDate(n.clientSignatureDate || '')
+        setResponseSentToAgencyDate(n.responseSentToAgencyDate || '')
+        setResponseSubmissionMethod(n.responseSubmissionMethod || '')
       }
     } catch (err) {
       console.error('Failed to fetch notice:', err)
@@ -124,35 +148,6 @@ export default function TaxNoticeDetailPage() {
     setTimeout(() => setSuccessMsg(''), 3000)
   }
 
-  const handleLetterUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setUploading(true)
-    setError('')
-    try {
-      const form = new FormData()
-      form.append('file', file)
-      const res = await fetch(`${API_URL}/api/tax-notices/${id}/letter`, { method: 'POST', body: form })
-      const data = await res.json()
-      if (data.success) { setNotice(data.data); showSuccess('Letter uploaded') }
-      else setError(data.error || 'Upload failed')
-    } catch { setError('Network error during upload') }
-    finally { setUploading(false); if (fileInputRef.current) fileInputRef.current.value = '' }
-  }
-
-  const handleLetterRemove = async () => {
-    if (!confirm('Remove the attached letter?')) return
-    setRemoving(true)
-    setError('')
-    try {
-      const res = await fetch(`${API_URL}/api/tax-notices/${id}/letter`, { method: 'DELETE' })
-      const data = await res.json()
-      if (data.success) { setNotice(data.data); showSuccess('Letter removed') }
-      else setError(data.error || 'Remove failed')
-    } catch { setError('Network error') }
-    finally { setRemoving(false) }
-  }
-
   const handleSave = async () => {
     setSaving(true)
     setError('')
@@ -169,6 +164,10 @@ export default function TaxNoticeDetailPage() {
           responseFiledDate: responseFiledDate || null,
           proofOfSubmissionUploaded: proofUploaded,
           finalResolution,
+          responseSentToClientDate: responseSentToClientDate || null,
+          clientSignatureDate: clientSignatureDate || null,
+          responseSentToAgencyDate: responseSentToAgencyDate || null,
+          responseSubmissionMethod: responseSubmissionMethod || null,
         }),
       })
       const data = await res.json()
@@ -217,6 +216,33 @@ export default function TaxNoticeDetailPage() {
   const dueDateColor = daysUntilDue != null
     ? daysUntilDue < 0 ? 'text-error' : daysUntilDue <= 7 ? 'text-orange-500' : daysUntilDue <= 14 ? 'text-warning' : 'text-base-content'
     : 'text-base-content'
+
+  const lifecycleSteps = [
+    {
+      label: 'Response Drafted',
+      done: DRAFT_DONE_STATUSES.has(notice.status),
+      date: '',
+      sub: '',
+    },
+    {
+      label: 'Sent to Client',
+      done: !!notice.responseSentToClientDate,
+      date: notice.responseSentToClientDate,
+      sub: '',
+    },
+    {
+      label: 'Client Signed',
+      done: !!notice.clientSignatureDate,
+      date: notice.clientSignatureDate,
+      sub: '',
+    },
+    {
+      label: 'Sent to Agency',
+      done: !!notice.responseSentToAgencyDate,
+      date: notice.responseSentToAgencyDate,
+      sub: notice.responseSubmissionMethod,
+    },
+  ]
 
   return (
     <div className="min-h-screen bg-base-200">
@@ -337,20 +363,46 @@ export default function TaxNoticeDetailPage() {
                   <textarea className={textareaCls} rows={3} value={clientDocumentsNeeded} onChange={e => setClientDocumentsNeeded(e.target.value)} placeholder="List any documents still needed from the client..." />
                 </div>
 
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <div>
-                    <label className={labelCls}>Response Filed Date</label>
-                    <input type="date" className={inputCls} value={responseFiledDate} onChange={e => setResponseFiledDate(e.target.value)} />
-                  </div>
-                  <div className="flex items-center gap-3 pt-5">
-                    <input
-                      type="checkbox"
-                      id="proofUploaded"
-                      checked={proofUploaded}
-                      onChange={e => setProofUploaded(e.target.checked)}
-                      className="checkbox checkbox-success"
-                    />
-                    <label htmlFor="proofUploaded" className="text-sm cursor-pointer">Proof of Submission Uploaded</label>
+                {/* Response process dates */}
+                <div>
+                  <p className="text-xs font-semibold text-base-content/40 uppercase tracking-wider mb-3">Response Process</p>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div>
+                      <label className={labelCls}>Response Filed Date</label>
+                      <input type="date" className={inputCls} value={responseFiledDate} onChange={e => setResponseFiledDate(e.target.value)} />
+                    </div>
+                    <div>
+                      <label className={labelCls}>Sent to Client Date</label>
+                      <input type="date" className={inputCls} value={responseSentToClientDate} onChange={e => setResponseSentToClientDate(e.target.value)} />
+                    </div>
+                    <div>
+                      <label className={labelCls}>Client Signature Date</label>
+                      <input type="date" className={inputCls} value={clientSignatureDate} onChange={e => setClientSignatureDate(e.target.value)} />
+                    </div>
+                    <div>
+                      <label className={labelCls}>Sent to Agency Date</label>
+                      <input type="date" className={inputCls} value={responseSentToAgencyDate} onChange={e => setResponseSentToAgencyDate(e.target.value)} />
+                    </div>
+                    <div>
+                      <label className={labelCls}>Submission Method</label>
+                      <select className={selectCls} value={responseSubmissionMethod} onChange={e => setResponseSubmissionMethod(e.target.value)}>
+                        <option value="">—</option>
+                        <option value="Mail">Mail</option>
+                        <option value="Fax">Fax</option>
+                        <option value="Certified Mail">Certified Mail</option>
+                        <option value="Electronic">Electronic</option>
+                      </select>
+                    </div>
+                    <div className="flex items-center gap-3 pt-5">
+                      <input
+                        type="checkbox"
+                        id="proofUploaded"
+                        checked={proofUploaded}
+                        onChange={e => setProofUploaded(e.target.checked)}
+                        className="checkbox checkbox-success"
+                      />
+                      <label htmlFor="proofUploaded" className="text-sm cursor-pointer">Proof of Submission Uploaded</label>
+                    </div>
                   </div>
                 </div>
 
@@ -372,8 +424,10 @@ export default function TaxNoticeDetailPage() {
             <TaxNoticeNotes noticeId={notice.id} clientName={notice.clientName} />
           </div>
 
-          {/* RIGHT: Status */}
+          {/* RIGHT column */}
           <div className="space-y-4">
+
+            {/* Current Status */}
             <div className="card bg-base-100 shadow">
               <div className="card-body">
                 <h2 className="text-xs font-semibold text-base-content/50 uppercase tracking-wider mb-3">Current Status</h2>
@@ -412,73 +466,36 @@ export default function TaxNoticeDetailPage() {
               </div>
             </div>
 
-            {/* Notice Letter */}
-            <div className="card bg-base-100 shadow">
-              <div className="card-body space-y-3">
-                <h2 className="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Notice Letter</h2>
-                {notice.letterDriveId ? (
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2 text-sm">
-                      <svg className="w-4 h-4 text-primary flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                      </svg>
-                      <span className="truncate text-base-content/70">{notice.letterFileName || 'notice-letter'}</span>
-                    </div>
-                    <div className="flex gap-2">
-                      <a
-                        href={notice.letterViewUrl!}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="btn btn-sm btn-outline flex-1"
-                      >
-                        View
-                      </a>
-                      <a
-                        href={`${API_URL}/api/tax-notices/${id}/letter/download`}
-                        download
-                        className="btn btn-sm btn-outline flex-1"
-                      >
-                        Download
-                      </a>
-                    </div>
-                    <button
-                      onClick={handleLetterRemove}
-                      disabled={removing}
-                      className="btn btn-sm btn-ghost text-error w-full"
-                    >
-                      {removing ? <span className="loading loading-spinner loading-xs" /> : null}
-                      Remove
-                    </button>
+            {/* Attachments */}
+            <TaxNoticeAttachments
+              noticeId={notice.id}
+              legacyLetter={{ driveId: notice.letterDriveId, viewUrl: notice.letterViewUrl, fileName: notice.letterFileName }}
+              userName={session.user?.name || 'Staff'}
+              onLegacyLetterRemoved={fetchNotice}
+            />
+
+            {/* Response Lifecycle */}
+            {LIFECYCLE_STATUSES.has(notice.status) && (
+              <div className="card bg-base-100 shadow">
+                <div className="card-body space-y-3">
+                  <h2 className="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Response Lifecycle</h2>
+                  <div className="space-y-3">
+                    {lifecycleSteps.map((step, i) => (
+                      <div key={i} className="flex items-start gap-3">
+                        <div className={`mt-0.5 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${step.done ? 'bg-success text-success-content' : 'bg-base-300 text-base-content/30'}`}>
+                          {step.done ? '✓' : i + 1}
+                        </div>
+                        <div>
+                          <p className={`text-sm font-medium ${step.done ? 'text-base-content' : 'text-base-content/40'}`}>{step.label}</p>
+                          {step.date && <p className="text-xs text-base-content/50 mt-0.5">{fmt(step.date)}</p>}
+                          {step.sub && <p className="text-xs text-base-content/40 mt-0.5">{step.sub}</p>}
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                ) : (
-                  <div>
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                      className="hidden"
-                      onChange={handleLetterUpload}
-                    />
-                    <button
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={uploading}
-                      className="btn btn-sm btn-outline w-full"
-                    >
-                      {uploading
-                        ? <><span className="loading loading-spinner loading-xs" /> Uploading…</>
-                        : <>
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                            </svg>
-                            Attach Letter
-                          </>
-                      }
-                    </button>
-                    <p className="text-xs text-base-content/40 mt-1 text-center">PDF, JPG, PNG, DOC</p>
-                  </div>
-                )}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Submission summary */}
             <div className="card bg-base-100 shadow">
@@ -494,6 +511,18 @@ export default function TaxNoticeDetailPage() {
                     {notice.proofOfSubmissionUploaded ? '✓ Yes' : 'No'}
                   </span>
                 </div>
+                {notice.responseSentToAgencyDate && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-base-content/60">Sent to Agency</span>
+                    <span>{fmt(notice.responseSentToAgencyDate)}</span>
+                  </div>
+                )}
+                {notice.responseSubmissionMethod && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-base-content/60">Method</span>
+                    <span>{notice.responseSubmissionMethod}</span>
+                  </div>
+                )}
               </div>
             </div>
           </div>

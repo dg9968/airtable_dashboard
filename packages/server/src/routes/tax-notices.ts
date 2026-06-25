@@ -15,8 +15,11 @@ const STATUS_TRANSITIONS: Record<string, string[]> = {
   'Scanned / Uploaded': ['Initial Review'],
   'Initial Review': ['Waiting on Client', 'Research / Drafting'],
   'Waiting on Client': ['Research / Drafting'],
-  'Research / Drafting': ['Needs Daniel Review', 'Ready to Submit'],
-  'Needs Daniel Review': ['Ready to Submit'],
+  'Research / Drafting': ['Needs Daniel Review', 'Drafting Response', 'Ready to Submit'],
+  'Drafting Response': ['Awaiting Client Signature', 'Needs Daniel Review'],
+  'Awaiting Client Signature': ['Response Signed'],
+  'Response Signed': ['Ready to Submit'],
+  'Needs Daniel Review': ['Drafting Response', 'Ready to Submit'],
   'Ready to Submit': ['Submitted'],
   'Submitted': ['Waiting on Agency'],
   'Waiting on Agency': ['Resolved'],
@@ -87,6 +90,10 @@ function mapRecordToNotice(record: any) {
     letterDriveId: record.fields['Letter Drive ID'] || null,
     letterViewUrl: record.fields['Letter View URL'] || null,
     letterFileName: record.fields['Letter File Name'] || null,
+    responseSentToClientDate: record.fields['Response Sent to Client Date'] || '',
+    clientSignatureDate: record.fields['Client Signature Date'] || '',
+    responseSentToAgencyDate: record.fields['Response Sent to Agency Date'] || '',
+    responseSubmissionMethod: record.fields['Response Submission Method'] || '',
   };
 }
 
@@ -359,6 +366,10 @@ app.patch('/:id', async (c) => {
     if (body.responseFiledDate !== undefined) fields['Response Filed Date'] = body.responseFiledDate;
     if (body.proofOfSubmissionUploaded !== undefined) fields['Proof of Submission Uploaded'] = body.proofOfSubmissionUploaded;
     if (body.finalResolution !== undefined) fields['Final Resolution'] = body.finalResolution;
+    if (body.responseSentToClientDate !== undefined) fields['Response Sent to Client Date'] = body.responseSentToClientDate || null;
+    if (body.clientSignatureDate !== undefined) fields['Client Signature Date'] = body.clientSignatureDate || null;
+    if (body.responseSentToAgencyDate !== undefined) fields['Response Sent to Agency Date'] = body.responseSentToAgencyDate || null;
+    if (body.responseSubmissionMethod !== undefined) fields['Response Submission Method'] = body.responseSubmissionMethod || null;
 
     const records = await updateRecords(BASE_ID, TABLE, [{ id, fields }]);
     const notice = mapRecordToNotice(records[0]);
@@ -393,21 +404,16 @@ app.post('/:id/advance-status', async (c) => {
       );
     }
 
-    if (targetStatus === 'Submitted') {
-      if (!notice.responseFiledDate) {
-        return c.json({ success: false, error: 'Cannot submit — Response Filed Date must be set first.' }, 400);
-      }
-      if (!notice.proofOfSubmissionUploaded) {
-        return c.json({ success: false, error: 'Cannot submit — Proof of Submission must be marked as uploaded first.' }, 400);
-      }
-    }
-
     if (targetStatus === 'Closed / Archived' && !notice.finalResolution?.trim()) {
       return c.json({ success: false, error: 'Cannot archive — Final Resolution must be filled in first.' }, 400);
     }
 
     if (targetStatus === 'Needs Daniel Review' && !notice.danielReviewRequired) {
       return c.json({ success: false, error: 'Daniel Review is not required for this notice.' }, 400);
+    }
+
+    if (targetStatus === 'Response Signed' && !notice.clientSignatureDate) {
+      return c.json({ success: false, error: 'Cannot mark as signed — Client Signature Date must be saved first.' }, 400);
     }
 
     const updated = await updateRecords(BASE_ID, TABLE, [{ id, fields: { 'Status': targetStatus } }]);

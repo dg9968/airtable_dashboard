@@ -14,6 +14,9 @@ const STATUS_COLOR: Record<string, string> = {
   'Initial Review': 'bg-indigo-600 text-white',
   'Waiting on Client': 'bg-yellow-500 text-black',
   'Research / Drafting': 'bg-purple-600 text-white',
+  'Drafting Response': 'bg-violet-600 text-white',
+  'Awaiting Client Signature': 'bg-amber-500 text-black',
+  'Response Signed': 'bg-teal-500 text-white',
   'Needs Daniel Review': 'bg-red-600 text-white',
   'Ready to Submit': 'bg-green-600 text-white',
   'Submitted': 'bg-teal-600 text-white',
@@ -30,7 +33,8 @@ const PRIORITY_COLOR: Record<string, string> = {
 
 const STATUSES = [
   'New Notice', 'Scanned / Uploaded', 'Initial Review', 'Waiting on Client',
-  'Research / Drafting', 'Needs Daniel Review', 'Ready to Submit',
+  'Research / Drafting', 'Drafting Response', 'Awaiting Client Signature', 'Response Signed',
+  'Needs Daniel Review', 'Ready to Submit',
   'Submitted', 'Waiting on Agency', 'Resolved', 'Closed / Archived',
 ]
 const OWNERS = ['Daniel', 'Genesis', 'Javier', 'Scarlett', 'Evelina']

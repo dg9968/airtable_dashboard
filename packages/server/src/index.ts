@@ -43,6 +43,7 @@ import extensionsRoutes from './routes/extensions';
 import extensionsPersonalRoutes from './routes/extensions-personal';
 import taxNoticesRoutes from './routes/tax-notices';
 import taxNoticeNotesRoutes from './routes/tax-notice-notes';
+import taxNoticeAttachmentsRoutes from './routes/tax-notice-attachments';
 
 const app = new Hono();
 
@@ -118,6 +119,7 @@ app.route('/api/extensions', extensionsRoutes);
 app.route('/api/extensions-personal', extensionsPersonalRoutes);
 app.route('/api/tax-notices', taxNoticesRoutes);
 app.route('/api/tax-notice-notes', taxNoticeNotesRoutes);
+app.route('/api/tax-notice-attachments', taxNoticeAttachmentsRoutes);
 
 // 404 handler
 app.notFound((c) => {
