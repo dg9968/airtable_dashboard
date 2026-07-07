@@ -100,9 +100,8 @@ GOOGLE_DRIVE_FOLDER_ID
 - Deployment configured for Render.com with specific build/start commands
 - API routes migrated from Next.js API routes to Hono server routes
 
-### Adding New Server Routes (CRITICAL)
-When creating a new route file in `packages/server/src/routes/`, you **must** register it in **both** entry points:
-1. `packages/server/src/index.ts` — used locally with Bun
-2. `packages/server/src/node-server.ts` — used in production on Render.com (Node.js)
+### Adding New Server Routes
+Register new route files from `packages/server/src/routes/` in **`packages/server/src/app.ts`** — the single shared Hono app. The entry points (`src/index.ts` for Bun dev, `src/node-server.ts` for production/Render) are thin wrappers around it and must not register routes themselves.
 
-Failing to update `node-server.ts` will cause 404 errors in production even though the route works locally.
+### Airtable → Postgres Migration (in progress)
+The server is being migrated from Airtable to the existing Render Postgres (`DATABASE_URL`, shared with the client's Better Auth). Drizzle ORM owns the business schema in `packages/server/src/db/schema/`; migrations via `bun run db:generate` + `bun run db:migrate` (**never** `drizzle-kit push` — the DB also holds Better Auth tables owned by `packages/client/scripts/run-migrations.ts`). ETL scripts live in `packages/server/scripts/etl/`. Airtable rec IDs are preserved as Postgres text PKs.

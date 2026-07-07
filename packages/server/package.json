@@ -5,9 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "bun run --hot src/index.ts",
-    "build": "bun build src/node-server.ts --outdir=dist --target=node --external=airtable --external=googleapis --external=google-auth-library",
+    "build": "bun build src/node-server.ts --outdir=dist --target=node --external=airtable --external=googleapis --external=google-auth-library --external=pg",
     "start": "node dist/node-server.js",
     "lint": "eslint . --ext .ts",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
     "backup:onedrive": "bun run src/scripts/onedrive-to-gdrive-backup.ts",
     "backup:onedrive:dry-run": "bun run src/scripts/onedrive-to-gdrive-backup.ts --dry-run"
   },
@@ -20,18 +22,22 @@
     "airtable": "^0.12.2",
     "bcryptjs": "^3.0.2",
     "csv-parse": "^6.1.0",
+    "drizzle-orm": "^0.45.2",
     "google-auth-library": "^10.3.0",
     "googleapis": "^155.0.1",
     "hono": "^4.0.0",
     "isomorphic-fetch": "^3.0.0",
-    "pdf-lib": "^1.17.1"
+    "pdf-lib": "^1.17.1",
+    "pg": "^8.22.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.1",
     "@types/bcryptjs": "^2.4.6",
     "@types/bun": "latest",
     "@types/node": "^20",
+    "@types/pg": "^8.20.0",
     "dotenv": "^17.2.1",
+    "drizzle-kit": "^0.31.10",
     "eslint": "^9.33.0",
     "typescript": "^5"
   }
