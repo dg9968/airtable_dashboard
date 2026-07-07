@@ -1,9 +1,11 @@
 /**
- * Services Cached Routes
+ * Services Cached Routes (Postgres-backed)
  */
 
 import { Hono } from 'hono';
-import { fetchAllTableData } from '../airtable';
+import { asc } from 'drizzle-orm';
+import { getDb } from '../db/client';
+import { servicesCorporate } from '../db/schema';
 
 const app = new Hono();
 
@@ -30,17 +32,20 @@ app.get('/', async (c) => {
       });
     }
 
-    console.log('Fetching fresh services data from Airtable');
+    console.log('Fetching fresh services data from Postgres');
 
-    const records = await fetchAllTableData('Services Corporate');
+    const rows = await getDb()
+      .select()
+      .from(servicesCorporate)
+      .orderBy(asc(servicesCorporate.createdAt));
 
-    const services = records.map((record) => ({
-      id: record.id,
-      name: record.fields['Services'] || 'Unnamed Service',
-      price: record.fields['Price'] || 0,
-      description: record.fields['Description'] || '',
-      category: record.fields['Category'] || null,
-      billingCycle: record.fields['Billing Cycle'] || null
+    const services = rows.map((row) => ({
+      id: row.id,
+      name: row.name || 'Unnamed Service',
+      price: row.price != null ? Number(row.price) : 0,
+      description: row.description || '',
+      category: row.category || null,
+      billingCycle: row.billingCycle || null
     }));
 
     servicesCache = services;

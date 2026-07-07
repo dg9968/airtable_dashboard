@@ -1,106 +1,43 @@
 /**
- * Services Routes
+ * Services Routes (Postgres-backed)
  */
 
 import { Hono } from 'hono';
-import { fetchAllTableData, testConnection } from '../airtable';
-import { createRecords } from '../lib/airtable-helpers';
+import { asc } from 'drizzle-orm';
+import { getDb } from '../db/client';
+import { servicesCorporate } from '../db/schema';
 
 const app = new Hono();
 
+// Rebuild the Airtable-style fields object from columns (legacy response shape).
+function toFieldData(row: typeof servicesCorporate.$inferSelect): Record<string, unknown> {
+  const fields: Record<string, unknown> = { 'Services': row.name };
+  if (row.price != null) fields['Price'] = Number(row.price);
+  if (row.description) fields['Description'] = row.description;
+  if (row.category) fields['Category'] = row.category;
+  if (row.billingCycle) fields['Billing Cycle'] = row.billingCycle;
+  return fields;
+}
+
 /**
  * GET /api/services
- * Fetch all services from Services Corporate table with flexible field detection
+ * Fetch all services from the services_corporate table
  */
 app.get('/', async (c) => {
   try {
-    const connectionTest = await testConnection();
-    if (!connectionTest.success) {
-      return c.json(
-        {
-          success: false,
-          error: `Connection failed: ${connectionTest.message}`,
-          suggestion: 'Please check your AIRTABLE_PERSONAL_ACCESS_TOKEN and AIRTABLE_BASE_ID in .env.local'
-        },
-        401
-      );
-    }
+    const rows = await getDb()
+      .select()
+      .from(servicesCorporate)
+      .orderBy(asc(servicesCorporate.createdAt));
 
-    const possibleServiceTableNames = [
-      'Services Corporate',
-      'Corporate Services',
-      'Services',
-      'Service Types',
-      'Service Categories',
-      'Service Offerings'
-    ];
-
-    let serviceRecords: any[] = [];
-    let actualServiceTableName = '';
-    let serviceTableFound = false;
-
-    for (const tableName of possibleServiceTableNames) {
-      try {
-        console.log(`Trying services table: ${tableName}`);
-        serviceRecords = await fetchAllTableData(tableName);
-        actualServiceTableName = tableName;
-        serviceTableFound = true;
-        console.log(`Successfully found services table: ${tableName} with ${serviceRecords.length} total records`);
-        break;
-      } catch (error) {
-        console.log(`Services table "${tableName}" not found, trying next...`);
-        continue;
-      }
-    }
-
-    if (!serviceTableFound) {
-      return c.json({
-        success: false,
-        error: 'No Services Corporate table found',
-        suggestion: 'Please check that you have a table for services (e.g., "Services Corporate", "Services", etc.)',
-        searchedFor: possibleServiceTableNames
-      }, 404);
-    }
-
-    const services = serviceRecords.map(record => {
-      const possibleNameFields = [
-        'Services',
-        'Service',
-        'Service Name',
-        'Name',
-        'Service Type',
-        'Service Title',
-        'Title',
-        'Description'
-      ];
-
-      let serviceName = 'Unnamed Service';
-      let foundField = null;
-
-      for (const fieldName of possibleNameFields) {
-        if (record.fields[fieldName] && record.fields[fieldName].toString().trim()) {
-          serviceName = record.fields[fieldName].toString().trim();
-          foundField = fieldName;
-          break;
-        }
-      }
-
-      if (serviceName === 'Unnamed Service') {
-        const textFields = Object.entries(record.fields).filter(([key, value]) =>
-          typeof value === 'string' && value.trim().length > 0
-        );
-        if (textFields.length > 0) {
-          serviceName = (textFields[0][1] as string).toString().trim();
-          foundField = textFields[0][0];
-        }
-      }
-
+    const services = rows.map((row) => {
+      const fieldData = toFieldData(row);
       return {
-        id: record.id,
-        name: serviceName,
-        nameField: foundField,
-        allFields: Object.keys(record.fields),
-        allFieldData: record.fields
+        id: row.id,
+        name: row.name || 'Unnamed Service',
+        nameField: 'Services',
+        allFields: Object.keys(fieldData),
+        allFieldData: fieldData,
       };
     });
 
@@ -113,7 +50,7 @@ app.get('/', async (c) => {
       success: true,
       data: {
         services: services,
-        tableName: actualServiceTableName,
+        tableName: 'Services Corporate',
         totalServices: services.length,
         bookkeepingServiceExists: !!bookkeepingService,
         bookkeepingService: bookkeepingService || null,
@@ -135,7 +72,7 @@ app.get('/', async (c) => {
       {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to fetch services data',
-        suggestion: 'Check your Airtable connection and Services Corporate table'
+        suggestion: 'Check the database connection'
       },
       500
     );
@@ -144,7 +81,7 @@ app.get('/', async (c) => {
 
 /**
  * POST /api/services
- * Create a new service record in the Services Corporate table
+ * Create a new service record
  *
  * Expected body: { name: string }
  */
@@ -156,12 +93,20 @@ app.post('/', async (c) => {
       return c.json({ success: false, error: 'Missing required field: name' }, 400);
     }
 
-    const baseId = process.env.AIRTABLE_BASE_ID || '';
-    const records = await createRecords(baseId, 'Services Corporate', [
-      { fields: { Services: name.trim() } },
-    ]);
+    const [row] = await getDb()
+      .insert(servicesCorporate)
+      .values({ name: name.trim() })
+      .returning();
 
-    return c.json({ success: true, data: records[0] });
+    // Legacy Airtable record shape
+    return c.json({
+      success: true,
+      data: {
+        id: row.id,
+        createdTime: row.createdAt.toISOString(),
+        fields: { Services: row.name },
+      },
+    });
   } catch (error) {
     console.error('Error creating service:', error);
     return c.json(

@@ -65,6 +65,23 @@ export async function closeEtlDb(): Promise<void> {
   _pool = null;
 }
 
+/**
+ * Like fetchAll, but returns null when the table doesn't exist in the base
+ * (or the token can't see it). Use for tables the app treats as optional —
+ * e.g. the knowledge routes return setupRequired when their tables are missing.
+ */
+export async function fetchAllOptional(tableName: string): Promise<AirtableRecord[] | null> {
+  try {
+    return await fetchAll(tableName);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('INVALID_PERMISSIONS_OR_MODEL_NOT_FOUND') || msg.includes('NOT_FOUND')) {
+      return null;
+    }
+    throw err;
+  }
+}
+
 /** Fetch every record of an Airtable table via the REST API (handles pagination + 429s). */
 export async function fetchAll(tableName: string): Promise<AirtableRecord[]> {
   const records: AirtableRecord[] = [];

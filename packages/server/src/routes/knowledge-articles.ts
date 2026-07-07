@@ -1,34 +1,43 @@
 /**
- * Knowledge Articles API Routes
+ * Knowledge Articles API Routes (Postgres-backed)
  * CRUD operations for knowledge base articles
  */
 
 import { Hono } from 'hono';
-import { fetchAllRecords, createRecords, updateRecords, getRecord } from '../lib/airtable-helpers.js';
+import { and, arrayOverlaps, desc, eq, ilike, or, sql } from 'drizzle-orm';
+import { getDb } from '../db/client';
+import { knowledgeArticles } from '../db/schema';
 
 const app = new Hono();
 
-const BASE_ID = process.env.AIRTABLE_BASE_ID || '';
-const ARTICLES_TABLE = 'Knowledge Articles';
+type ArticleRow = typeof knowledgeArticles.$inferSelect;
 
-// Helper to map Airtable record to article response
-function mapRecordToArticle(record: any) {
+function mapRowToArticle(row: ArticleRow) {
   return {
-    id: record.id,
-    title: record.fields['Title'] || '',
-    slug: record.fields['Slug'] || '',
-    summary: record.fields['Summary'] || '',
-    content: record.fields['Content'] || '',
-    categoryId: Array.isArray(record.fields['Category']) ? record.fields['Category'][0] : record.fields['Category'] || null,
-    tags: record.fields['Tags'] || [],
-    status: record.fields['Status'] || 'Draft',
-    authorName: record.fields['Author Name'] || '',
-    authorEmail: record.fields['Author Email'] || '',
-    viewCount: record.fields['View Count'] || 0,
-    featured: record.fields['Featured'] || false,
-    createdDate: record.fields['Created Date'] || record.createdTime || '',
-    lastModified: record.fields['Last Modified'] || '',
+    id: row.id,
+    title: row.title || '',
+    slug: row.slug || '',
+    summary: row.summary || '',
+    content: row.content || '',
+    categoryId: row.categoryId || null,
+    tags: row.tags || [],
+    status: row.status || 'Draft',
+    authorName: row.authorName || '',
+    authorEmail: row.authorEmail || '',
+    viewCount: row.viewCount || 0,
+    featured: row.featured || false,
+    createdDate: row.createdDate || row.createdAt.toISOString() || '',
+    lastModified: row.lastModified || '',
   };
+}
+
+function slugify(title: string): string {
+  const baseSlug = title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+  // Add timestamp to ensure uniqueness
+  return `${baseSlug}-${Date.now().toString(36)}`;
 }
 
 /**
@@ -38,61 +47,55 @@ function mapRecordToArticle(record: any) {
  * Query params:
  * - search: Search in title, summary, and content
  * - category: Filter by category ID
- * - status: Filter by status (Draft, Published, Archived)
- * - tags: Filter by tags (comma-separated)
+ * - status: Filter by status (Draft, Published, Archived), or 'all'
+ * - tags: Filter by tags (comma-separated, article must have at least one)
  * - featured: Filter featured articles only
  */
 app.get('/', async (c) => {
   try {
     const { search, category, status, tags, featured } = c.req.query();
 
-    const filters: string[] = [];
+    const conditions = [];
 
-    // status=all shows all statuses (for admin/staff)
-    // status=Published/Draft/Archived filters to that status
-    // no status defaults to Published only
+    // status=all shows all statuses (for admin/staff); no status defaults to Published
     if (status && status !== 'all') {
-      filters.push(`{Status} = '${status}'`);
+      conditions.push(eq(knowledgeArticles.status, status));
     } else if (!status) {
-      filters.push(`{Status} = 'Published'`);
+      conditions.push(eq(knowledgeArticles.status, 'Published'));
     }
-    // If status === 'all', no status filter is added
 
     if (category) {
-      filters.push(`FIND('${category}', ARRAYJOIN({Category}))`);
+      conditions.push(eq(knowledgeArticles.categoryId, category));
     }
 
     if (featured === 'true') {
-      filters.push(`{Featured} = TRUE()`);
+      conditions.push(eq(knowledgeArticles.featured, true));
     }
 
     if (search) {
-      filters.push(
-        `OR(` +
-        `FIND(LOWER('${search}'), LOWER({Title})), ` +
-        `FIND(LOWER('${search}'), LOWER({Summary})), ` +
-        `FIND(LOWER('${search}'), LOWER({Content}))` +
-        `)`
+      conditions.push(
+        or(
+          ilike(knowledgeArticles.title, `%${search}%`),
+          ilike(knowledgeArticles.summary, `%${search}%`),
+          ilike(knowledgeArticles.content, `%${search}%`)
+        )
       );
     }
 
-    // Tags filtering - if multiple tags, article must have at least one
     if (tags) {
-      const tagList = tags.split(',').map(t => t.trim());
-      const tagFilters = tagList.map(tag => `FIND('${tag}', ARRAYJOIN({Tags}))`);
-      if (tagFilters.length > 0) {
-        filters.push(`OR(${tagFilters.join(', ')})`);
+      const tagList = tags.split(',').map((t) => t.trim()).filter(Boolean);
+      if (tagList.length > 0) {
+        conditions.push(arrayOverlaps(knowledgeArticles.tags, tagList));
       }
     }
 
-    const filterByFormula = filters.length > 0 ? `AND(${filters.join(', ')})` : undefined;
+    const rows = await getDb()
+      .select()
+      .from(knowledgeArticles)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(desc(knowledgeArticles.createdDate));
 
-    const records = await fetchAllRecords(BASE_ID, ARTICLES_TABLE, {
-      filterByFormula,
-      sort: [{ field: 'Created Date', direction: 'desc' }],
-    });
-
-    const articles = records.map(mapRecordToArticle);
+    const articles = rows.map(mapRowToArticle);
 
     return c.json({
       success: true,
@@ -101,24 +104,10 @@ app.get('/', async (c) => {
     });
   } catch (error) {
     console.error('Error fetching knowledge articles:', error);
-
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    const isNotAuthorized = errorMessage.includes('NOT_AUTHORIZED') || errorMessage.includes('Could not find table');
-
-    if (isNotAuthorized) {
-      return c.json({
-        success: true,
-        data: [],
-        count: 0,
-        setupRequired: true,
-        message: 'Knowledge Articles table not found. Please create it in Airtable.',
-      });
-    }
-
     return c.json(
       {
         success: false,
-        error: errorMessage,
+        error: error instanceof Error ? error.message : 'Unknown error',
       },
       500
     );
@@ -133,12 +122,13 @@ app.get('/slug/:slug', async (c) => {
   try {
     const { slug } = c.req.param();
 
-    const records = await fetchAllRecords(BASE_ID, ARTICLES_TABLE, {
-      filterByFormula: `{Slug} = '${slug}'`,
-      maxRecords: 1,
-    });
+    const [row] = await getDb()
+      .select()
+      .from(knowledgeArticles)
+      .where(eq(knowledgeArticles.slug, slug))
+      .limit(1);
 
-    if (records.length === 0) {
+    if (!row) {
       return c.json(
         {
           success: false,
@@ -148,11 +138,9 @@ app.get('/slug/:slug', async (c) => {
       );
     }
 
-    const article = mapRecordToArticle(records[0]);
-
     return c.json({
       success: true,
-      data: article,
+      data: mapRowToArticle(row),
     });
   } catch (error) {
     console.error('Error fetching knowledge article by slug:', error);
@@ -179,12 +167,19 @@ app.get('/:id', async (c) => {
       return c.json({ success: false, error: 'Invalid ID' }, 400);
     }
 
-    const record = await getRecord(BASE_ID, ARTICLES_TABLE, id);
-    const article = mapRecordToArticle(record);
+    const [row] = await getDb()
+      .select()
+      .from(knowledgeArticles)
+      .where(eq(knowledgeArticles.id, id))
+      .limit(1);
+
+    if (!row) {
+      return c.json({ success: false, error: 'Article not found' }, 404);
+    }
 
     return c.json({
       success: true,
-      data: article,
+      data: mapRowToArticle(row),
     });
   } catch (error) {
     console.error('Error fetching knowledge article:', error);
@@ -218,37 +213,27 @@ app.post('/', async (c) => {
       );
     }
 
-    // Generate slug from title
-    const baseSlug = title
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '');
-
-    // Add timestamp to ensure uniqueness
-    const slug = `${baseSlug}-${Date.now().toString(36)}`;
-
-    const fields: Record<string, any> = {
-      'Title': title,
-      'Slug': slug,
-      'Status': status || 'Draft',
-    };
-
-    if (summary) fields['Summary'] = summary;
-    if (content) fields['Content'] = content;
-    if (categoryId) fields['Category'] = [categoryId];
-    if (tags && Array.isArray(tags)) fields['Tags'] = tags;
-    if (authorName) fields['Author Name'] = authorName;
-    if (authorEmail) fields['Author Email'] = authorEmail;
-    if (featured !== undefined) fields['Featured'] = featured;
-    fields['View Count'] = 0;
-
-    const createdRecords = await createRecords(BASE_ID, ARTICLES_TABLE, [{ fields }]);
-
-    const article = mapRecordToArticle(createdRecords[0]);
+    const [row] = await getDb()
+      .insert(knowledgeArticles)
+      .values({
+        title,
+        slug: slugify(title),
+        status: status || 'Draft',
+        summary: summary || null,
+        content: content || null,
+        categoryId: categoryId || null,
+        tags: tags && Array.isArray(tags) ? tags : null,
+        authorName: authorName || null,
+        authorEmail: authorEmail || null,
+        featured: featured !== undefined ? featured : false,
+        viewCount: 0,
+        createdDate: new Date().toISOString(),
+      })
+      .returning();
 
     return c.json({
       success: true,
-      data: article,
+      data: mapRowToArticle(row),
     });
   } catch (error) {
     console.error('Error creating knowledge article:', error);
@@ -271,35 +256,36 @@ app.patch('/:id', async (c) => {
     const { id } = c.req.param();
     const body = await c.req.json();
 
-    const fields: Record<string, any> = {};
+    const values: Partial<typeof knowledgeArticles.$inferInsert> = {};
 
     if (body.title) {
-      fields['Title'] = body.title;
+      values.title = body.title;
       // Regenerate slug if title changes
-      const baseSlug = body.title
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-|-$/g, '');
-      fields['Slug'] = `${baseSlug}-${Date.now().toString(36)}`;
+      values.slug = slugify(body.title);
     }
-    if (body.summary !== undefined) fields['Summary'] = body.summary;
-    if (body.content !== undefined) fields['Content'] = body.content;
-    if (body.categoryId) fields['Category'] = [body.categoryId];
-    if (body.tags !== undefined) fields['Tags'] = body.tags;
-    if (body.status) fields['Status'] = body.status;
-    if (body.authorName) fields['Author Name'] = body.authorName;
-    if (body.authorEmail) fields['Author Email'] = body.authorEmail;
-    if (body.featured !== undefined) fields['Featured'] = body.featured;
+    if (body.summary !== undefined) values.summary = body.summary;
+    if (body.content !== undefined) values.content = body.content;
+    if (body.categoryId) values.categoryId = body.categoryId;
+    if (body.tags !== undefined) values.tags = body.tags;
+    if (body.status) values.status = body.status;
+    if (body.authorName) values.authorName = body.authorName;
+    if (body.authorEmail) values.authorEmail = body.authorEmail;
+    if (body.featured !== undefined) values.featured = body.featured;
+    values.lastModified = new Date().toISOString();
 
-    const updatedRecords = await updateRecords(BASE_ID, ARTICLES_TABLE, [
-      { id, fields },
-    ]);
+    const [row] = await getDb()
+      .update(knowledgeArticles)
+      .set(values)
+      .where(eq(knowledgeArticles.id, id))
+      .returning();
 
-    const article = mapRecordToArticle(updatedRecords[0]);
+    if (!row) {
+      return c.json({ success: false, error: 'Article not found' }, 404);
+    }
 
     return c.json({
       success: true,
-      data: article,
+      data: mapRowToArticle(row),
     });
   } catch (error) {
     console.error('Error updating knowledge article:', error);
@@ -321,12 +307,10 @@ app.delete('/:id', async (c) => {
   try {
     const { id } = c.req.param();
 
-    await updateRecords(BASE_ID, ARTICLES_TABLE, [
-      {
-        id,
-        fields: { Status: 'Archived' },
-      },
-    ]);
+    await getDb()
+      .update(knowledgeArticles)
+      .set({ status: 'Archived' })
+      .where(eq(knowledgeArticles.id, id));
 
     return c.json({
       success: true,
@@ -352,21 +336,19 @@ app.post('/:id/view', async (c) => {
   try {
     const { id } = c.req.param();
 
-    // Get current view count
-    const record = await getRecord(BASE_ID, ARTICLES_TABLE, id);
-    const currentViewCount = record.fields['View Count'] || 0;
+    const [row] = await getDb()
+      .update(knowledgeArticles)
+      .set({ viewCount: sql`${knowledgeArticles.viewCount} + 1` })
+      .where(eq(knowledgeArticles.id, id))
+      .returning({ viewCount: knowledgeArticles.viewCount });
 
-    // Increment view count
-    await updateRecords(BASE_ID, ARTICLES_TABLE, [
-      {
-        id,
-        fields: { 'View Count': currentViewCount + 1 },
-      },
-    ]);
+    if (!row) {
+      return c.json({ success: false, error: 'Article not found' }, 404);
+    }
 
     return c.json({
       success: true,
-      viewCount: currentViewCount + 1,
+      viewCount: row.viewCount,
     });
   } catch (error) {
     console.error('Error incrementing view count:', error);

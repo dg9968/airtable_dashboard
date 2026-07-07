@@ -1,15 +1,38 @@
 /**
- * Knowledge Categories API Routes
+ * Knowledge Categories API Routes (Postgres-backed)
  * CRUD operations for knowledge base categories
  */
 
 import { Hono } from 'hono';
-import { fetchAllRecords, createRecords, updateRecords, getRecord } from '../lib/airtable-helpers.js';
+import { asc, count, eq } from 'drizzle-orm';
+import { getDb } from '../db/client';
+import { knowledgeCategories, knowledgeArticles } from '../db/schema';
 
 const app = new Hono();
 
-const BASE_ID = process.env.AIRTABLE_BASE_ID || '';
-const CATEGORIES_TABLE = 'Knowledge Categories';
+type CategoryRow = typeof knowledgeCategories.$inferSelect;
+
+function mapRowToCategory(row: CategoryRow, articleCount?: number) {
+  const category: Record<string, unknown> = {
+    id: row.id,
+    name: row.name || '',
+    slug: row.slug || '',
+    description: row.description || '',
+    icon: row.icon || 'book',
+    color: row.color || 'primary',
+    sortOrder: row.sortOrder || 0,
+    status: row.status || 'Active',
+  };
+  if (articleCount !== undefined) category.articleCount = articleCount;
+  return category;
+}
+
+function slugify(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+}
 
 /**
  * GET /api/knowledge-categories
@@ -22,33 +45,19 @@ app.get('/', async (c) => {
   try {
     const { status } = c.req.query();
 
-    const filters: string[] = [];
+    const db = getDb();
+    const rows = await db
+      .select({
+        category: knowledgeCategories,
+        articleCount: count(knowledgeArticles.id),
+      })
+      .from(knowledgeCategories)
+      .leftJoin(knowledgeArticles, eq(knowledgeArticles.categoryId, knowledgeCategories.id))
+      .where(eq(knowledgeCategories.status, status || 'Active'))
+      .groupBy(knowledgeCategories.id)
+      .orderBy(asc(knowledgeCategories.sortOrder));
 
-    if (status) {
-      filters.push(`{Status} = '${status}'`);
-    } else {
-      // Default to active categories only
-      filters.push(`{Status} = 'Active'`);
-    }
-
-    const filterByFormula = filters.length > 0 ? `AND(${filters.join(', ')})` : undefined;
-
-    const records = await fetchAllRecords(BASE_ID, CATEGORIES_TABLE, {
-      filterByFormula,
-      sort: [{ field: 'Sort Order', direction: 'asc' }],
-    });
-
-    const categories = records.map((record) => ({
-      id: record.id,
-      name: record.fields['Name'] || '',
-      slug: record.fields['Slug'] || '',
-      description: record.fields['Description'] || '',
-      icon: record.fields['Icon'] || 'book',
-      color: record.fields['Color'] || 'primary',
-      sortOrder: record.fields['Sort Order'] || 0,
-      status: record.fields['Status'] || 'Active',
-      articleCount: Array.isArray(record.fields['Articles']) ? record.fields['Articles'].length : 0,
-    }));
+    const categories = rows.map((r) => mapRowToCategory(r.category, r.articleCount));
 
     return c.json({
       success: true,
@@ -57,25 +66,10 @@ app.get('/', async (c) => {
     });
   } catch (error) {
     console.error('Error fetching knowledge categories:', error);
-
-    // Check if table doesn't exist yet
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    const isNotAuthorized = errorMessage.includes('NOT_AUTHORIZED') || errorMessage.includes('Could not find table');
-
-    if (isNotAuthorized) {
-      return c.json({
-        success: true,
-        data: [],
-        count: 0,
-        setupRequired: true,
-        message: 'Knowledge Categories table not found. Please create it in Airtable.',
-      });
-    }
-
     return c.json(
       {
         success: false,
-        error: errorMessage,
+        error: error instanceof Error ? error.message : 'Unknown error',
       },
       500
     );
@@ -90,23 +84,25 @@ app.get('/:id', async (c) => {
   try {
     const { id } = c.req.param();
 
-    const record = await getRecord(BASE_ID, CATEGORIES_TABLE, id);
+    const db = getDb();
+    const [row] = await db
+      .select({
+        category: knowledgeCategories,
+        articleCount: count(knowledgeArticles.id),
+      })
+      .from(knowledgeCategories)
+      .leftJoin(knowledgeArticles, eq(knowledgeArticles.categoryId, knowledgeCategories.id))
+      .where(eq(knowledgeCategories.id, id))
+      .groupBy(knowledgeCategories.id)
+      .limit(1);
 
-    const category = {
-      id: record.id,
-      name: record.fields['Name'] || '',
-      slug: record.fields['Slug'] || '',
-      description: record.fields['Description'] || '',
-      icon: record.fields['Icon'] || 'book',
-      color: record.fields['Color'] || 'primary',
-      sortOrder: record.fields['Sort Order'] || 0,
-      status: record.fields['Status'] || 'Active',
-      articleCount: Array.isArray(record.fields['Articles']) ? record.fields['Articles'].length : 0,
-    };
+    if (!row) {
+      return c.json({ success: false, error: 'Category not found' }, 404);
+    }
 
     return c.json({
       success: true,
-      data: category,
+      data: mapRowToCategory(row.category, row.articleCount),
     });
   } catch (error) {
     console.error('Error fetching knowledge category:', error);
@@ -140,39 +136,22 @@ app.post('/', async (c) => {
       );
     }
 
-    // Generate slug from name
-    const slug = name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '');
-
-    const fields: Record<string, any> = {
-      'Name': name,
-      'Slug': slug,
-      'Status': 'Active',
-    };
-
-    if (description) fields['Description'] = description;
-    if (icon) fields['Icon'] = icon;
-    if (color) fields['Color'] = color;
-    if (sortOrder !== undefined) fields['Sort Order'] = sortOrder;
-
-    const createdRecords = await createRecords(BASE_ID, CATEGORIES_TABLE, [{ fields }]);
-
-    const category = {
-      id: createdRecords[0].id,
-      name: createdRecords[0].fields['Name'] || '',
-      slug: createdRecords[0].fields['Slug'] || '',
-      description: createdRecords[0].fields['Description'] || '',
-      icon: createdRecords[0].fields['Icon'] || 'book',
-      color: createdRecords[0].fields['Color'] || 'primary',
-      sortOrder: createdRecords[0].fields['Sort Order'] || 0,
-      status: createdRecords[0].fields['Status'] || 'Active',
-    };
+    const [row] = await getDb()
+      .insert(knowledgeCategories)
+      .values({
+        name,
+        slug: slugify(name),
+        status: 'Active',
+        description: description || null,
+        icon: icon || null,
+        color: color || null,
+        sortOrder: sortOrder !== undefined ? sortOrder : null,
+      })
+      .returning();
 
     return c.json({
       success: true,
-      data: category,
+      data: mapRowToCategory(row),
     });
   } catch (error) {
     console.error('Error creating knowledge category:', error);
@@ -195,40 +174,32 @@ app.patch('/:id', async (c) => {
     const { id } = c.req.param();
     const body = await c.req.json();
 
-    const fields: Record<string, any> = {};
+    const values: Partial<typeof knowledgeCategories.$inferInsert> = {};
 
     if (body.name) {
-      fields['Name'] = body.name;
+      values.name = body.name;
       // Regenerate slug if name changes
-      fields['Slug'] = body.name
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-|-$/g, '');
+      values.slug = slugify(body.name);
     }
-    if (body.description !== undefined) fields['Description'] = body.description;
-    if (body.icon) fields['Icon'] = body.icon;
-    if (body.color) fields['Color'] = body.color;
-    if (body.sortOrder !== undefined) fields['Sort Order'] = body.sortOrder;
-    if (body.status) fields['Status'] = body.status;
+    if (body.description !== undefined) values.description = body.description;
+    if (body.icon) values.icon = body.icon;
+    if (body.color) values.color = body.color;
+    if (body.sortOrder !== undefined) values.sortOrder = body.sortOrder;
+    if (body.status) values.status = body.status;
 
-    const updatedRecords = await updateRecords(BASE_ID, CATEGORIES_TABLE, [
-      { id, fields },
-    ]);
+    const [row] = await getDb()
+      .update(knowledgeCategories)
+      .set(values)
+      .where(eq(knowledgeCategories.id, id))
+      .returning();
 
-    const category = {
-      id: updatedRecords[0].id,
-      name: updatedRecords[0].fields['Name'] || '',
-      slug: updatedRecords[0].fields['Slug'] || '',
-      description: updatedRecords[0].fields['Description'] || '',
-      icon: updatedRecords[0].fields['Icon'] || 'book',
-      color: updatedRecords[0].fields['Color'] || 'primary',
-      sortOrder: updatedRecords[0].fields['Sort Order'] || 0,
-      status: updatedRecords[0].fields['Status'] || 'Active',
-    };
+    if (!row) {
+      return c.json({ success: false, error: 'Category not found' }, 404);
+    }
 
     return c.json({
       success: true,
-      data: category,
+      data: mapRowToCategory(row),
     });
   } catch (error) {
     console.error('Error updating knowledge category:', error);
@@ -250,12 +221,10 @@ app.delete('/:id', async (c) => {
   try {
     const { id } = c.req.param();
 
-    await updateRecords(BASE_ID, CATEGORIES_TABLE, [
-      {
-        id,
-        fields: { Status: 'Inactive' },
-      },
-    ]);
+    await getDb()
+      .update(knowledgeCategories)
+      .set({ status: 'Inactive' })
+      .where(eq(knowledgeCategories.id, id));
 
     return c.json({
       success: true,

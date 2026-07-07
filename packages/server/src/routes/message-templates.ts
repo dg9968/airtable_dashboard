@@ -1,15 +1,41 @@
 /**
- * Message Templates API Routes
+ * Message Templates API Routes (Postgres-backed)
  * CRUD operations for reusable message templates
  */
 
 import { Hono } from 'hono';
-import { fetchAllRecords, createRecords, updateRecords, getRecord } from '../lib/airtable-helpers.js';
+import { and, asc, eq, ilike, or } from 'drizzle-orm';
+import { getDb } from '../db/client';
+import { messageTemplates } from '../db/schema';
 
 const app = new Hono();
 
-const BASE_ID = process.env.AIRTABLE_BASE_ID || '';
-const TEMPLATES_TABLE = 'Message Templates';
+type TemplateRow = typeof messageTemplates.$inferSelect;
+
+function parseVariableDefinitions(raw: string | null) {
+  if (!raw) return { variables: [] };
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return { variables: [] };
+  }
+}
+
+function mapRowToTemplate(row: TemplateRow) {
+  return {
+    id: row.id,
+    templateName: row.templateName || '',
+    templateCode: row.templateCode || '',
+    subjectTemplate: row.subjectTemplate || '',
+    contentTemplate: row.contentTemplate || '',
+    description: row.description || '',
+    variableDefinitions: parseVariableDefinitions(row.variableDefinitions),
+    category: row.category || '',
+    status: row.status || 'Draft',
+    createdDate: row.createdDate || '',
+    lastUsedDate: row.lastUsedDate || '',
+  };
+}
 
 /**
  * GET /api/message-templates
@@ -24,48 +50,25 @@ app.get('/', async (c) => {
   try {
     const { status, category, search } = c.req.query();
 
-    // Build filter formula
-    const filters: string[] = [];
-
-    if (status) {
-      filters.push(`{Status} = '${status}'`);
-    }
-
-    if (category) {
-      filters.push(`{Category} = '${category}'`);
-    }
-
+    const conditions = [];
+    if (status) conditions.push(eq(messageTemplates.status, status));
+    if (category) conditions.push(eq(messageTemplates.category, category));
     if (search) {
-      filters.push(
-        `OR(` +
-        `FIND(LOWER('${search}'), LOWER({Template Name})), ` +
-        `FIND(LOWER('${search}'), LOWER({Description}))` +
-        `)`
+      conditions.push(
+        or(
+          ilike(messageTemplates.templateName, `%${search}%`),
+          ilike(messageTemplates.description, `%${search}%`)
+        )
       );
     }
 
-    const filterByFormula = filters.length > 0 ? `AND(${filters.join(', ')})` : undefined;
+    const rows = await getDb()
+      .select()
+      .from(messageTemplates)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(asc(messageTemplates.templateName));
 
-    const records = await fetchAllRecords(BASE_ID, TEMPLATES_TABLE, {
-      filterByFormula,
-      sort: [{ field: 'Template Name', direction: 'asc' }],
-    });
-
-    const templates = records.map((record) => ({
-      id: record.id,
-      templateName: record.fields['Template Name'] || '',
-      templateCode: record.fields['Template Code'] || '',
-      subjectTemplate: record.fields['Subject Template'] || '',
-      contentTemplate: record.fields['Content Template'] || '',
-      description: record.fields['Description'] || '',
-      variableDefinitions: record.fields['Variable Definitions']
-        ? JSON.parse(record.fields['Variable Definitions'])
-        : { variables: [] },
-      category: record.fields['Category'] || '',
-      status: record.fields['Status'] || 'Draft',
-      createdDate: record.fields['Created Date'] || '',
-      lastUsedDate: record.fields['Last Used Date'] || '',
-    }));
+    const templates = rows.map(mapRowToTemplate);
 
     return c.json({
       success: true,
@@ -92,27 +95,19 @@ app.get('/:id', async (c) => {
   try {
     const { id } = c.req.param();
 
-    const record = await getRecord(BASE_ID, TEMPLATES_TABLE, id);
+    const [row] = await getDb()
+      .select()
+      .from(messageTemplates)
+      .where(eq(messageTemplates.id, id))
+      .limit(1);
 
-    const template = {
-      id: record.id,
-      templateName: record.fields['Template Name'] || '',
-      templateCode: record.fields['Template Code'] || '',
-      subjectTemplate: record.fields['Subject Template'] || '',
-      contentTemplate: record.fields['Content Template'] || '',
-      description: record.fields['Description'] || '',
-      variableDefinitions: record.fields['Variable Definitions']
-        ? JSON.parse(record.fields['Variable Definitions'])
-        : { variables: [] },
-      category: record.fields['Category'] || '',
-      status: record.fields['Status'] || 'Draft',
-      createdDate: record.fields['Created Date'] || '',
-      lastUsedDate: record.fields['Last Used Date'] || '',
-    };
+    if (!row) {
+      return c.json({ success: false, error: 'Template not found' }, 404);
+    }
 
     return c.json({
       success: true,
-      data: template,
+      data: mapRowToTemplate(row),
     });
   } catch (error) {
     console.error('Error fetching template:', error);
@@ -129,18 +124,6 @@ app.get('/:id', async (c) => {
 /**
  * POST /api/message-templates
  * Create a new message template
- *
- * Expected body:
- * {
- *   templateName: string,
- *   templateCode?: string,
- *   subjectTemplate: string,
- *   contentTemplate: string,
- *   description?: string,
- *   variableDefinitions: { variables: VariableDefinition[] },
- *   category?: string,
- *   status?: 'Active' | 'Draft' | 'Archived'
- * }
  */
 app.post('/', async (c) => {
   try {
@@ -168,42 +151,24 @@ app.post('/', async (c) => {
       );
     }
 
-    const fields: Record<string, any> = {
-      'Template Name': templateName,
-      'Subject Template': subjectTemplate,
-      'Content Template': contentTemplate,
-      'Status': status || 'Draft',
-      'Created Date': new Date().toISOString().split('T')[0],
-    };
-
-    if (templateCode) fields['Template Code'] = templateCode;
-    if (description) fields['Description'] = description;
-    if (category) fields['Category'] = category;
-
-    if (variableDefinitions) {
-      fields['Variable Definitions'] = JSON.stringify(variableDefinitions);
-    }
-
-    const createdRecords = await createRecords(BASE_ID, TEMPLATES_TABLE, [{ fields }]);
-
-    const template = {
-      id: createdRecords[0].id,
-      templateName: createdRecords[0].fields['Template Name'],
-      templateCode: createdRecords[0].fields['Template Code'] || '',
-      subjectTemplate: createdRecords[0].fields['Subject Template'],
-      contentTemplate: createdRecords[0].fields['Content Template'],
-      description: createdRecords[0].fields['Description'] || '',
-      variableDefinitions: createdRecords[0].fields['Variable Definitions']
-        ? JSON.parse(createdRecords[0].fields['Variable Definitions'])
-        : { variables: [] },
-      category: createdRecords[0].fields['Category'] || '',
-      status: createdRecords[0].fields['Status'] || 'Draft',
-      createdDate: createdRecords[0].fields['Created Date'] || '',
-    };
+    const [row] = await getDb()
+      .insert(messageTemplates)
+      .values({
+        templateName,
+        templateCode: templateCode || null,
+        subjectTemplate,
+        contentTemplate,
+        description: description || null,
+        variableDefinitions: variableDefinitions ? JSON.stringify(variableDefinitions) : null,
+        category: category || null,
+        status: status || 'Draft',
+        createdDate: new Date().toISOString().split('T')[0],
+      })
+      .returning();
 
     return c.json({
       success: true,
-      data: template,
+      data: mapRowToTemplate(row),
     });
   } catch (error) {
     console.error('Error creating template:', error);
@@ -226,37 +191,31 @@ app.patch('/:id', async (c) => {
     const { id } = c.req.param();
     const body = await c.req.json();
 
-    const fields: Record<string, any> = {};
+    const values: Partial<typeof messageTemplates.$inferInsert> = {};
 
-    if (body.templateName) fields['Template Name'] = body.templateName;
-    if (body.templateCode) fields['Template Code'] = body.templateCode;
-    if (body.subjectTemplate) fields['Subject Template'] = body.subjectTemplate;
-    if (body.contentTemplate) fields['Content Template'] = body.contentTemplate;
-    if (body.description !== undefined) fields['Description'] = body.description;
-    if (body.category) fields['Category'] = body.category;
-    if (body.status) fields['Status'] = body.status;
-
+    if (body.templateName) values.templateName = body.templateName;
+    if (body.templateCode) values.templateCode = body.templateCode;
+    if (body.subjectTemplate) values.subjectTemplate = body.subjectTemplate;
+    if (body.contentTemplate) values.contentTemplate = body.contentTemplate;
+    if (body.description !== undefined) values.description = body.description;
+    if (body.category) values.category = body.category;
+    if (body.status) values.status = body.status;
     if (body.variableDefinitions) {
-      fields['Variable Definitions'] = JSON.stringify(body.variableDefinitions);
+      values.variableDefinitions = JSON.stringify(body.variableDefinitions);
     }
 
-    const updatedRecords = await updateRecords(BASE_ID, TEMPLATES_TABLE, [
-      { id, fields },
-    ]);
+    const [row] = await getDb()
+      .update(messageTemplates)
+      .set(values)
+      .where(eq(messageTemplates.id, id))
+      .returning();
 
-    const template = {
-      id: updatedRecords[0].id,
-      templateName: updatedRecords[0].fields['Template Name'] || '',
-      templateCode: updatedRecords[0].fields['Template Code'] || '',
-      subjectTemplate: updatedRecords[0].fields['Subject Template'] || '',
-      contentTemplate: updatedRecords[0].fields['Content Template'] || '',
-      description: updatedRecords[0].fields['Description'] || '',
-      variableDefinitions: updatedRecords[0].fields['Variable Definitions']
-        ? JSON.parse(updatedRecords[0].fields['Variable Definitions'])
-        : { variables: [] },
-      category: updatedRecords[0].fields['Category'] || '',
-      status: updatedRecords[0].fields['Status'] || 'Draft',
-    };
+    if (!row) {
+      return c.json({ success: false, error: 'Template not found' }, 404);
+    }
+
+    // Legacy shape: update response omits createdDate/lastUsedDate
+    const { createdDate: _cd, lastUsedDate: _lud, ...template } = mapRowToTemplate(row);
 
     return c.json({
       success: true,
@@ -282,12 +241,10 @@ app.delete('/:id', async (c) => {
   try {
     const { id } = c.req.param();
 
-    await updateRecords(BASE_ID, TEMPLATES_TABLE, [
-      {
-        id,
-        fields: { Status: 'Archived' },
-      },
-    ]);
+    await getDb()
+      .update(messageTemplates)
+      .set({ status: 'Archived' })
+      .where(eq(messageTemplates.id, id));
 
     return c.json({
       success: true,
@@ -313,36 +270,32 @@ app.post('/:id/duplicate', async (c) => {
   try {
     const { id } = c.req.param();
 
-    const original = await getRecord(BASE_ID, TEMPLATES_TABLE, id);
+    const [original] = await getDb()
+      .select()
+      .from(messageTemplates)
+      .where(eq(messageTemplates.id, id))
+      .limit(1);
 
-    const fields: Record<string, any> = {
-      'Template Name': `${original.fields['Template Name']} (Copy)`,
-      'Subject Template': original.fields['Subject Template'],
-      'Content Template': original.fields['Content Template'],
-      'Variable Definitions': original.fields['Variable Definitions'],
-      'Category': original.fields['Category'],
-      'Status': 'Draft',
-      'Created Date': new Date().toISOString().split('T')[0],
-    };
-
-    if (original.fields['Description']) {
-      fields['Description'] = original.fields['Description'];
+    if (!original) {
+      return c.json({ success: false, error: 'Template not found' }, 404);
     }
 
-    const createdRecords = await createRecords(BASE_ID, TEMPLATES_TABLE, [{ fields }]);
+    const [row] = await getDb()
+      .insert(messageTemplates)
+      .values({
+        templateName: `${original.templateName} (Copy)`,
+        subjectTemplate: original.subjectTemplate,
+        contentTemplate: original.contentTemplate,
+        variableDefinitions: original.variableDefinitions,
+        category: original.category,
+        description: original.description,
+        status: 'Draft',
+        createdDate: new Date().toISOString().split('T')[0],
+      })
+      .returning();
 
-    const template = {
-      id: createdRecords[0].id,
-      templateName: createdRecords[0].fields['Template Name'],
-      subjectTemplate: createdRecords[0].fields['Subject Template'],
-      contentTemplate: createdRecords[0].fields['Content Template'],
-      description: createdRecords[0].fields['Description'] || '',
-      variableDefinitions: createdRecords[0].fields['Variable Definitions']
-        ? JSON.parse(createdRecords[0].fields['Variable Definitions'])
-        : { variables: [] },
-      category: createdRecords[0].fields['Category'] || '',
-      status: createdRecords[0].fields['Status'] || 'Draft',
-    };
+    // Legacy shape: duplicate response omits templateCode/createdDate/lastUsedDate
+    const { templateCode: _tc, createdDate: _cd, lastUsedDate: _lud, ...template } = mapRowToTemplate(row);
 
     return c.json({
       success: true,
