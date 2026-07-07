@@ -2,7 +2,9 @@
  * Helper utilities for server
  */
 
-import { fetchAllRecords } from "../lib/airtable-helpers";
+import { eq, or } from "drizzle-orm";
+import { getDb } from "../db/client";
+import { personal, corporations } from "../db/schema";
 
 /**
  * Generate a random 6-digit code (100000-999999)
@@ -21,29 +23,29 @@ export function isValidClientCode(code: string): boolean {
 }
 
 /**
- * Check if a client code already exists in Airtable
- * Checks both the "Client Code" formula field and "Client Code Override" field
+ * Check if a client code already exists (Personal and Corporations tables,
+ * both the materialized code and the override).
  */
 export async function isClientCodeUnique(code: string): Promise<boolean> {
-  const baseId = process.env.AIRTABLE_BASE_ID || "";
+  const db = getDb();
 
-  // Check Personal table - check both formula result and override field
-  const personalRecords = await fetchAllRecords(baseId, "Personal", {
-    filterByFormula: `OR({Client Code} = '${code}', {Client Code Override} = '${code}')`,
-    maxRecords: 1,
-  });
+  const personalMatch = await db
+    .select({ id: personal.id })
+    .from(personal)
+    .where(or(eq(personal.clientCode, code), eq(personal.clientCodeOverride, code)))
+    .limit(1);
 
-  if (personalRecords.length > 0) {
+  if (personalMatch.length > 0) {
     return false;
   }
 
-  // Check Corporations table - check both formula result and override field
-  const corporateRecords = await fetchAllRecords(baseId, "Corporations", {
-    filterByFormula: `OR({Client Code} = '${code}', {Client Code Override} = '${code}')`,
-    maxRecords: 1,
-  });
+  const corporateMatch = await db
+    .select({ id: corporations.id })
+    .from(corporations)
+    .where(or(eq(corporations.clientCode, code), eq(corporations.clientCodeOverride, code)))
+    .limit(1);
 
-  return corporateRecords.length === 0;
+  return corporateMatch.length === 0;
 }
 
 /**

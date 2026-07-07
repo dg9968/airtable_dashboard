@@ -10,6 +10,7 @@
     "lint": "eslint . --ext .ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "bun run scripts/db-migrate.ts",
+    "db:studio": "drizzle-kit studio",
     "backup:onedrive": "bun run src/scripts/onedrive-to-gdrive-backup.ts",
     "backup:onedrive:dry-run": "bun run src/scripts/onedrive-to-gdrive-backup.ts --dry-run"
   },

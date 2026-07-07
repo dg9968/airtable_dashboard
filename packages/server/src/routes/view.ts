@@ -5,9 +5,36 @@
  */
 
 import { Hono } from 'hono';
+import { eq } from 'drizzle-orm';
 import { testConnection, fetchRecords, findRecord, createRecords, updateRecords } from '../lib/airtable-service';
+import { getDb } from '../db/client';
+import { personal, corporations } from '../db/schema';
+import {
+  personalToAirtableRecord,
+  corporationToAirtableRecord,
+  personalFieldsToColumns,
+  corporationFieldsToColumns,
+  loadPersonalRelationships,
+  computeClientCode,
+  type AirtableShapedRecord,
+} from '../db/serializers';
 
 const app = new Hono();
+
+// Tables already migrated to Postgres — served from the DB in the legacy
+// Airtable record shape. Everything else still proxies to Airtable.
+const MIGRATED_TABLES = new Set(['Personal', 'Corporations']);
+
+async function fetchMigratedRecords(tableName: string): Promise<AirtableShapedRecord[]> {
+  const db = getDb();
+  if (tableName === 'Personal') {
+    const rows = await db.select().from(personal);
+    const { relMap, lookup } = await loadPersonalRelationships(db);
+    return rows.map((row) => personalToAirtableRecord(row, relMap.get(row.id), lookup));
+  }
+  const rows = await db.select().from(corporations);
+  return rows.map(corporationToAirtableRecord);
+}
 
 /**
  * GET /api/view
@@ -15,6 +42,42 @@ const app = new Hono();
  */
 app.get('/', async (c) => {
   try {
+    // Migrated tables: serve from Postgres, keeping the legacy response shape.
+    // View/sort/filter params are ignored for these (clients of Personal/
+    // Corporations only use table + view=Grid view).
+    const requestedTable = c.req.query('table') || 'Subscriptions Corporate';
+    if (MIGRATED_TABLES.has(requestedTable)) {
+      const records = await fetchMigratedRecords(requestedTable);
+      const fieldNames = records.length > 0 ? Object.keys(records[0].fields) : [];
+      const recentRecords = [...records]
+        .sort((a, b) => new Date(b.createdTime).getTime() - new Date(a.createdTime).getTime())
+        .slice(0, 5);
+      return c.json({
+        success: true,
+        data: {
+          records,
+          stats: {
+            totalRecords: records.length,
+            fieldCount: fieldNames.length,
+            tableName: requestedTable,
+            viewName: c.req.query('view') || 'Grid view',
+            lastUpdated: new Date().toISOString(),
+            recentActivity:
+              recentRecords.length > 0
+                ? new Date(recentRecords[0].createdTime).toLocaleString()
+                : 'No recent activity',
+          },
+          fieldNames,
+          fieldTypes: {},
+          recentRecords,
+          queryParams: {
+            tableName: requestedTable,
+            viewName: c.req.query('view') || 'Grid view',
+          },
+        },
+      });
+    }
+
     // Test connection first
     const connectionTest = await testConnection();
     if (!connectionTest.success) {
@@ -167,6 +230,23 @@ app.get('/:tableName/:recordId', async (c) => {
 
     console.log(`[View API] Fetching record ${recordId} from table "${tableName}"`);
 
+    if (MIGRATED_TABLES.has(tableName)) {
+      const db = getDb();
+      if (tableName === 'Personal') {
+        const [row] = await db.select().from(personal).where(eq(personal.id, recordId)).limit(1);
+        if (!row) {
+          return c.json({ success: false, error: 'Record not found', table: tableName, recordId }, 404);
+        }
+        const { relMap, lookup } = await loadPersonalRelationships(db, [recordId]);
+        return c.json({ success: true, data: personalToAirtableRecord(row, relMap.get(recordId), lookup) });
+      }
+      const [row] = await db.select().from(corporations).where(eq(corporations.id, recordId)).limit(1);
+      if (!row) {
+        return c.json({ success: false, error: 'Record not found', table: tableName, recordId }, 404);
+      }
+      return c.json({ success: true, data: corporationToAirtableRecord(row) });
+    }
+
     const record = await findRecord(tableName, recordId);
 
     console.log(`[View API] Successfully fetched record ${recordId}`);
@@ -213,6 +293,21 @@ app.post('/:tableName', async (c) => {
 
     console.log(`Creating record in table "${tableName}"`, fields);
 
+    if (MIGRATED_TABLES.has(tableName)) {
+      const db = getDb();
+      if (tableName === 'Personal') {
+        const values = personalFieldsToColumns(fields);
+        values.clientCode = computeClientCode(values.clientCodeOverride ?? null, values.ssn ?? null);
+        const [row] = await db.insert(personal).values(values).returning();
+        const { relMap, lookup } = await loadPersonalRelationships(db, [row.id]);
+        return c.json({ success: true, data: personalToAirtableRecord(row, relMap.get(row.id), lookup) }, 201);
+      }
+      const values = corporationFieldsToColumns(fields);
+      values.clientCode = computeClientCode(values.clientCodeOverride ?? null, values.ein ?? null);
+      const [row] = await db.insert(corporations).values(values).returning();
+      return c.json({ success: true, data: corporationToAirtableRecord(row) }, 201);
+    }
+
     const records = await createRecords(tableName, [{ fields }]);
 
     return c.json({
@@ -250,6 +345,35 @@ app.patch('/:tableName/:recordId', async (c) => {
     }
 
     console.log(`Updating record ${recordId} in table "${tableName}"`, fields);
+
+    if (MIGRATED_TABLES.has(tableName)) {
+      const db = getDb();
+      if (tableName === 'Personal') {
+        const values = personalFieldsToColumns(fields);
+        const [existing] = await db.select().from(personal).where(eq(personal.id, recordId)).limit(1);
+        if (!existing) {
+          return c.json({ success: false, error: 'Record not found' }, 404);
+        }
+        values.clientCode = computeClientCode(
+          (values.clientCodeOverride ?? existing.clientCodeOverride) || null,
+          (values.ssn ?? existing.ssn) || null
+        );
+        const [row] = await db.update(personal).set(values).where(eq(personal.id, recordId)).returning();
+        const { relMap, lookup } = await loadPersonalRelationships(db, [recordId]);
+        return c.json({ success: true, data: personalToAirtableRecord(row, relMap.get(recordId), lookup) });
+      }
+      const values = corporationFieldsToColumns(fields);
+      const [existing] = await db.select().from(corporations).where(eq(corporations.id, recordId)).limit(1);
+      if (!existing) {
+        return c.json({ success: false, error: 'Record not found' }, 404);
+      }
+      values.clientCode = computeClientCode(
+        (values.clientCodeOverride ?? existing.clientCodeOverride) || null,
+        (values.ein ?? existing.ein) || null
+      );
+      const [row] = await db.update(corporations).set(values).where(eq(corporations.id, recordId)).returning();
+      return c.json({ success: true, data: corporationToAirtableRecord(row) });
+    }
 
     const records = await updateRecords(tableName, [{ id: recordId, fields }]);
 

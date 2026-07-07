@@ -45,6 +45,37 @@ const checks: Check[] = [
   },
   { path: '/api/knowledge-articles?status=all', keys: ['success', 'data', 'count'] },
 
+  // Phase 2 — core entities (Postgres-backed)
+  {
+    path: '/api/personal',
+    keys: ['success', 'data'],
+    assert: (b) => (Array.isArray(b.data) && b.data.length > 0 && b.data[0].fields ? null : 'no personal records'),
+  },
+  {
+    path: '/api/contacts',
+    keys: ['success', 'data', 'count'],
+    assert: (b) => (Array.isArray(b.data) && b.data.length > 0 ? null : 'no contacts'),
+  },
+  {
+    path: '/api/companies',
+    keys: ['success', 'data', 'count'],
+    assert: (b) => (Array.isArray(b.data) && b.data.length > 0 ? null : 'no companies'),
+  },
+  { path: '/api/companies/search?q=inc', keys: ['success', 'data'] },
+  { path: '/api/company-contacts', keys: ['success', 'data', 'count'] },
+  {
+    path: '/api/view?table=Personal&view=Grid view',
+    keys: ['success', 'data.records', 'data.stats'],
+    assert: (b) => (Array.isArray(b.data?.records) && b.data.records.length > 0 ? null : 'no records'),
+  },
+  {
+    path: '/api/view?table=Corporations',
+    keys: ['success', 'data.records'],
+    assert: (b) => (Array.isArray(b.data?.records) && b.data.records.length > 0 ? null : 'no records'),
+  },
+  // Airtable-backed until Phase 3 (team IDs must match subscription link fields)
+  { path: '/api/teams', keys: ['success', 'data'] },
+
   // Still Airtable-backed (regression canaries for untouched routes)
   { path: '/api/tax-notices', keys: ['success'] },
 ];

@@ -1,14 +1,15 @@
 /**
- * Contacts Routes
- * Manage individual contacts/persons
+ * Contacts Routes (Postgres-backed)
+ * Manage individual contacts/persons (personal table)
  */
 
 import { Hono } from 'hono';
-import { fetchRecords, findRecord } from '../lib/airtable-service';
+import { eq } from 'drizzle-orm';
+import { getDb } from '../db/client';
+import { personal } from '../db/schema';
+import { personalToAirtableRecord, loadPersonalRelationships } from '../db/serializers';
 
 const app = new Hono();
-
-const CONTACTS_TABLE = 'Personal'; // Using "Personal" table in Airtable
 
 /**
  * GET /api/contacts
@@ -16,23 +17,16 @@ const CONTACTS_TABLE = 'Personal'; // Using "Personal" table in Airtable
  */
 app.get('/', async (c) => {
   try {
-    const records = await fetchRecords(CONTACTS_TABLE, { view: 'Grid view' });
+    const rows = await getDb().select().from(personal);
 
-    const contacts = records.map((record, index) => {
-      // Log first record to see actual field names
-      if (index === 0) {
-        console.log('Sample contact record fields:', Object.keys(record.fields));
-      }
-
-      return {
-        id: record.id,
-        name: record.fields['Full Name'] || record.fields['Name'] || 'Unknown',
-        email: record.fields['Email'] || record.fields['Personal Email'],
-        phone: record.fields['📞Phone number'] || record.fields['Phone'] || record.fields['Personal Phone'],
-        type: record.fields['Type'] || record.fields['Contact Type'],
-        status: record.fields['Status'] || record.fields['❓Status'] || 'Active'
-      };
-    });
+    const contacts = rows.map((row) => ({
+      id: row.id,
+      name: [row.firstName, row.lastName].filter(Boolean).join(' ') || 'Unknown',
+      email: row.email ?? undefined,
+      phone: row.phone ?? undefined,
+      type: undefined, // legacy alias fields (Type / Contact Type) never held data
+      status: row.status || 'Active',
+    }));
 
     return c.json({
       success: true,
@@ -42,24 +36,14 @@ app.get('/', async (c) => {
 
   } catch (error) {
     console.error('Error fetching contacts:', error);
-
-    // Check if it's a table not found error
-    const errorMessage = error instanceof Error ? error.message : 'Failed to fetch contacts';
-    const isNotAuthorized = errorMessage.includes('NOT_AUTHORIZED') || errorMessage.includes('not authorized');
-
     return c.json(
       {
         success: false,
-        error: isNotAuthorized
-          ? `The "${CONTACTS_TABLE}" table does not exist in your Airtable base`
-          : errorMessage,
-        suggestion: isNotAuthorized
-          ? `Please create a "${CONTACTS_TABLE}" table in Airtable with fields: Name, Email, Phone, Type, Status`
-          : 'Check your Airtable configuration and try again',
-        setupRequired: isNotAuthorized,
-        data: [] // Return empty array so UI doesn't break
+        error: error instanceof Error ? error.message : 'Failed to fetch contacts',
+        suggestion: 'Check the database connection and try again',
+        data: []
       },
-      isNotAuthorized ? 200 : 500 // Return 200 with empty data instead of error
+      500
     );
   }
 });
@@ -71,17 +55,26 @@ app.get('/', async (c) => {
 app.get('/:id', async (c) => {
   try {
     const id = c.req.param('id');
-    const record = await findRecord(CONTACTS_TABLE, id);
+    const db = getDb();
+
+    const [row] = await db.select().from(personal).where(eq(personal.id, id)).limit(1);
+
+    if (!row) {
+      return c.json({ success: false, error: 'Contact not found' }, 404);
+    }
+
+    const { relMap, lookup } = await loadPersonalRelationships(db, [id]);
+    const record = personalToAirtableRecord(row, relMap.get(id), lookup);
 
     return c.json({
       success: true,
       data: {
-        id: record.id,
-        name: record.fields['Full Name'] || record.fields['Name'],
-        email: record.fields['Email'] || record.fields['Personal Email'],
-        phone: record.fields['📞Phone number'] || record.fields['Phone'] || record.fields['Personal Phone'],
-        type: record.fields['Type'] || record.fields['Contact Type'],
-        status: record.fields['Status'] || record.fields['❓Status'],
+        id: row.id,
+        name: [row.firstName, row.lastName].filter(Boolean).join(' ') || undefined,
+        email: row.email ?? undefined,
+        phone: row.phone ?? undefined,
+        type: undefined,
+        status: row.status ?? undefined,
         fields: record.fields
       }
     });

@@ -1,12 +1,12 @@
 /**
- * Family Record Helper Functions
- * Handles creation and linking of spouse and dependent records in Airtable Personal table
+ * Family Record Helper Functions (Postgres-backed)
+ * Handles creation and linking of spouse and dependent records in the personal table
  */
 
-import { fetchAllRecords, createRecords, updateRecords } from './airtable-helpers.js';
-
-const baseId = process.env.AIRTABLE_BASE_ID!;
-const tableName = 'Personal';
+import { sql } from 'drizzle-orm';
+import { getDb } from '../db/client';
+import { personal, personalRelationships } from '../db/schema';
+import { personalToAirtableRecord, loadPersonalRelationships, computeClientCode } from '../db/serializers';
 
 export interface FamilyMemberData {
   firstName: string;
@@ -52,136 +52,110 @@ function parseLastName(fullName: string): string {
 }
 
 /**
- * Search for existing person by SSN
- * @param ssn - Social Security Number (can include dashes)
- * @returns PersonalRecord if found, null otherwise
+ * Search for existing person by SSN.
+ * Compares digits-only on both sides, so it matches regardless of whether the
+ * stored SSN has dashes (the legacy Airtable lookup missed dash-formatted rows).
  */
 export async function findPersonBySSN(ssn: string): Promise<PersonalRecord | null> {
   try {
-    // Remove dashes from SSN for comparison
-    const cleanSSN = ssn.replace(/-/g, '');
+    const cleanSSN = ssn.replace(/\D/g, '');
+    if (!cleanSSN) return null;
 
-    // Use filterByFormula to search for SSN
-    const formula = `{SSN} = "${cleanSSN}"`;
+    const db = getDb();
+    const rows = await db
+      .select()
+      .from(personal)
+      .where(sql`regexp_replace(coalesce(${personal.ssn}, ''), '\\D', '', 'g') = ${cleanSSN}`)
+      .limit(1);
 
-    const records = await fetchAllRecords(baseId, tableName, {
-      filterByFormula: formula,
-    });
+    if (rows.length === 0) return null;
 
-    return records.length > 0 ? records[0] : null;
+    const { relMap, lookup } = await loadPersonalRelationships(db, [rows[0].id]);
+    return personalToAirtableRecord(rows[0], relMap.get(rows[0].id), lookup);
   } catch (error) {
     console.error('Error finding person by SSN:', error);
     return null;
   }
 }
 
-/**
- * Create a new Personal record for spouse
- * @param spouseData - Spouse information
- * @param taxYear - Tax year for the record
- * @returns Operation result with record ID if successful
- */
-export async function createSpouseRecord(
-  spouseData: FamilyMemberData,
+/** Shared insert for spouse/dependent rows. */
+async function createFamilyMember(
+  data: FamilyMemberData,
   taxYear: string
 ): Promise<OperationResult> {
   try {
-    const fields: Record<string, any> = {
-      'First Name': spouseData.firstName,
-      'Last Name': spouseData.lastName,
-      'SSN': spouseData.ssn.replace(/-/g, ''), // Remove dashes
-      'Date of Birth': spouseData.dob,
-      'Tax Year': parseInt(taxYear, 10),
-    };
+    const ssn = data.ssn.replace(/-/g, '');
 
-    // Add optional fields if provided
-    if (spouseData.occupation) {
-      fields['Occupation'] = spouseData.occupation;
-    }
+    const [row] = await getDb()
+      .insert(personal)
+      .values({
+        firstName: data.firstName,
+        lastName: data.lastName,
+        ssn,
+        dateOfBirth: data.dob,
+        taxYear: parseInt(taxYear, 10) || null,
+        occupation: data.occupation || null,
+        driverLicense: data.driverLicense || null,
+        mailingAddress: data.address || null,
+        city: data.city || null,
+        state: data.state || null,
+        zip: data.zip || null,
+        phone: data.phone || null,
+        email: data.email || null,
+        // Like the Airtable formula: no override for family members, so the
+        // client code is the last 4 digits of the SSN.
+        clientCode: computeClientCode(null, ssn),
+      })
+      .returning({ id: personal.id });
 
-    if (spouseData.driverLicense) {
-      fields['Drivers License / State ID'] = spouseData.driverLicense;
-    }
-
-    if (spouseData.address) {
-      fields['Mailing Address'] = spouseData.address;
-    }
-
-    if (spouseData.city) {
-      fields['City'] = spouseData.city;
-    }
-
-    if (spouseData.state) {
-      fields['State'] = spouseData.state;
-    }
-
-    if (spouseData.zip) {
-      fields['ZIP'] = spouseData.zip;
-    }
-
-    if (spouseData.phone) {
-      fields['📞Phone number'] = spouseData.phone;
-    }
-
-    if (spouseData.email) {
-      fields['Email'] = spouseData.email;
-    }
-
-    const createdRecords = await createRecords(baseId, tableName, [{ fields }]);
-
-    if (createdRecords && createdRecords.length > 0) {
-      return {
-        success: true,
-        recordId: createdRecords[0].id,
-      };
-    }
-
-    return {
-      success: false,
-      error: 'Failed to create spouse record',
-    };
+    return { success: true, recordId: row.id };
   } catch (error) {
-    console.error('Error creating spouse record:', error);
+    console.error('Error creating family member record:', error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Unknown error creating spouse record',
+      error: error instanceof Error ? error.message : 'Unknown error creating record',
     };
   }
 }
 
 /**
- * Create bidirectional spouse link between two persons
- * Updates both Person A and Person B to point to each other
- * @param personAId - ID of first person
- * @param personBId - ID of second person (spouse)
- * @returns Operation result
+ * Create a new personal record for spouse
+ */
+export async function createSpouseRecord(
+  spouseData: FamilyMemberData,
+  taxYear: string
+): Promise<OperationResult> {
+  return createFamilyMember(spouseData, taxYear);
+}
+
+/**
+ * Create bidirectional spouse link between two persons (two rows, like the
+ * bidirectional Airtable link field).
  */
 export async function linkSpouses(
   personAId: string,
   personBId: string
 ): Promise<OperationResult> {
   try {
-    // Update both records in a single batch to create bidirectional link
-    const updates = [
-      {
-        id: personAId,
-        fields: {
-          'Spouse (Linked)': [personBId],
+    await getDb()
+      .insert(personalRelationships)
+      .values([
+        {
+          id: `${personAId}:spouse:${personBId}`,
+          personalId: personAId,
+          relatedPersonalId: personBId,
+          relationship: 'spouse',
         },
-      },
-      {
-        id: personBId,
-        fields: {
-          'Spouse (Linked)': [personAId],
+        {
+          id: `${personBId}:spouse:${personAId}`,
+          personalId: personBId,
+          relatedPersonalId: personAId,
+          relationship: 'spouse',
         },
-      },
-    ];
+      ])
+      .onConflictDoNothing();
 
-    await updateRecords(baseId, tableName, updates);
-
-    return {
-      success: true,
-    };
+    return { success: true };
   } catch (error) {
     console.error('Error linking spouses:', error);
     return {
@@ -192,85 +166,17 @@ export async function linkSpouses(
 }
 
 /**
- * Create a new Personal record for dependent
- * @param dependentData - Dependent information
- * @param taxYear - Tax year for the record
- * @returns Operation result with record ID if successful
+ * Create a new personal record for dependent
  */
 export async function createDependentRecord(
   dependentData: DependentData,
   taxYear: string
 ): Promise<OperationResult> {
-  try {
-    const fields: Record<string, any> = {
-      'First Name': dependentData.firstName,
-      'Last Name': dependentData.lastName,
-      'SSN': dependentData.ssn.replace(/-/g, ''), // Remove dashes
-      'Date of Birth': dependentData.dob,
-      'Tax Year': parseInt(taxYear, 10),
-    };
-
-    // Add optional fields if provided
-    if (dependentData.occupation) {
-      fields['Occupation'] = dependentData.occupation;
-    }
-
-    if (dependentData.driverLicense) {
-      fields['Drivers License / State ID'] = dependentData.driverLicense;
-    }
-
-    if (dependentData.address) {
-      fields['Mailing Address'] = dependentData.address;
-    }
-
-    if (dependentData.city) {
-      fields['City'] = dependentData.city;
-    }
-
-    if (dependentData.state) {
-      fields['State'] = dependentData.state;
-    }
-
-    if (dependentData.zip) {
-      fields['ZIP'] = dependentData.zip;
-    }
-
-    if (dependentData.phone) {
-      fields['📞Phone number'] = dependentData.phone;
-    }
-
-    if (dependentData.email) {
-      fields['Email'] = dependentData.email;
-    }
-
-    const createdRecords = await createRecords(baseId, tableName, [{ fields }]);
-
-    if (createdRecords && createdRecords.length > 0) {
-      return {
-        success: true,
-        recordId: createdRecords[0].id,
-      };
-    }
-
-    return {
-      success: false,
-      error: 'Failed to create dependent record',
-    };
-  } catch (error) {
-    console.error('Error creating dependent record:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error creating dependent record',
-    };
-  }
+  return createFamilyMember(dependentData, taxYear);
 }
 
 /**
  * Link dependent to primary taxpayer
- * @param primaryId - ID of primary taxpayer
- * @param dependentId - ID of dependent
- * @param relationshipType - Type of relationship (Child, Parent, Other Dependent)
- * @returns Operation result
  */
 export async function linkDependent(
   primaryId: string,
@@ -278,55 +184,22 @@ export async function linkDependent(
   relationshipType: 'Child' | 'Parent' | 'Other Dependent'
 ): Promise<OperationResult> {
   try {
-    // Determine which field to use based on relationship type
-    let linkField: string;
+    const relationship =
+      relationshipType === 'Child' ? 'child'
+      : relationshipType === 'Parent' ? 'parent'
+      : 'dependent';
 
-    if (relationshipType === 'Child') {
-      linkField = 'Child (Linked)';
-    } else if (relationshipType === 'Parent') {
-      linkField = 'Parent (Linked)';
-    } else {
-      linkField = 'Dependent (Linked)';
-    }
+    await getDb()
+      .insert(personalRelationships)
+      .values({
+        id: `${primaryId}:${relationship}:${dependentId}`,
+        personalId: primaryId,
+        relatedPersonalId: dependentId,
+        relationship,
+      })
+      .onConflictDoNothing();
 
-    // First, fetch the current primary record to get existing links
-    const apiKey = process.env.AIRTABLE_PERSONAL_ACCESS_TOKEN;
-    if (!apiKey) {
-      throw new Error('AIRTABLE_PERSONAL_ACCESS_TOKEN not configured');
-    }
-
-    const url = `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(tableName)}/${primaryId}`;
-    const response = await fetch(url, {
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to fetch primary record: ${response.statusText}`);
-    }
-
-    const record = await response.json() as { fields: Record<string, any> };
-    const existingLinks = record.fields[linkField] || [];
-
-    // Add new dependent to existing links (avoid duplicates)
-    const updatedLinks = existingLinks.includes(dependentId)
-      ? existingLinks
-      : [...existingLinks, dependentId];
-
-    // Update primary record with new link
-    await updateRecords(baseId, tableName, [
-      {
-        id: primaryId,
-        fields: {
-          [linkField]: updatedLinks,
-        },
-      },
-    ]);
-
-    return {
-      success: true,
-    };
+    return { success: true };
   } catch (error) {
     console.error('Error linking dependent:', error);
     return {
@@ -338,10 +211,6 @@ export async function linkDependent(
 
 /**
  * Validate that all SSNs in the family are unique
- * @param primarySSN - Primary taxpayer's SSN
- * @param spouseSSN - Spouse's SSN (optional)
- * @param dependentSSNs - Array of dependent SSNs (optional)
- * @returns Validation result with any error messages
  */
 export function validateUniqueFamilySSN(
   primarySSN: string,
@@ -351,7 +220,6 @@ export function validateUniqueFamilySSN(
   const errors: string[] = [];
   const ssnSet = new Set<string>();
 
-  // Normalize SSNs (remove dashes)
   const cleanPrimarySSN = primarySSN.replace(/-/g, '');
   ssnSet.add(cleanPrimarySSN);
 

@@ -6,14 +6,20 @@ import { defineConfig } from 'drizzle-kit';
 // owned by packages/client/scripts/run-migrations.ts, and push would try to drop them.
 // The read-only `user` definition lives in src/db/auth-readonly.ts, deliberately
 // OUTSIDE the schema folder below so drizzle-kit never generates DDL for it.
+// Render Postgres requires SSL but its cert chain fails Node verification, so
+// use sslmode=no-verify in the URL — drizzle-kit (studio/migrate) ignores a
+// separate `ssl` credentials object.
+const url = process.env.DATABASE_URL ?? '';
+const sslUrl =
+  url.includes('.render.com') && !url.includes('sslmode=')
+    ? `${url}${url.includes('?') ? '&' : '?'}sslmode=no-verify`
+    : url;
+
 export default defineConfig({
   dialect: 'postgresql',
   schema: './src/db/schema',
   out: './drizzle',
   dbCredentials: {
-    url: process.env.DATABASE_URL!,
-    ssl: process.env.DATABASE_URL?.includes('.render.com')
-      ? { rejectUnauthorized: false }
-      : false,
+    url: sslUrl,
   },
 });

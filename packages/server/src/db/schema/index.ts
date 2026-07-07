@@ -12,3 +12,4 @@
 
 export * from './catalogs';
 export * from './knowledge';
+export * from './people';

@@ -16,6 +16,11 @@ import {
   renameFileInGoogleDrive,
 } from '../googleDrive';
 import { fetchAllRecords, createRecords } from '../lib/airtable-helpers';
+import { and, eq } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
+import { getDb } from '../db/client';
+import { personal, personalRelationships } from '../db/schema';
+import { personalToAirtableRecord, loadPersonalRelationships } from '../db/serializers';
 
 const airtable = new Airtable({
   apiKey: process.env.AIRTABLE_PERSONAL_ACCESS_TOKEN || 'dummy',
@@ -125,48 +130,37 @@ export async function generateUniqueClientCode(): Promise<string> {
 }
 
 /**
- * Get spouse client code from Personal table (bidirectional)
- * If the given client code is a primary person, returns their spouse's code
- * If the given client code is a spouse, returns the primary person's code
+ * Get spouse client code from the personal table (bidirectional).
+ * Spouse relationships are stored as two rows in personal_relationships, so a
+ * single lookup covers both the primary→spouse and spouse→primary directions.
  */
 export async function getSpouseClientCode(clientCode: string): Promise<string | null> {
   try {
-    const PERSONAL_TABLE = 'Personal';
+    const db = getDb();
+    const [person] = await db
+      .select({ id: personal.id })
+      .from(personal)
+      .where(eq(personal.clientCode, clientCode))
+      .limit(1);
 
-    // First, check if this is a primary person with a spouse
-    const primaryRecords = await base(PERSONAL_TABLE)
-      .select({
-        filterByFormula: `{Client Code} = '${clientCode}'`,
-        maxRecords: 1
-      })
-      .firstPage();
+    if (!person) return null;
 
-    if (primaryRecords.length > 0) {
-      const person = primaryRecords[0];
-      const spouseClientCode = person.fields['Spouse Client Code'] as string;
+    const spouse = alias(personal, 'spouse');
+    const [rel] = await db
+      .select({ spouseClientCode: spouse.clientCode })
+      .from(personalRelationships)
+      .innerJoin(spouse, eq(personalRelationships.relatedPersonalId, spouse.id))
+      .where(
+        and(
+          eq(personalRelationships.personalId, person.id),
+          eq(personalRelationships.relationship, 'spouse')
+        )
+      )
+      .limit(1);
 
-      if (spouseClientCode) {
-        console.log(`[documentService] Found spouse code ${spouseClientCode} for primary person ${clientCode}`);
-        return spouseClientCode;
-      }
-    }
-
-    // Second, check if this client code is someone's spouse (reverse lookup)
-    const spouseRecords = await base(PERSONAL_TABLE)
-      .select({
-        filterByFormula: `{Spouse Client Code} = '${clientCode}'`,
-        maxRecords: 1
-      })
-      .firstPage();
-
-    if (spouseRecords.length > 0) {
-      const primaryPerson = spouseRecords[0];
-      const primaryClientCode = primaryPerson.fields['Client Code'] as string;
-
-      if (primaryClientCode) {
-        console.log(`[documentService] Found primary person code ${primaryClientCode} for spouse ${clientCode}`);
-        return primaryClientCode;
-      }
+    if (rel?.spouseClientCode) {
+      console.log(`[documentService] Found spouse code ${rel.spouseClientCode} for ${clientCode}`);
+      return rel.spouseClientCode;
     }
 
     return null;
@@ -177,43 +171,32 @@ export async function getSpouseClientCode(clientCode: string): Promise<string | 
 }
 
 /**
- * Get dependent client codes from Personal table
+ * Get dependent client codes from the personal table
  */
 export async function getDependentClientCodes(clientCode: string): Promise<string[]> {
   try {
-    const PERSONAL_TABLE = 'Personal';
+    const db = getDb();
+    const [person] = await db
+      .select({ id: personal.id })
+      .from(personal)
+      .where(eq(personal.clientCode, clientCode))
+      .limit(1);
 
-    // Find the person with this client code
-    const records = await base(PERSONAL_TABLE)
-      .select({
-        filterByFormula: `{Client Code} = '${clientCode}'`,
-        maxRecords: 1
-      })
-      .firstPage();
+    if (!person) return [];
 
-    if (records.length === 0) {
-      return [];
-    }
+    const dependent = alias(personal, 'dependent');
+    const rels = await db
+      .select({ code: dependent.clientCode })
+      .from(personalRelationships)
+      .innerJoin(dependent, eq(personalRelationships.relatedPersonalId, dependent.id))
+      .where(
+        and(
+          eq(personalRelationships.personalId, person.id),
+          eq(personalRelationships.relationship, 'dependent')
+        )
+      );
 
-    const person = records[0];
-    const dependentLinks = person.fields['Dependent (Linked)'] as string[] | undefined;
-
-    if (!dependentLinks || dependentLinks.length === 0) {
-      return [];
-    }
-
-    // Get client codes for all dependents
-    const dependentCodes: string[] = [];
-    for (const dependentId of dependentLinks) {
-      const depRecord = await base(PERSONAL_TABLE).find(dependentId);
-      const depClientCode = depRecord.fields['Client Code'] as string;
-      if (depClientCode) {
-        dependentCodes.push(depClientCode);
-        console.log(`[documentService] Found dependent code ${depClientCode} for primary person ${clientCode}`);
-      }
-    }
-
-    return dependentCodes;
+    return rels.map((r) => r.code).filter((code): code is string => Boolean(code));
   } catch (error) {
     console.error('[documentService] Error finding dependents:', error);
     return [];
@@ -221,22 +204,22 @@ export async function getDependentClientCodes(clientCode: string): Promise<strin
 }
 
 /**
- * Get Personal record by client code
+ * Get personal record by client code (legacy Airtable record shape)
  */
 export async function getPersonalRecordByClientCode(clientCode: string): Promise<{ id: string; fields: any } | null> {
   try {
-    const PERSONAL_TABLE = 'Personal';
-    const records = await base(PERSONAL_TABLE)
-      .select({
-        filterByFormula: `{Client Code} = '${clientCode}'`,
-        maxRecords: 1
-      })
-      .firstPage();
+    const db = getDb();
+    const [row] = await db
+      .select()
+      .from(personal)
+      .where(eq(personal.clientCode, clientCode))
+      .limit(1);
 
-    if (records.length > 0) {
-      return { id: records[0].id, fields: records[0].fields };
-    }
-    return null;
+    if (!row) return null;
+
+    const { relMap, lookup } = await loadPersonalRelationships(db, [row.id]);
+    const record = personalToAirtableRecord(row, relMap.get(row.id), lookup);
+    return { id: record.id, fields: record.fields };
   } catch (error) {
     console.error('[documentService] Error finding personal record:', error);
     return null;

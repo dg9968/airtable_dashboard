@@ -1,23 +1,21 @@
 /**
- * Company_Contacts Junction Table Routes
- * Manages the many-to-many relationship between Contacts and Companies
+ * Company_Contacts Junction Table Routes (Postgres-backed)
+ * Manages the many-to-many relationship between contacts (personal) and
+ * companies (corporations).
+ *
+ * NOTE: the /service/:serviceName/subscribers endpoint is hybrid during the
+ * migration — services + entities + relationships come from Postgres, but
+ * subscriptions still come from Airtable until Phase 3.
  */
 
 import { Hono } from 'hono';
-import {
-  fetchRecords,
-  findRecord,
-  createRecords,
-  updateRecords,
-  deleteRecords,
-  getTable
-} from '../lib/airtable-service';
+import { and, eq, ilike, inArray } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
+import { getDb } from '../db/client';
+import { companyContacts, corporations, personal, servicesCorporate } from '../db/schema';
+import { fetchRecords } from '../lib/airtable-service';
 
 const app = new Hono();
-
-const COMPANY_CONTACTS_TABLE = 'Company_Contacts';
-const CONTACTS_TABLE = 'Personal';
-const COMPANIES_TABLE = 'Corporations';
 
 interface CompanyContactRelationship {
   id?: string;
@@ -33,6 +31,60 @@ interface CompanyContactRelationship {
   status?: 'Active' | 'Inactive';
 }
 
+const contactPerson = alias(personal, 'contact_person');
+
+/** Select relationships joined with contact + company names. */
+function selectRelationships() {
+  return getDb()
+    .select({
+      rel: companyContacts,
+      contactFirstName: contactPerson.firstName,
+      contactLastName: contactPerson.lastName,
+      companyName: corporations.company,
+    })
+    .from(companyContacts)
+    .leftJoin(contactPerson, eq(companyContacts.contactId, contactPerson.id))
+    .leftJoin(corporations, eq(companyContacts.corporationId, corporations.id));
+}
+
+type JoinedRel = Awaited<ReturnType<ReturnType<typeof selectRelationships>['execute']>>[number];
+
+function mapRelationship(r: JoinedRel) {
+  const contactName = [r.contactFirstName, r.contactLastName].filter(Boolean).join(' ') || undefined;
+  return {
+    id: r.rel.id,
+    contactId: r.rel.contactId ?? undefined,
+    companyId: r.rel.corporationId ?? undefined,
+    contactName,
+    companyName: r.companyName ?? undefined,
+    role: r.rel.role ?? undefined,
+    isPrimary: r.rel.isPrimaryContact || false,
+    workEmail: r.rel.workEmail ?? undefined,
+    workPhone: r.rel.workPhone ?? undefined,
+    department: r.rel.department ?? undefined,
+    startDate: r.rel.startDate ?? undefined,
+    endDate: r.rel.endDate ?? undefined,
+    status: r.rel.status || 'Active',
+    createdTime: r.rel.createdAt.toISOString(),
+  };
+}
+
+/** Legacy Airtable-shaped fields object for create/update responses. */
+function relationshipFields(r: typeof companyContacts.$inferSelect): Record<string, unknown> {
+  const fields: Record<string, unknown> = {};
+  if (r.contactId) fields['Contact'] = [r.contactId];
+  if (r.corporationId) fields['Company'] = [r.corporationId];
+  if (r.role) fields['Role'] = r.role;
+  if (r.isPrimaryContact) fields['Is Primary Contact'] = true;
+  if (r.workEmail) fields['Work Email'] = r.workEmail;
+  if (r.workPhone) fields['Work Phone'] = r.workPhone;
+  if (r.department) fields['Department'] = r.department;
+  if (r.startDate) fields['Start Date'] = r.startDate;
+  if (r.endDate) fields['End Date'] = r.endDate;
+  if (r.status) fields['Status'] = r.status;
+  return fields;
+}
+
 /**
  * GET /api/company-contacts
  * Get all company-contact relationships (with optional filters)
@@ -43,44 +95,16 @@ app.get('/', async (c) => {
     const companyId = c.req.query('companyId');
     const status = c.req.query('status') || 'Active';
 
-    const records = await fetchRecords(COMPANY_CONTACTS_TABLE, { maxRecords: 100 });
+    const conditions = [];
+    if (contactId) conditions.push(eq(companyContacts.contactId, contactId));
+    if (companyId) conditions.push(eq(companyContacts.corporationId, companyId));
+    if (status) conditions.push(eq(companyContacts.status, status));
 
-    // Log first record to inspect field names
-    if (records.length > 0) {
-      console.log('Sample Company_Contacts record fields:', Object.keys(records[0].fields));
-      console.log('Total records found:', records.length);
-    }
+    const rows = await selectRelationships().where(
+      conditions.length > 0 ? and(...conditions) : undefined
+    );
 
-    const relationships = records
-      .map((record) => {
-        // Extract contact and company IDs from linked record fields
-        const recordContactId = Array.isArray(record.fields['Contact']) ? record.fields['Contact'][0] : record.fields['Contact'];
-        const recordCompanyId = Array.isArray(record.fields['Company']) ? record.fields['Company'][0] : record.fields['Company'];
-
-        return {
-          id: record.id,
-          contactId: recordContactId,
-          companyId: recordCompanyId,
-          contactName: record.fields['Contact Name (from Contact)'] || record.fields['Contact Name'],
-          companyName: record.fields['Company Name (from Company)'] || record.fields['Company Name'],
-          role: record.fields['Role'],
-          isPrimary: record.fields['Is Primary Contact'] || false,
-          workEmail: record.fields['Work Email'],
-          workPhone: record.fields['Work Phone'],
-          department: record.fields['Department'],
-          startDate: record.fields['Start Date'],
-          endDate: record.fields['End Date'],
-          status: record.fields['Status'] || 'Active',
-          createdTime: record.createdTime
-        };
-      })
-      .filter((rel) => {
-        // Apply filtering in code
-        const matchesContact = !contactId || String(rel.contactId) === String(contactId);
-        const matchesCompany = !companyId || String(rel.companyId) === String(companyId);
-        const matchesStatus = !status || String(rel.status) === String(status);
-        return matchesContact && matchesCompany && matchesStatus;
-      });
+    const relationships = rows.map(mapRelationship);
 
     return c.json({
       success: true,
@@ -108,26 +132,15 @@ app.get('/:id', async (c) => {
   try {
     const id = c.req.param('id');
 
-    const record = await findRecord(COMPANY_CONTACTS_TABLE, id);
+    const rows = await selectRelationships().where(eq(companyContacts.id, id)).limit(1);
+
+    if (rows.length === 0) {
+      return c.json({ success: false, error: 'Relationship not found' }, 404);
+    }
 
     return c.json({
       success: true,
-      data: {
-        id: record.id,
-        contactId: Array.isArray(record.fields['Contact']) ? record.fields['Contact'][0] : record.fields['Contact'],
-        companyId: Array.isArray(record.fields['Company']) ? record.fields['Company'][0] : record.fields['Company'],
-        contactName: record.fields['Contact Name (from Contact)'] || record.fields['Contact Name'],
-        companyName: record.fields['Company Name (from Company)'] || record.fields['Company Name'],
-        role: record.fields['Role'],
-        isPrimary: record.fields['Is Primary Contact'] || false,
-        workEmail: record.fields['Work Email'],
-        workPhone: record.fields['Work Phone'],
-        department: record.fields['Department'],
-        startDate: record.fields['Start Date'],
-        endDate: record.fields['End Date'],
-        status: record.fields['Status'] || 'Active',
-        createdTime: record.createdTime
-      }
+      data: mapRelationship(rows[0])
     });
 
   } catch (error) {
@@ -157,52 +170,48 @@ app.post('/', async (c) => {
       );
     }
 
-    // Check if relationship already exists - fetch all and filter in code
-    const existing = await fetchRecords(COMPANY_CONTACTS_TABLE, { maxRecords: 100 });
+    const db = getDb();
 
-    const duplicate = existing.find(record => {
-      const contactMatch = Array.isArray(record.fields['Contact'])
-        ? record.fields['Contact'].includes(data.contactId)
-        : record.fields['Contact'] === data.contactId;
+    // Check if an active relationship already exists
+    const duplicate = await db
+      .select({ id: companyContacts.id })
+      .from(companyContacts)
+      .where(
+        and(
+          eq(companyContacts.contactId, data.contactId),
+          eq(companyContacts.corporationId, data.companyId),
+          eq(companyContacts.status, 'Active')
+        )
+      )
+      .limit(1);
 
-      const companyMatch = Array.isArray(record.fields['Company'])
-        ? record.fields['Company'].includes(data.companyId)
-        : record.fields['Company'] === data.companyId;
-
-      return contactMatch && companyMatch && record.fields['Status'] === 'Active';
-    });
-
-    if (duplicate) {
+    if (duplicate.length > 0) {
       return c.json(
         { success: false, error: 'Active relationship already exists between this contact and company' },
         409
       );
     }
 
-    const recordData: any = {
-      'Contact': [data.contactId], // Linked record field
-      'Company': [data.companyId], // Linked record field
-      'Status': data.status || 'Active',
-      'Start Date': data.startDate || new Date().toISOString().split('T')[0]
-    };
-
-    if (data.role) recordData['Role'] = data.role;
-    if (data.isPrimary !== undefined) recordData['Is Primary Contact'] = data.isPrimary;
-    if (data.workEmail) recordData['Work Email'] = data.workEmail;
-    if (data.workPhone) recordData['Work Phone'] = data.workPhone;
-    if (data.department) recordData['Department'] = data.department;
-
-    console.log('Creating company-contact relationship:', recordData);
-
-    const record = await createRecords(COMPANY_CONTACTS_TABLE, [
-      { fields: recordData }
-    ]);
+    const [row] = await db
+      .insert(companyContacts)
+      .values({
+        contactId: data.contactId,
+        corporationId: data.companyId,
+        status: data.status || 'Active',
+        startDate: data.startDate || new Date().toISOString().split('T')[0],
+        role: data.role || null,
+        isPrimaryContact: data.isPrimary ?? false,
+        workEmail: data.workEmail || null,
+        workPhone: data.workPhone || null,
+        department: data.department || null,
+      })
+      .returning();
 
     return c.json({
       success: true,
       data: {
-        id: record[0].id,
-        fields: record[0].fields
+        id: row.id,
+        fields: relationshipFields(row)
       }
     }, 201);
 
@@ -228,28 +237,34 @@ app.patch('/:id', async (c) => {
     const id = c.req.param('id');
     const data: Partial<CompanyContactRelationship> = await c.req.json();
 
-    const updateFields: any = {};
+    const values: Partial<typeof companyContacts.$inferInsert> = {};
 
-    if (data.role !== undefined) updateFields['Role'] = data.role;
-    if (data.isPrimary !== undefined) updateFields['Is Primary Contact'] = data.isPrimary;
-    if (data.workEmail !== undefined) updateFields['Work Email'] = data.workEmail;
-    if (data.workPhone !== undefined) updateFields['Work Phone'] = data.workPhone;
-    if (data.department !== undefined) updateFields['Department'] = data.department;
-    if (data.startDate !== undefined) updateFields['Start Date'] = data.startDate;
-    if (data.endDate !== undefined) updateFields['End Date'] = data.endDate;
-    if (data.status !== undefined) updateFields['Status'] = data.status;
+    if (data.role !== undefined) values.role = data.role;
+    if (data.isPrimary !== undefined) values.isPrimaryContact = data.isPrimary;
+    if (data.workEmail !== undefined) values.workEmail = data.workEmail;
+    if (data.workPhone !== undefined) values.workPhone = data.workPhone;
+    if (data.department !== undefined) values.department = data.department;
+    if (data.startDate !== undefined) values.startDate = data.startDate;
+    if (data.endDate !== undefined) values.endDate = data.endDate;
+    if (data.status !== undefined) values.status = data.status;
 
-    console.log('Updating relationship:', id, updateFields);
+    console.log('Updating relationship:', id, values);
 
-    const records = await updateRecords(COMPANY_CONTACTS_TABLE, [
-      { id, fields: updateFields }
-    ]);
+    const [row] = await getDb()
+      .update(companyContacts)
+      .set(values)
+      .where(eq(companyContacts.id, id))
+      .returning();
+
+    if (!row) {
+      return c.json({ success: false, error: 'Relationship not found' }, 404);
+    }
 
     return c.json({
       success: true,
       data: {
-        id: records[0].id,
-        fields: records[0].fields
+        id: row.id,
+        fields: relationshipFields(row)
       }
     });
 
@@ -274,31 +289,34 @@ app.delete('/:id', async (c) => {
     const id = c.req.param('id');
     const hardDelete = c.req.query('hard') === 'true';
 
+    const db = getDb();
+
     if (hardDelete) {
-      // Permanently delete the record
-      await deleteRecords(COMPANY_CONTACTS_TABLE, [id]);
+      await db.delete(companyContacts).where(eq(companyContacts.id, id));
       return c.json({
         success: true,
         message: 'Relationship permanently deleted'
       });
     } else {
-      // Soft delete: set status to Inactive and add end date
-      const records = await updateRecords(COMPANY_CONTACTS_TABLE, [
-        {
-          id,
-          fields: {
-            'Status': 'Inactive',
-            'End Date': new Date().toISOString().split('T')[0]
-          }
-        }
-      ]);
+      const [row] = await db
+        .update(companyContacts)
+        .set({
+          status: 'Inactive',
+          endDate: new Date().toISOString().split('T')[0],
+        })
+        .where(eq(companyContacts.id, id))
+        .returning();
+
+      if (!row) {
+        return c.json({ success: false, error: 'Relationship not found' }, 404);
+      }
 
       return c.json({
         success: true,
         message: 'Relationship deactivated',
         data: {
-          id: records[0].id,
-          fields: records[0].fields
+          id: row.id,
+          fields: relationshipFields(row)
         }
       });
     }
@@ -324,27 +342,22 @@ app.get('/contact/:contactId/companies', async (c) => {
     const contactId = c.req.param('contactId');
     const status = c.req.query('status') || 'Active';
 
-    const records = await fetchRecords(COMPANY_CONTACTS_TABLE, { maxRecords: 100 });
+    const rows = await selectRelationships().where(
+      and(eq(companyContacts.contactId, contactId), eq(companyContacts.status, status))
+    );
 
-    const relationships = records
-      .filter((record) => {
-        const recordContactId = Array.isArray(record.fields['Contact']) ? record.fields['Contact'][0] : record.fields['Contact'];
-        const matchesContact = String(recordContactId) === String(contactId);
-        const matchesStatus = String(record.fields['Status']) === String(status);
-        return matchesContact && matchesStatus;
-      })
-      .map((record) => ({
-        relationshipId: record.id,
-        companyId: Array.isArray(record.fields['Company']) ? record.fields['Company'][0] : record.fields['Company'],
-        companyName: record.fields['Company Name (from Company)'] || record.fields['Company Name'],
-        role: record.fields['Role'],
-        isPrimary: record.fields['Is Primary Contact'] || false,
-        workEmail: record.fields['Work Email'],
-        workPhone: record.fields['Work Phone'],
-        department: record.fields['Department'],
-        startDate: record.fields['Start Date'],
-        endDate: record.fields['End Date']
-      }));
+    const relationships = rows.map((r) => ({
+      relationshipId: r.rel.id,
+      companyId: r.rel.corporationId ?? undefined,
+      companyName: r.companyName ?? undefined,
+      role: r.rel.role ?? undefined,
+      isPrimary: r.rel.isPrimaryContact || false,
+      workEmail: r.rel.workEmail ?? undefined,
+      workPhone: r.rel.workPhone ?? undefined,
+      department: r.rel.department ?? undefined,
+      startDate: r.rel.startDate ?? undefined,
+      endDate: r.rel.endDate ?? undefined
+    }));
 
     return c.json({
       success: true,
@@ -374,36 +387,26 @@ app.get('/company/:companyId/contacts', async (c) => {
     const companyId = c.req.param('companyId');
     const status = c.req.query('status') || 'Active';
 
-    const records = await fetchRecords(COMPANY_CONTACTS_TABLE, { maxRecords: 100 });
+    const rows = await selectRelationships().where(
+      and(eq(companyContacts.corporationId, companyId), eq(companyContacts.status, status))
+    );
 
-    const relationships = records
-      .filter((record) => {
-        const recordCompanyId = Array.isArray(record.fields['Company']) ? record.fields['Company'][0] : record.fields['Company'];
-        const matchesCompany = String(recordCompanyId) === String(companyId);
-        const matchesStatus = String(record.fields['Status']) === String(status);
-        return matchesCompany && matchesStatus;
-      })
-      .map((record) => {
-        // Try multiple possible field names for contact name
-        const contactName = record.fields['Contact Name (from Contact)']
-          || record.fields['Contact Name']
-          || record.fields['Full Name (from Contact)']
-          || record.fields['Name (from Contact)']
-          || 'Unknown Contact';
-
-        return {
-          relationshipId: record.id,
-          contactId: Array.isArray(record.fields['Contact']) ? record.fields['Contact'][0] : record.fields['Contact'],
-          contactName: contactName,
-          role: record.fields['Role'],
-          isPrimary: record.fields['Is Primary Contact'] || false,
-          workEmail: record.fields['Work Email'],
-          workPhone: record.fields['Work Phone'],
-          department: record.fields['Department'],
-          startDate: record.fields['Start Date'],
-          endDate: record.fields['End Date']
-        };
-      });
+    const relationships = rows.map((r) => {
+      const contactName =
+        [r.contactFirstName, r.contactLastName].filter(Boolean).join(' ') || 'Unknown Contact';
+      return {
+        relationshipId: r.rel.id,
+        contactId: r.rel.contactId ?? undefined,
+        contactName,
+        role: r.rel.role ?? undefined,
+        isPrimary: r.rel.isPrimaryContact || false,
+        workEmail: r.rel.workEmail ?? undefined,
+        workPhone: r.rel.workPhone ?? undefined,
+        department: r.rel.department ?? undefined,
+        startDate: r.rel.startDate ?? undefined,
+        endDate: r.rel.endDate ?? undefined
+      };
+    });
 
     return c.json({
       success: true,
@@ -440,52 +443,51 @@ app.post('/contact/:contactId/set-primary', async (c) => {
       );
     }
 
-    // First, fetch all relationships for this company
-    const allContacts = await fetchRecords(COMPANY_CONTACTS_TABLE, { maxRecords: 100 });
+    const db = getDb();
 
-    // Filter for the specific company and active status
-    const companyContacts = allContacts.filter(record => {
-      const recordCompanyId = Array.isArray(record.fields['Company']) ? record.fields['Company'][0] : record.fields['Company'];
-      return String(recordCompanyId) === String(companyId) && record.fields['Status'] === 'Active';
-    });
+    // Ensure the target relationship exists before clearing others
+    const [target] = await db
+      .select()
+      .from(companyContacts)
+      .where(
+        and(
+          eq(companyContacts.corporationId, companyId),
+          eq(companyContacts.contactId, contactId),
+          eq(companyContacts.status, 'Active')
+        )
+      )
+      .limit(1);
 
-    // Set all contacts for this company to non-primary
-    if (companyContacts.length > 0) {
-      await updateRecords(
-        COMPANY_CONTACTS_TABLE,
-        companyContacts.map(record => ({
-          id: record.id,
-          fields: { 'Is Primary Contact': false }
-        }))
-      );
-    }
-
-    // Now find and set the specified contact as primary
-    const targetRelationship = companyContacts.find(record => {
-      const recordContactId = Array.isArray(record.fields['Contact']) ? record.fields['Contact'][0] : record.fields['Contact'];
-      return String(recordContactId) === String(contactId);
-    });
-
-    if (!targetRelationship) {
+    if (!target) {
       return c.json(
         { success: false, error: 'Contact-Company relationship not found' },
         404
       );
     }
 
-    const updatedRecords = await updateRecords(COMPANY_CONTACTS_TABLE, [
-      {
-        id: targetRelationship.id,
-        fields: { 'Is Primary Contact': true }
-      }
-    ]);
+    // Set all active contacts for this company to non-primary
+    await db
+      .update(companyContacts)
+      .set({ isPrimaryContact: false })
+      .where(
+        and(
+          eq(companyContacts.corporationId, companyId),
+          eq(companyContacts.status, 'Active')
+        )
+      );
+
+    const [row] = await db
+      .update(companyContacts)
+      .set({ isPrimaryContact: true })
+      .where(eq(companyContacts.id, target.id))
+      .returning();
 
     return c.json({
       success: true,
       message: 'Primary contact updated',
       data: {
-        id: updatedRecords[0].id,
-        fields: updatedRecords[0].fields
+        id: row.id,
+        fields: relationshipFields(row)
       }
     });
 
@@ -504,6 +506,9 @@ app.post('/contact/:contactId/set-primary', async (c) => {
 /**
  * GET /api/company-contacts/service/:serviceName/subscribers
  * Get all subscribers of a specific service with their contact information
+ *
+ * Hybrid during migration: services/entities/relationships from Postgres,
+ * subscriptions from Airtable (until Phase 3).
  */
 app.get('/service/:serviceName/subscribers', async (c) => {
   try {
@@ -512,31 +517,15 @@ app.get('/service/:serviceName/subscribers', async (c) => {
 
     console.log(`\n[Service Subscribers] Searching for service: "${serviceName}"`);
 
-    // Step 1: Fetch all services and find matching service IDs
-    const SERVICES_TABLE = 'Services Corporate';
-    const matchingServiceIds: string[] = [];
+    const db = getDb();
 
-    const servicesRecords = await fetchRecords(SERVICES_TABLE, {});
-    servicesRecords.forEach((record, index) => {
-      const serviceNameField = record.fields['Services']
-        || record.fields['Service']
-        || record.fields['Service Name']
-        || record.fields['Name'];
+    // Step 1: Find matching service IDs (Postgres)
+    const serviceRows = await db
+      .select({ id: servicesCorporate.id, name: servicesCorporate.name })
+      .from(servicesCorporate)
+      .where(ilike(servicesCorporate.name, `%${serviceName}%`));
 
-      // Debug: Log first 3 services to see what we have
-      if (index < 3) {
-        console.log(`Service #${index + 1}: "${serviceNameField}" (${record.id})`, {
-          allFields: Object.keys(record.fields),
-          fields: record.fields
-        });
-      }
-
-      if (serviceNameField && String(serviceNameField).toLowerCase().includes(serviceName.toLowerCase())) {
-        matchingServiceIds.push(record.id);
-        console.log(`✓ Found matching service: "${serviceNameField}" (${record.id})`);
-      }
-    });
-
+    const matchingServiceIds = serviceRows.map((s) => s.id);
     console.log(`[Service Subscribers] Found ${matchingServiceIds.length} matching service IDs`);
 
     if (matchingServiceIds.length === 0) {
@@ -550,76 +539,35 @@ app.get('/service/:serviceName/subscribers', async (c) => {
       });
     }
 
-    // Step 2: Query Subscriptions Corporate junction table to find company IDs with this service
+    // Step 2: Find company IDs with an Active subscription to those services
+    // (Airtable until Phase 3)
     const SUBSCRIPTIONS_TABLE = 'Subscriptions Corporate';
     const companyIdsWithService: Set<string> = new Set();
 
     const subscriptionsRecords = await fetchRecords(SUBSCRIPTIONS_TABLE, {});
-    subscriptionsRecords.forEach((record, subscriptionCount) => {
+    subscriptionsRecords.forEach((record) => {
+      const serviceIds = record.fields['Services'];
+      const companyId = Array.isArray(record.fields['Customer'])
+        ? record.fields['Customer'][0]
+        : record.fields['Customer'];
 
-          // Field is called "Services" (plural) and "Customer" (not Company)
-          const serviceIds = record.fields['Services']; // This is an array of service IDs
-          const companyId = Array.isArray(record.fields['Customer'])
-            ? record.fields['Customer'][0]
-            : record.fields['Customer'];
+      const status = record.fields['Status']
+        || record.fields['Active']
+        || record.fields['Is Active']
+        || record.fields['Subscription Status'];
+      const statusValue = Array.isArray(status) ? status : [status];
 
-          // Try various possible status field names
-          // Status might be an array (multiple select field) or a string
-          let status = record.fields['Status']
-            || record.fields['Active']
-            || record.fields['Is Active']
-            || record.fields['Subscription Status'];
+      if (serviceIds && Array.isArray(serviceIds) && companyId) {
+        const hasMatchingService = serviceIds.some(sid =>
+          matchingServiceIds.includes(String(sid))
+        );
+        const isActive = statusValue.includes('Active');
 
-          // If status is an array (multiple select), check if it contains 'Active'
-          const statusValue = Array.isArray(status) ? status : [status];
-
-          // Debug: Log first 10 subscriptions to see all field data
-          // Including both matching and non-matching to understand structure
-          if (subscriptionCount < 10) {
-            const allFields = Object.keys(record.fields);
-            const hasMatchingService = serviceIds && Array.isArray(serviceIds) && serviceIds.some(sid =>
-              matchingServiceIds.includes(String(sid))
-            );
-
-            console.log(`Subscription #${subscriptionCount + 1}${hasMatchingService ? ' [MATCHES SERVICE]' : ''}:`, {
-              name: record.fields['Name'],
-              serviceIds,
-              servicesCount: Array.isArray(serviceIds) ? serviceIds.length : 0,
-              companyId,
-              status,
-              statusValue,
-              statusType: Array.isArray(status) ? 'array' : typeof status,
-              allFields,
-              // Show sample of field values to understand structure
-              sampleFields: Object.fromEntries(
-                Object.entries(record.fields)
-                  .filter(([key]) => !key.includes('(from'))
-                  .slice(0, 8)
-              )
-            });
-          }
-
-          // Check if this subscription has any of the matching service IDs AND is Active
-          if (serviceIds && Array.isArray(serviceIds) && companyId) {
-            const hasMatchingService = serviceIds.some(sid =>
-              matchingServiceIds.includes(String(sid))
-            );
-
-            // Filter by Status = 'Active'
-            // Status could be a string or an array (multiple select field)
-            const isActive = statusValue.includes('Active');
-
-            if (hasMatchingService && isActive) {
-              companyIdsWithService.add(String(companyId));
-              console.log(`✓ Found ACTIVE subscription: Company ${companyId} -> Services ${serviceIds.join(', ')} | Status: ${JSON.stringify(status)}`);
-            } else if (hasMatchingService && !isActive) {
-              // Log filtered out subscriptions for debugging
-              if (subscriptionCount < 20) {
-                console.log(`  [Filtered] Company ${companyId} has service but Status is ${JSON.stringify(status)} (not Active)`);
-              }
-            }
-          }
-        });
+        if (hasMatchingService && isActive) {
+          companyIdsWithService.add(String(companyId));
+        }
+      }
+    });
 
     console.log(`[Service Subscribers] Found ${companyIdsWithService.size} companies with service "${serviceName}"`);
 
@@ -634,64 +582,63 @@ app.get('/service/:serviceName/subscribers', async (c) => {
       });
     }
 
-    // Step 3: Fetch company details for the matching companies
-    const companiesRecords = await fetchRecords(COMPANIES_TABLE, {});
-    const companiesWithService = companiesRecords
-      .filter(record => companyIdsWithService.has(record.id))
-      .map(record => ({
-        id: record.id,
-        name: record.fields['Company'] || record.fields['Company Name'],
-        email: record.fields['🤷‍♂️Email'] || record.fields['Email'],
-        phone: record.fields['Phone'],
-        ein: record.fields['EIN'],
-        subscriptions: []
+    // Step 3: Company details (Postgres)
+    const companyRows = await db
+      .select()
+      .from(corporations)
+      .where(inArray(corporations.id, [...companyIdsWithService]));
+
+    const companiesWithService = companyRows.map((row) => ({
+      id: row.id,
+      name: row.company ?? undefined,
+      email: row.email ?? undefined,
+      phone: row.phone ?? undefined,
+      ein: row.ein ?? undefined,
+      subscriptions: [] as unknown[]
+    }));
+
+    // Step 4 + 5: Relationships joined with contact info (Postgres)
+    const relRows = await selectRelationships();
+    const allRelationships = relRows
+      .filter((r) => includeInactive || r.rel.status === 'Active')
+      .map((r) => ({
+        id: r.rel.id,
+        contactId: r.rel.contactId,
+        companyId: r.rel.corporationId,
+        role: r.rel.role ?? undefined,
+        isPrimary: r.rel.isPrimaryContact || false,
+        workEmail: r.rel.workEmail ?? undefined,
+        workPhone: r.rel.workPhone ?? undefined,
+        department: r.rel.department ?? undefined,
+        status: r.rel.status ?? undefined,
+        contactName: [r.contactFirstName, r.contactLastName].filter(Boolean).join(' ') || undefined,
       }));
 
-    // Step 4: Fetch all Company_Contacts relationships
-    const relationshipsRecords = await fetchRecords(COMPANY_CONTACTS_TABLE, {});
-    const allRelationships = relationshipsRecords
-      .filter(record => {
-        const status = record.fields['Status'];
-        return includeInactive || status === 'Active';
-      })
-      .map(record => ({
-        id: record.id,
-        contactId: Array.isArray(record.fields['Contact'])
-          ? record.fields['Contact'][0]
-          : record.fields['Contact'],
-        companyId: Array.isArray(record.fields['Company'])
-          ? record.fields['Company'][0]
-          : record.fields['Company'],
-        role: record.fields['Role'],
-        isPrimary: record.fields['Is Primary Contact'] || false,
-        workEmail: record.fields['Work Email'],
-        workPhone: record.fields['Work Phone'],
-        department: record.fields['Department'],
-        status: record.fields['Status']
-      }));
-
-    // Step 5: Fetch all contacts to enrich the data
-    const contactsRecords = await fetchRecords(CONTACTS_TABLE, {});
-    const allContacts: Map<string, any> = new Map();
-    contactsRecords.forEach(record => {
-      allContacts.set(record.id, {
-        id: record.id,
-        name: record.fields['Full Name'] || record.fields['Name'],
-        email: record.fields['Email'],
-        phone: record.fields['📞Phone number'] || record.fields['Phone'],
-        status: record.fields['Status'] || record.fields['❓Status']
-      });
-    });
+    const contactIds = [...new Set(allRelationships.map((r) => r.contactId).filter(Boolean))] as string[];
+    const contactRows = contactIds.length > 0
+      ? await db.select().from(personal).where(inArray(personal.id, contactIds))
+      : [];
+    const allContacts = new Map(
+      contactRows.map((row) => [
+        row.id,
+        {
+          id: row.id,
+          name: [row.firstName, row.lastName].filter(Boolean).join(' ') || undefined,
+          email: row.email ?? undefined,
+          phone: row.phone ?? undefined,
+          status: row.status ?? undefined,
+        },
+      ])
+    );
 
     // Step 6: Build the enriched response
     const subscribers = companiesWithService.map(company => {
-      // Find all contacts for this company
       const companyRelationships = allRelationships.filter(
         rel => String(rel.companyId) === String(company.id)
       );
 
       const contacts = companyRelationships.map(rel => {
-        const contactInfo = allContacts.get(rel.contactId);
+        const contactInfo = rel.contactId ? allContacts.get(rel.contactId) : undefined;
         return {
           relationshipId: rel.id,
           contactId: rel.contactId,
