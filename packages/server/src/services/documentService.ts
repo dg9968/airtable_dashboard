@@ -4,7 +4,6 @@
  * Handles document storage, retrieval, and management
  */
 
-import Airtable from 'airtable';
 import { existsSync } from 'fs';
 import { writeFile, readFile, mkdir, unlink, readdir, lstat } from 'fs/promises';
 import path from 'path';
@@ -15,18 +14,17 @@ import {
   getFileMetadata,
   renameFileInGoogleDrive,
 } from '../googleDrive';
-import { fetchAllRecords, createRecords } from '../lib/airtable-helpers';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { getDb } from '../db/client';
-import { personal, personalRelationships } from '../db/schema';
+import {
+  personal,
+  personalRelationships,
+  documents,
+  personalServices,
+  subscriptionsPersonal,
+} from '../db/schema';
 import { personalToAirtableRecord, loadPersonalRelationships } from '../db/serializers';
-
-const airtable = new Airtable({
-  apiKey: process.env.AIRTABLE_PERSONAL_ACCESS_TOKEN || 'dummy',
-});
-const base = airtable.base(process.env.AIRTABLE_BASE_ID || 'dummy');
-const DOCUMENTS_TABLE = 'Documents';
 
 export interface DocumentMetadata {
   id: string;
@@ -99,31 +97,17 @@ export async function generateUniqueClientCode(): Promise<string> {
   while (attempts < maxAttempts) {
     const code = generateClientCode();
 
-    try {
-      // Check if code exists in Airtable
-      const records = await base(DOCUMENTS_TABLE)
-        .select({
-          filterByFormula: `{Client Code} = '${code}'`,
-          maxRecords: 1
-        })
-        .firstPage();
+    const existing = await getDb()
+      .select({ id: documents.id })
+      .from(documents)
+      .where(eq(documents.clientCode, code))
+      .limit(1);
 
-      if (records.length === 0) {
-        return code;
-      }
-
-      attempts++;
-    } catch (error) {
-      console.error('Airtable check failed, using local check:', error);
-
-      // Fallback: check if directory exists locally
-      const clientDir = path.join(process.cwd(), 'documents', code);
-      if (!existsSync(clientDir)) {
-        return code;
-      }
-
-      attempts++;
+    if (existing.length === 0) {
+      return code;
     }
+
+    attempts++;
   }
 
   throw new Error('Unable to generate unique client code');
@@ -231,13 +215,12 @@ export async function getPersonalRecordByClientCode(clientCode: string): Promise
  */
 export async function isFirstDocumentForClient(clientCode: string): Promise<boolean> {
   try {
-    const records = await base(DOCUMENTS_TABLE)
-      .select({
-        filterByFormula: `{Client Code} = '${clientCode}'`,
-        maxRecords: 1
-      })
-      .firstPage();
-    return records.length === 0;
+    const existing = await getDb()
+      .select({ id: documents.id })
+      .from(documents)
+      .where(eq(documents.clientCode, clientCode))
+      .limit(1);
+    return existing.length === 0;
   } catch (error) {
     console.error('[documentService] Error checking existing documents:', error);
     return false; // Assume not first to avoid duplicates
@@ -249,45 +232,41 @@ export async function isFirstDocumentForClient(clientCode: string): Promise<bool
  */
 export async function addClientToPipelineIfNeeded(personalId: string): Promise<boolean> {
   const SERVICE_NAME = 'Tax Prep Pipeline';
-  const baseId = process.env.AIRTABLE_BASE_ID || '';
 
   try {
-    // 1. Find the "Tax Prep Pipeline" service
-    const services = await fetchAllRecords(baseId, 'Personal Services');
-    console.log('[documentService] Available services:', services.map(s => ({ id: s.id, fields: s.fields })));
+    const db = getDb();
 
-    const service = services.find(s =>
-      s.fields['Service Name'] === SERVICE_NAME
-    );
+    // 1. Find the "Tax Prep Pipeline" service
+    const [service] = await db
+      .select({ id: personalServices.id })
+      .from(personalServices)
+      .where(eq(personalServices.name, SERVICE_NAME))
+      .limit(1);
 
     if (!service) {
-      console.warn(`[documentService] Service "${SERVICE_NAME}" not found in Personal Services table`);
+      console.warn(`[documentService] Service "${SERVICE_NAME}" not found in personal_services`);
       return false;
     }
 
     // 2. Check if client already has this subscription
-    // Fetch all subscriptions and filter in JS — ARRAYJOIN on link fields returns display names,
-    // not record IDs, making filterByFormula unreliable for this check.
-    const subscriptions = await fetchAllRecords(baseId, 'Subscriptions Personal');
+    const [existing] = await db
+      .select({ id: subscriptionsPersonal.id })
+      .from(subscriptionsPersonal)
+      .where(
+        and(
+          eq(subscriptionsPersonal.personalId, personalId),
+          eq(subscriptionsPersonal.serviceId, service.id)
+        )
+      )
+      .limit(1);
 
-    const alreadyInPipeline = subscriptions.some(sub => {
-      const linkedPersonals = sub.fields['Last Name'] || [];
-      const linkedServices = sub.fields['Service'] || [];
-      return linkedPersonals.includes(personalId) && linkedServices.includes(service.id);
-    });
-
-    if (alreadyInPipeline) {
+    if (existing) {
       console.log(`[documentService] Client ${personalId} already in ${SERVICE_NAME}`);
       return true;
     }
 
     // 3. Create junction record
-    await createRecords(baseId, 'Subscriptions Personal', [{
-      fields: {
-        'Last Name': [personalId],
-        'Service': [service.id]
-      }
-    }]);
+    await db.insert(subscriptionsPersonal).values({ personalId, serviceId: service.id });
 
     console.log(`[documentService] Added client ${personalId} to ${SERVICE_NAME}`);
     return true;
@@ -300,6 +279,25 @@ export async function addClientToPipelineIfNeeded(personalId: string): Promise<b
 /**
  * Get documents by client code and tax year
  */
+function rowToMetadata(row: typeof documents.$inferSelect): DocumentMetadata {
+  return {
+    id: row.id,
+    fileName: row.fileName as string,
+    originalName: row.originalName as string,
+    uploadDate: row.uploadDate as string,
+    fileSize: row.fileSize as number,
+    fileType: row.fileType as string,
+    clientCode: row.clientCode as string,
+    taxYear: row.taxYear as string,
+    uploadedBy: row.uploadedBy ?? undefined,
+    googleDriveFileId: row.googleDriveFileId ?? undefined,
+    webViewLink: row.webViewLink ?? undefined,
+    webContentLink: row.webContentLink ?? undefined,
+    documentCategory: row.documentCategory ?? undefined,
+    bankName: row.bankName ?? undefined,
+  };
+}
+
 export async function getDocuments(
   clientCode: string,
   taxYear: string,
@@ -308,11 +306,8 @@ export async function getDocuments(
   bankName?: string,
   includeDependents: boolean = false
 ): Promise<DocumentMetadata[]> {
-  let filterFormula = `AND({Client Code} = '${clientCode}', {Tax Year} = '${taxYear}')`;
-
   try {
     console.log(`[documentService] getDocuments called with clientCode: "${clientCode}", taxYear: "${taxYear}", includeSpouse: ${includeSpouse}, includeDependents: ${includeDependents}, category: "${documentCategory}", bankName: "${bankName}"`);
-    console.log(`[documentService] Using Airtable base: ${process.env.AIRTABLE_BASE_ID?.substring(0, 8)}...`);
 
     const clientCodesToInclude: string[] = [clientCode];
 
@@ -334,58 +329,24 @@ export async function getDocuments(
       }
     }
 
-    // Build OR clause for all client codes
-    if (clientCodesToInclude.length > 1) {
-      const orClauses = clientCodesToInclude.map(code => `{Client Code} = '${code}'`).join(', ');
-      filterFormula = `AND(OR(${orClauses}), {Tax Year} = '${taxYear}')`;
-    }
+    const conditions = [
+      inArray(documents.clientCode, clientCodesToInclude),
+      eq(documents.taxYear, taxYear),
+    ];
+    if (documentCategory) conditions.push(eq(documents.documentCategory, documentCategory));
+    if (bankName) conditions.push(eq(documents.bankName, bankName));
 
-    // Add document category filter if provided
-    if (documentCategory) {
-      filterFormula = filterFormula.replace(')', `, {Document Category} = '${documentCategory}')`);
-    }
+    const rows = await getDb()
+      .select()
+      .from(documents)
+      .where(and(...conditions));
 
-    // Add bank name filter if provided
-    if (bankName) {
-      filterFormula = filterFormula.replace(')', `, {Bank Name} = '${bankName}')`);
-    }
+    console.log(`[documentService] Found ${rows.length} documents`);
 
-    console.log(`[documentService] Filter formula: ${filterFormula}`);
-
-    // Try Airtable first
-    const records = await base(DOCUMENTS_TABLE)
-      .select({
-        filterByFormula: filterFormula,
-      })
-      .firstPage();
-
-    console.log(`[documentService] Found ${records.length} records from Airtable`);
-
-    if (records.length > 0) {
-      console.log(`[documentService] Sample record fields:`, Object.keys(records[0].fields));
-      console.log(`[documentService] First record Client Code: "${records[0].fields['Client Code']}", Tax Year: "${records[0].fields['Tax Year']}"`);
-    }
-
-    return records.map(record => ({
-      id: record.id,
-      fileName: record.fields['File Name'] as string,
-      originalName: record.fields['Original Name'] as string,
-      uploadDate: record.fields['Upload Date'] as string,
-      fileSize: record.fields['File Size'] as number,
-      fileType: record.fields['File Type'] as string,
-      clientCode: record.fields['Client Code'] as string,
-      taxYear: record.fields['Tax Year'] as string,
-      uploadedBy: record.fields['Uploaded By'] as string,
-      googleDriveFileId: record.fields['Google Drive File ID'] as string,
-      webViewLink: record.fields['Web View Link'] as string,
-      webContentLink: record.fields['Web Content Link'] as string,
-      documentCategory: record.fields['Document Category'] as string,
-      bankName: record.fields['Bank Name'] as string,
-    }));
+    return rows.map(rowToMetadata);
   } catch (error) {
-    console.error('[documentService] Airtable fetch failed, using local metadata:', error);
+    console.error('[documentService] Postgres fetch failed, using local metadata:', error);
     console.error('[documentService] Error details:', error instanceof Error ? error.message : String(error));
-    console.error('[documentService] Filter formula was:', filterFormula);
     return await getLocalMetadata(clientCode, taxYear);
   }
 }
@@ -460,31 +421,30 @@ export async function saveDocument(
   let recordId = documentMetadata.id;
 
   try {
-    // Save to Airtable
-    const record = await base(DOCUMENTS_TABLE).create([
-      {
-        fields: {
-          'Client Code': clientCode,
-          'Tax Year': taxYear,
-          'File Name': fileName,
-          'Original Name': file.name,
-          'Upload Date': new Date().toISOString().split('T')[0],
-          'File Size': file.size,
-          'File Type': file.type,
-          'Uploaded By': uploadedBy,
-          ...(googleDriveFileId && { 'Google Drive File ID': googleDriveFileId }),
-          ...(webViewLink && { 'Web View Link': webViewLink }),
-          ...(webContentLink && { 'Web Content Link': webContentLink }),
-          ...(documentCategory && { 'Document Category': documentCategory }),
-          ...(bankName && { 'Bank Name': bankName }),
-        }
-      }
-    ]);
+    // Save metadata row to Postgres
+    const [row] = await getDb()
+      .insert(documents)
+      .values({
+        clientCode,
+        taxYear,
+        fileName,
+        originalName: file.name,
+        uploadDate: new Date().toISOString().split('T')[0],
+        fileSize: file.size,
+        fileType: file.type,
+        uploadedBy,
+        googleDriveFileId: googleDriveFileId || null,
+        webViewLink: webViewLink || null,
+        webContentLink: webContentLink || null,
+        documentCategory: documentCategory || null,
+        bankName: bankName || null,
+      })
+      .returning({ id: documents.id });
 
-    recordId = record[0].id;
+    recordId = row.id;
     documentMetadata.id = recordId;
   } catch (error) {
-    console.error('Airtable save failed:', error);
+    console.error('Postgres save failed:', error);
     // Still return the Google Drive ID if upload succeeded
   }
 
@@ -510,22 +470,8 @@ export async function saveDocument(
  */
 export async function getDocumentById(recordId: string): Promise<DocumentMetadata | null> {
   try {
-    const record = await base(DOCUMENTS_TABLE).find(recordId);
-
-    return {
-      id: record.id,
-      fileName: record.fields['File Name'] as string,
-      originalName: record.fields['Original Name'] as string,
-      uploadDate: record.fields['Upload Date'] as string,
-      fileSize: record.fields['File Size'] as number,
-      fileType: record.fields['File Type'] as string,
-      clientCode: record.fields['Client Code'] as string,
-      taxYear: record.fields['Tax Year'] as string,
-      uploadedBy: record.fields['Uploaded By'] as string,
-      googleDriveFileId: record.fields['Google Drive File ID'] as string,
-      webViewLink: record.fields['Web View Link'] as string,
-      webContentLink: record.fields['Web Content Link'] as string,
-    };
+    const [row] = await getDb().select().from(documents).where(eq(documents.id, recordId)).limit(1);
+    return row ? rowToMetadata(row) : null;
   } catch (error) {
     console.error('Error fetching document:', error);
     return null;
@@ -537,40 +483,32 @@ export async function getDocumentById(recordId: string): Promise<DocumentMetadat
  */
 export async function renameDocument(recordId: string, newFileName: string): Promise<DocumentMetadata> {
   try {
+    const db = getDb();
+
     // Get document metadata first
-    const record = await base(DOCUMENTS_TABLE).find(recordId);
-    const googleDriveFileId = record.fields['Google Drive File ID'] as string;
+    const [row] = await db.select().from(documents).where(eq(documents.id, recordId)).limit(1);
+    if (!row) {
+      throw new Error('Document not found');
+    }
 
     // Rename in Google Drive if file ID exists
-    if (googleDriveFileId) {
+    if (row.googleDriveFileId) {
       try {
-        await renameFileInGoogleDrive(googleDriveFileId, newFileName);
-        console.log('Successfully renamed in Google Drive:', googleDriveFileId);
+        await renameFileInGoogleDrive(row.googleDriveFileId, newFileName);
+        console.log('Successfully renamed in Google Drive:', row.googleDriveFileId);
       } catch (error) {
         console.error('Google Drive rename failed:', error);
         throw new Error('Failed to rename file in Google Drive');
       }
     }
 
-    // Update in Airtable
-    const updatedRecord = await base(DOCUMENTS_TABLE).update(recordId, {
-      'Original Name': newFileName,
-    });
+    const [updated] = await db
+      .update(documents)
+      .set({ originalName: newFileName })
+      .where(eq(documents.id, recordId))
+      .returning();
 
-    return {
-      id: updatedRecord.id,
-      fileName: updatedRecord.fields['File Name'] as string,
-      originalName: updatedRecord.fields['Original Name'] as string,
-      uploadDate: updatedRecord.fields['Upload Date'] as string,
-      fileSize: updatedRecord.fields['File Size'] as number,
-      fileType: updatedRecord.fields['File Type'] as string,
-      clientCode: updatedRecord.fields['Client Code'] as string,
-      taxYear: updatedRecord.fields['Tax Year'] as string,
-      uploadedBy: updatedRecord.fields['Uploaded By'] as string,
-      googleDriveFileId: updatedRecord.fields['Google Drive File ID'] as string,
-      webViewLink: updatedRecord.fields['Web View Link'] as string,
-      webContentLink: updatedRecord.fields['Web Content Link'] as string,
-    };
+    return rowToMetadata(updated);
   } catch (error) {
     console.error('Error renaming document:', error);
     throw new Error(error instanceof Error ? error.message : 'Document not found');
@@ -581,26 +519,27 @@ export async function renameDocument(recordId: string, newFileName: string): Pro
  * Delete document
  */
 export async function deleteDocument(recordId: string): Promise<boolean> {
-  let googleDriveFileId: string | undefined;
-
   try {
+    const db = getDb();
+
     // Get document metadata first
-    const record = await base(DOCUMENTS_TABLE).find(recordId);
-    googleDriveFileId = record.fields['Google Drive File ID'] as string;
+    const [row] = await db.select().from(documents).where(eq(documents.id, recordId)).limit(1);
+    if (!row) {
+      throw new Error('Document not found');
+    }
 
     // Delete from Google Drive if file ID exists
-    if (googleDriveFileId) {
+    if (row.googleDriveFileId) {
       try {
-        await deleteFileFromGoogleDrive(googleDriveFileId);
-        console.log('Successfully deleted from Google Drive:', googleDriveFileId);
+        await deleteFileFromGoogleDrive(row.googleDriveFileId);
+        console.log('Successfully deleted from Google Drive:', row.googleDriveFileId);
       } catch (error) {
         console.error('Google Drive deletion failed:', error);
-        // Continue with Airtable deletion even if Google Drive fails
+        // Continue with metadata deletion even if Google Drive fails
       }
     }
 
-    // Delete from Airtable
-    await base(DOCUMENTS_TABLE).destroy([recordId]);
+    await db.delete(documents).where(eq(documents.id, recordId));
     return true;
   } catch (error) {
     console.error('Error deleting document:', error);

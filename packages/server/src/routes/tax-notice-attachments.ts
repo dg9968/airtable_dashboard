@@ -1,26 +1,33 @@
+/**
+ * Tax Notice Attachments API Routes (Postgres-backed)
+ * Files live in Google Drive; this table stores the pointers.
+ */
+
 import { Hono } from 'hono';
-import { fetchAllRecords, createRecords, getRecord, deleteRecords } from '../lib/airtable-helpers';
+import { asc, eq } from 'drizzle-orm';
+import { getDb } from '../db/client';
+import { taxNoticeAttachments } from '../db/schema';
 import { uploadTaxNoticeLetter, downloadFileFromGoogleDrive, deleteFileFromGoogleDrive, getFileMetadata } from '../googleDrive';
 
 const app = new Hono();
-const BASE_ID = process.env.AIRTABLE_BASE_ID || '';
-const TABLE = 'Tax Notice Attachments';
 
 const VALID_FILE_TYPES = [
   'original-letter', 'additional-pages', 'response-draft',
   'signed-response', 'proof-of-submission', 'other',
 ];
 
-function mapRecord(record: any) {
+type AttachmentRow = typeof taxNoticeAttachments.$inferSelect;
+
+function mapRow(row: AttachmentRow) {
   return {
-    id: record.id,
-    noticeId: (record.fields['Tax Notice'] as string[] | undefined)?.[0] ?? null,
-    fileName: record.fields['File Name'] || '',
-    driveId: record.fields['Drive ID'] || null,
-    viewUrl: record.fields['View URL'] || null,
-    fileType: record.fields['File Type'] || 'other',
-    uploadedBy: record.fields['Uploaded By'] || '',
-    uploadedAt: record.createdTime || '',
+    id: row.id,
+    noticeId: row.taxNoticeId ?? null,
+    fileName: row.fileName || '',
+    driveId: row.driveId || null,
+    viewUrl: row.viewUrl || null,
+    fileType: row.fileType || 'other',
+    uploadedBy: row.uploadedBy || '',
+    uploadedAt: row.createdAt.toISOString(),
   };
 }
 
@@ -28,14 +35,12 @@ function mapRecord(record: any) {
 app.get('/notice/:noticeId', async (c) => {
   try {
     const noticeId = c.req.param('noticeId');
-    const all = await fetchAllRecords(BASE_ID, TABLE);
-    const filtered = all
-      .filter(r => {
-        const linked = r.fields['Tax Notice'];
-        return Array.isArray(linked) && linked.includes(noticeId);
-      })
-      .sort((a, b) => new Date(a.createdTime).getTime() - new Date(b.createdTime).getTime());
-    return c.json({ success: true, data: filtered.map(mapRecord) });
+    const rows = await getDb()
+      .select()
+      .from(taxNoticeAttachments)
+      .where(eq(taxNoticeAttachments.taxNoticeId, noticeId))
+      .orderBy(asc(taxNoticeAttachments.createdAt));
+    return c.json({ success: true, data: rows.map(mapRow) });
   } catch (error) {
     console.error('Error fetching attachments:', error);
     return c.json({ success: false, error: error instanceof Error ? error.message : 'Failed to fetch attachments' }, 500);
@@ -59,18 +64,19 @@ app.post('/notice/:noticeId', async (c) => {
       buffer, file.name, file.type || 'application/octet-stream', noticeId,
     );
 
-    const records = await createRecords(BASE_ID, TABLE, [{
-      fields: {
-        'Tax Notice': [noticeId],
-        'File Name': file.name,
-        'Drive ID': fileId,
-        'View URL': webViewLink,
-        'File Type': fileType,
-        'Uploaded By': uploadedBy,
-      },
-    }]);
+    const [row] = await getDb()
+      .insert(taxNoticeAttachments)
+      .values({
+        taxNoticeId: noticeId,
+        fileName: file.name,
+        driveId: fileId,
+        viewUrl: webViewLink,
+        fileType,
+        uploadedBy,
+      })
+      .returning();
 
-    return c.json({ success: true, data: mapRecord(records[0]) });
+    return c.json({ success: true, data: mapRow(row) });
   } catch (error) {
     console.error('Error uploading attachment:', error);
     return c.json({ success: false, error: error instanceof Error ? error.message : 'Upload failed' }, 500);
@@ -81,17 +87,20 @@ app.post('/notice/:noticeId', async (c) => {
 app.get('/:attachmentId/download', async (c) => {
   try {
     const attachmentId = c.req.param('attachmentId');
-    const record = await getRecord(BASE_ID, TABLE, attachmentId);
-    const driveId = record.fields['Drive ID'] as string | undefined;
-    const fileName = record.fields['File Name'] as string | undefined;
+    const [row] = await getDb()
+      .select()
+      .from(taxNoticeAttachments)
+      .where(eq(taxNoticeAttachments.id, attachmentId))
+      .limit(1);
 
-    if (!driveId) return c.json({ success: false, error: 'No file attached' }, 404);
+    if (!row) return c.json({ success: false, error: 'Attachment not found' }, 404);
+    if (!row.driveId) return c.json({ success: false, error: 'No file attached' }, 404);
 
-    const metadata = await getFileMetadata(driveId);
-    const buffer = await downloadFileFromGoogleDrive(driveId);
+    const metadata = await getFileMetadata(row.driveId);
+    const buffer = await downloadFileFromGoogleDrive(row.driveId);
 
     c.header('Content-Type', (metadata.mimeType as string) || 'application/octet-stream');
-    c.header('Content-Disposition', `attachment; filename="${encodeURIComponent(fileName || 'attachment')}"`);
+    c.header('Content-Disposition', `attachment; filename="${encodeURIComponent(row.fileName || 'attachment')}"`);
     c.header('Content-Length', buffer.length.toString());
     return c.body(buffer);
   } catch (error) {
@@ -104,14 +113,20 @@ app.get('/:attachmentId/download', async (c) => {
 app.delete('/:attachmentId', async (c) => {
   try {
     const attachmentId = c.req.param('attachmentId');
-    const record = await getRecord(BASE_ID, TABLE, attachmentId);
-    const driveId = record.fields['Drive ID'] as string | undefined;
+    const db = getDb();
+    const [row] = await db
+      .select()
+      .from(taxNoticeAttachments)
+      .where(eq(taxNoticeAttachments.id, attachmentId))
+      .limit(1);
 
-    if (driveId) {
-      try { await deleteFileFromGoogleDrive(driveId); } catch { /* already deleted */ }
+    if (!row) return c.json({ success: false, error: 'Attachment not found' }, 404);
+
+    if (row.driveId) {
+      try { await deleteFileFromGoogleDrive(row.driveId); } catch { /* already deleted */ }
     }
 
-    await deleteRecords(BASE_ID, TABLE, [attachmentId]);
+    await db.delete(taxNoticeAttachments).where(eq(taxNoticeAttachments.id, attachmentId));
     return c.json({ success: true });
   } catch (error) {
     console.error('Error deleting attachment:', error);

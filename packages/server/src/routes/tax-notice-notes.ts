@@ -1,9 +1,26 @@
+/**
+ * Tax Notice Notes API Routes (Postgres-backed)
+ */
+
 import { Hono } from 'hono';
-import { fetchAllRecords, createRecords, deleteRecords } from '../lib/airtable-helpers';
+import { asc, eq } from 'drizzle-orm';
+import { getDb } from '../db/client';
+import { taxNoticeNotes } from '../db/schema';
 
 const app = new Hono();
-const BASE_ID = process.env.AIRTABLE_BASE_ID || '';
-const NOTES_TABLE = 'Tax Notice Notes';
+
+type NoteRow = typeof taxNoticeNotes.$inferSelect;
+
+// Legacy Airtable record shape
+function serialize(row: NoteRow) {
+  const fields: Record<string, unknown> = {};
+  if (row.taxNoticeId) fields['Tax Notice'] = [row.taxNoticeId];
+  if (row.authorName) fields['Author Name'] = row.authorName;
+  if (row.authorEmail) fields['Author Email'] = row.authorEmail;
+  if (row.note) fields['Note'] = row.note;
+  fields['Created Time'] = row.createdAt.toISOString();
+  return { id: row.id, createdTime: row.createdAt.toISOString(), fields };
+}
 
 app.post('/', async (c) => {
   try {
@@ -16,19 +33,20 @@ app.post('/', async (c) => {
       );
     }
 
-    const fields: any = {
-      'Tax Notice': [noticeId],
-      'Author Name': authorName,
-      'Note': note,
-    };
+    const [row] = await getDb()
+      .insert(taxNoticeNotes)
+      .values({
+        taxNoticeId: noticeId,
+        authorName,
+        authorEmail: authorEmail || null,
+        note,
+      })
+      .returning();
 
-    if (authorEmail) fields['Author Email'] = authorEmail;
-
-    const records = await createRecords(BASE_ID, NOTES_TABLE, [{ fields }]);
-
+    const record = serialize(row);
     return c.json({
       success: true,
-      data: { id: records[0].id, fields: records[0].fields },
+      data: { id: record.id, fields: record.fields },
     });
   } catch (error) {
     console.error('Error creating Tax Notice Note:', error);
@@ -43,16 +61,13 @@ app.get('/notice/:noticeId', async (c) => {
   try {
     const noticeId = c.req.param('noticeId');
 
-    const allRecords = await fetchAllRecords(BASE_ID, NOTES_TABLE, {
-      sort: [{ field: 'Created Time', direction: 'asc' }],
-    });
+    const rows = await getDb()
+      .select()
+      .from(taxNoticeNotes)
+      .where(eq(taxNoticeNotes.taxNoticeId, noticeId))
+      .orderBy(asc(taxNoticeNotes.createdAt));
 
-    const records = allRecords.filter((record: any) => {
-      const noticeField = record.fields['Tax Notice'];
-      return Array.isArray(noticeField) && noticeField.includes(noticeId);
-    });
-
-    return c.json({ success: true, data: records });
+    return c.json({ success: true, data: rows.map(serialize) });
   } catch (error) {
     console.error('Error fetching Tax Notice Notes:', error);
     return c.json(
@@ -65,7 +80,7 @@ app.get('/notice/:noticeId', async (c) => {
 app.delete('/:id', async (c) => {
   try {
     const id = c.req.param('id');
-    await deleteRecords(BASE_ID, NOTES_TABLE, [id]);
+    await getDb().delete(taxNoticeNotes).where(eq(taxNoticeNotes.id, id));
     return c.json({ success: true, message: 'Note deleted successfully' });
   } catch (error) {
     console.error('Error deleting Tax Notice Note:', error);

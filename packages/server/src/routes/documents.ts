@@ -316,77 +316,33 @@ app.get('/generate-code', async (c) => {
 });
 
 /**
- * GET /api/documents/schema
- * Debug endpoint to check Airtable Documents table field names
- */
-app.get('/schema', async (c) => {
-  try {
-    const Airtable = require('airtable');
-    const airtable = new Airtable({
-      apiKey: process.env.AIRTABLE_PERSONAL_ACCESS_TOKEN,
-    });
-    const base = airtable.base(process.env.AIRTABLE_BASE_ID || '');
-
-    // Fetch one record to see what fields exist
-    const records = await base('Documents').select({ maxRecords: 1 }).firstPage();
-
-    if (records.length > 0) {
-      const sampleRecord = records[0];
-      const fieldNames = Object.keys(sampleRecord.fields);
-
-      return c.json({
-        success: true,
-        tableName: 'Documents',
-        fieldNames: fieldNames,
-        sampleRecord: {
-          id: sampleRecord.id,
-          fields: sampleRecord.fields,
-        },
-      });
-    }
-
-    return c.json({
-      success: true,
-      message: 'No records found in Documents table',
-      fieldNames: [],
-    });
-  } catch (error) {
-    console.error('Error fetching Documents schema:', error);
-    return c.json({ error: 'Failed to fetch schema', details: error instanceof Error ? error.message : 'Unknown error' }, 500);
-  }
-});
-
-/**
  * GET /api/documents/debug-all
- * Debug endpoint to list all documents in Airtable (production debugging)
+ * Debug endpoint to list documents (production debugging)
  */
 app.get('/debug-all', async (c) => {
   try {
-    const Airtable = require('airtable');
-    const airtable = new Airtable({
-      apiKey: process.env.AIRTABLE_PERSONAL_ACCESS_TOKEN,
-    });
-    const base = airtable.base(process.env.AIRTABLE_BASE_ID || '');
+    const { eq } = await import('drizzle-orm');
+    const { getDb } = await import('../db/client');
+    const { documents } = await import('../db/schema');
 
     const clientCodeFilter = c.req.query('clientCode');
     const maxRecords = parseInt(c.req.query('maxRecords') || '50');
 
-    let selectOptions: any = { maxRecords };
-    if (clientCodeFilter) {
-      selectOptions.filterByFormula = `{Client Code} = '${clientCodeFilter}'`;
-    }
-
-    const records = await base('Documents').select(selectOptions).firstPage();
+    const rows = await getDb()
+      .select()
+      .from(documents)
+      .where(clientCodeFilter ? eq(documents.clientCode, clientCodeFilter) : undefined)
+      .limit(maxRecords);
 
     return c.json({
       success: true,
-      count: records.length,
-      records: records.map(r => ({
+      count: rows.length,
+      records: rows.map(r => ({
         id: r.id,
-        clientCode: r.fields['Client Code'],
-        taxYear: r.fields['Tax Year'],
-        fileName: r.fields['Original Name'],
-        uploadDate: r.fields['Upload Date'],
+        clientCode: r.clientCode,
+        taxYear: r.taxYear,
+        fileName: r.originalName,
+        uploadDate: r.uploadDate,
       })),
     });
   } catch (error) {

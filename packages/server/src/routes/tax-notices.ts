@@ -1,10 +1,17 @@
+/**
+ * Tax Notices API Routes (Postgres-backed)
+ *
+ * IRS/state notice workflow: intake auto-triage, a 14-state status machine,
+ * response lifecycle dates, and letter storage in Google Drive.
+ */
+
 import { Hono } from 'hono';
-import { fetchAllRecords, createRecords, updateRecords, getRecord } from '../lib/airtable-helpers';
+import { and, eq, ilike, inArray, ne, not, or, isNotNull, sql } from 'drizzle-orm';
+import { getDb } from '../db/client';
+import { taxNotices } from '../db/schema';
 import { uploadTaxNoticeLetter, downloadFileFromGoogleDrive, deleteFileFromGoogleDrive, getFileMetadata } from '../googleDrive';
 
 const app = new Hono();
-const BASE_ID = process.env.AIRTABLE_BASE_ID || '';
-const TABLE = 'Tax Notices';
 const HIGH_DOLLAR_THRESHOLD = 2000;
 
 const DANIEL_CATEGORIES = new Set(['Audit', 'Collections', 'Levy/Lien', 'Garnishment', 'Appeal']);
@@ -63,52 +70,67 @@ function autoTriage(input: {
   return { priority, assignedOwner, danielReviewRequired };
 }
 
-function mapRecordToNotice(record: any) {
+type NoticeRow = typeof taxNotices.$inferSelect;
+
+function mapRowToNotice(row: NoticeRow) {
   return {
-    id: record.id,
-    createdTime: record.createdTime,
-    clientName: record.fields['Client Name'] || '',
-    entityName: record.fields['Entity Name'] || '',
-    noticeAgency: record.fields['Notice Agency'] || '',
-    noticeNumber: record.fields['Notice Number'] || '',
-    taxYear: record.fields['Tax Year'] || '',
-    taxType: record.fields['Tax Type'] || '',
-    dateReceived: record.fields['Date Received'] || '',
-    responseDueDate: record.fields['Response Due Date'] || '',
-    amountDue: record.fields['Amount Due'] ?? null,
-    noticeCategory: record.fields['Notice Category'] || '',
-    assignedOwner: record.fields['Assigned Owner'] || '',
-    supportingTeamMember: record.fields['Supporting Team Member'] || '',
-    status: record.fields['Status'] || 'New Notice',
-    priority: record.fields['Priority'] || 'Medium',
-    danielReviewRequired: record.fields['Daniel Review Required'] || false,
-    clientDocumentsNeeded: record.fields['Client Documents Needed'] || '',
-    responseFiledDate: record.fields['Response Filed Date'] || '',
-    proofOfSubmissionUploaded: record.fields['Proof of Submission Uploaded'] || false,
-    finalResolution: record.fields['Final Resolution'] || '',
-    createdBy: record.fields['Created By'] || '',
-    letterDriveId: record.fields['Letter Drive ID'] || null,
-    letterViewUrl: record.fields['Letter View URL'] || null,
-    letterFileName: record.fields['Letter File Name'] || null,
-    responseSentToClientDate: record.fields['Response Sent to Client Date'] || '',
-    clientSignatureDate: record.fields['Client Signature Date'] || '',
-    responseSentToAgencyDate: record.fields['Response Sent to Agency Date'] || '',
-    responseSubmissionMethod: record.fields['Response Submission Method'] || '',
+    id: row.id,
+    createdTime: row.createdAt.toISOString(),
+    clientName: row.clientName || '',
+    entityName: row.entityName || '',
+    noticeAgency: row.noticeAgency || '',
+    noticeNumber: row.noticeNumber || '',
+    taxYear: row.taxYear || '',
+    taxType: row.taxType || '',
+    dateReceived: row.dateReceived || '',
+    responseDueDate: row.responseDueDate || '',
+    amountDue: row.amountDue != null ? Number(row.amountDue) : null,
+    noticeCategory: row.noticeCategory || '',
+    assignedOwner: row.assignedOwner || '',
+    supportingTeamMember: row.supportingTeamMember || '',
+    status: row.status || 'New Notice',
+    priority: row.priority || 'Medium',
+    danielReviewRequired: row.danielReviewRequired || false,
+    clientDocumentsNeeded: row.clientDocumentsNeeded || '',
+    responseFiledDate: row.responseFiledDate || '',
+    proofOfSubmissionUploaded: row.proofOfSubmissionUploaded || false,
+    finalResolution: row.finalResolution || '',
+    createdBy: row.createdBy || '',
+    letterDriveId: row.letterDriveId || null,
+    letterViewUrl: row.letterViewUrl || null,
+    letterFileName: row.letterFileName || null,
+    responseSentToClientDate: row.responseSentToClientDate || '',
+    clientSignatureDate: row.clientSignatureDate || '',
+    responseSentToAgencyDate: row.responseSentToAgencyDate || '',
+    responseSubmissionMethod: row.responseSubmissionMethod || '',
   };
 }
+
+const withDaysUntilDue = (row: NoticeRow) => ({
+  ...mapRowToNotice(row),
+  daysUntilDue: computeDaysUntilDue(row.responseDueDate || ''),
+});
+
+const TERMINAL_STATUSES = ['Submitted', 'Waiting on Agency', 'Resolved', 'Closed / Archived'] as const;
 
 // GET /api/tax-notices/review-queue — must be registered before /:id
 app.get('/review-queue', async (c) => {
   try {
-    const records = await fetchAllRecords(BASE_ID, TABLE, {
-      filterByFormula: `AND({Daniel Review Required} = TRUE(), OR({Status} = 'Needs Daniel Review', AND({Status} != 'Submitted', {Status} != 'Waiting on Agency', {Status} != 'Resolved', {Status} != 'Closed / Archived')))`,
-      sort: [{ field: 'Response Due Date', direction: 'asc' }],
-    });
+    const rows = await getDb()
+      .select()
+      .from(taxNotices)
+      .where(
+        and(
+          eq(taxNotices.danielReviewRequired, true),
+          or(
+            eq(taxNotices.status, 'Needs Daniel Review'),
+            not(inArray(taxNotices.status, [...TERMINAL_STATUSES]))
+          )
+        )
+      )
+      .orderBy(sql`${taxNotices.responseDueDate} ASC NULLS FIRST`);
 
-    const notices = records.map(r => ({
-      ...mapRecordToNotice(r),
-      daysUntilDue: computeDaysUntilDue(r.fields['Response Due Date'] || ''),
-    }));
+    const notices = rows.map(withDaysUntilDue);
 
     return c.json({ success: true, data: notices, count: notices.length });
   } catch (error) {
@@ -123,18 +145,19 @@ app.get('/review-queue', async (c) => {
 // GET /api/tax-notices/deadline-monitor — must be registered before /:id
 app.get('/deadline-monitor', async (c) => {
   try {
-    const excluded = ['Submitted', 'Waiting on Agency', 'Resolved', 'Closed / Archived'];
-    const excludeFormula = excluded.map(s => `{Status} != '${s}'`).join(', ');
+    const rows = await getDb()
+      .select()
+      .from(taxNotices)
+      .where(
+        and(
+          not(inArray(taxNotices.status, [...TERMINAL_STATUSES])),
+          isNotNull(taxNotices.responseDueDate),
+          ne(taxNotices.responseDueDate, '')
+        )
+      )
+      .orderBy(sql`${taxNotices.responseDueDate} ASC NULLS FIRST`);
 
-    const records = await fetchAllRecords(BASE_ID, TABLE, {
-      filterByFormula: `AND(${excludeFormula}, {Response Due Date} != '')`,
-      sort: [{ field: 'Response Due Date', direction: 'asc' }],
-    });
-
-    const notices = records.map(r => ({
-      ...mapRecordToNotice(r),
-      daysUntilDue: computeDaysUntilDue(r.fields['Response Due Date'] || ''),
-    }));
+    const notices = rows.map(withDaysUntilDue);
 
     return c.json({ success: true, data: notices, count: notices.length });
   } catch (error) {
@@ -151,38 +174,36 @@ app.get('/', async (c) => {
   try {
     const { status, priority, assignedOwner, agency, search, danielReviewRequired } = c.req.query();
 
-    const filters: string[] = [];
+    const conditions = [];
 
     if (status) {
       const list = status.split(',').map(s => s.trim()).filter(Boolean);
-      if (list.length === 1) {
-        filters.push(`{Status} = '${list[0]}'`);
-      } else if (list.length > 1) {
-        filters.push(`OR(${list.map(s => `{Status} = '${s}'`).join(', ')})`);
+      if (list.length > 0) {
+        conditions.push(inArray(taxNotices.status, list as NoticeRow['status'][]));
       }
     }
 
-    if (priority) filters.push(`{Priority} = '${priority}'`);
-    if (assignedOwner) filters.push(`{Assigned Owner} = '${assignedOwner}'`);
-    if (agency) filters.push(`{Notice Agency} = '${agency}'`);
-    if (danielReviewRequired === 'true') filters.push(`{Daniel Review Required} = TRUE()`);
+    if (priority) conditions.push(eq(taxNotices.priority, priority));
+    if (assignedOwner) conditions.push(eq(taxNotices.assignedOwner, assignedOwner));
+    if (agency) conditions.push(eq(taxNotices.noticeAgency, agency));
+    if (danielReviewRequired === 'true') conditions.push(eq(taxNotices.danielReviewRequired, true));
 
     if (search) {
-      const s = search.replace(/'/g, "\\'");
-      filters.push(`OR(FIND(LOWER('${s}'), LOWER({Client Name})), FIND(LOWER('${s}'), LOWER({Notice Number})))`);
+      conditions.push(
+        or(
+          ilike(taxNotices.clientName, `%${search}%`),
+          ilike(taxNotices.noticeNumber, `%${search}%`)
+        )
+      );
     }
 
-    const filterByFormula = filters.length > 0 ? `AND(${filters.join(', ')})` : undefined;
+    const rows = await getDb()
+      .select()
+      .from(taxNotices)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(sql`${taxNotices.responseDueDate} ASC NULLS FIRST`);
 
-    const records = await fetchAllRecords(BASE_ID, TABLE, {
-      filterByFormula,
-      sort: [{ field: 'Response Due Date', direction: 'asc' }],
-    });
-
-    const notices = records.map(r => ({
-      ...mapRecordToNotice(r),
-      daysUntilDue: computeDaysUntilDue(r.fields['Response Due Date'] || ''),
-    }));
+    const notices = rows.map(withDaysUntilDue);
 
     return c.json({ success: true, data: notices, count: notices.length });
   } catch (error) {
@@ -212,29 +233,28 @@ app.post('/', async (c) => {
 
     const triage = autoTriage({ noticeCategory, taxType, responseDueDate, amountDue });
 
-    const fields: Record<string, any> = {
-      'Client Name': clientName,
-      'Notice Agency': noticeAgency,
-      'Notice Number': noticeNumber,
-      'Notice Category': noticeCategory,
-      'Tax Type': taxType,
-      'Date Received': dateReceived,
-      'Response Due Date': responseDueDate,
-      'Status': 'New Notice',
-      'Priority': triage.priority,
-      'Assigned Owner': triage.assignedOwner,
-      'Daniel Review Required': triage.danielReviewRequired,
-    };
+    const [row] = await getDb()
+      .insert(taxNotices)
+      .values({
+        clientName,
+        noticeAgency,
+        noticeNumber,
+        noticeCategory,
+        taxType,
+        dateReceived,
+        responseDueDate,
+        status: 'New Notice',
+        priority: triage.priority,
+        assignedOwner: triage.assignedOwner,
+        danielReviewRequired: triage.danielReviewRequired,
+        entityName: entityName || null,
+        taxYear: taxYear || null,
+        amountDue: amountDue !== undefined && amountDue !== null ? String(Number(amountDue)) : null,
+        createdBy: createdBy || null,
+      })
+      .returning();
 
-    if (entityName) fields['Entity Name'] = entityName;
-    if (taxYear) fields['Tax Year'] = taxYear;
-    if (amountDue !== undefined && amountDue !== null) fields['Amount Due'] = Number(amountDue);
-    if (createdBy) fields['Created By'] = createdBy;
-
-    const records = await createRecords(BASE_ID, TABLE, [{ fields }]);
-    const notice = mapRecordToNotice(records[0]);
-
-    return c.json({ success: true, data: notice, triage });
+    return c.json({ success: true, data: mapRowToNotice(row), triage });
   } catch (error) {
     console.error('Error creating tax notice:', error);
     return c.json(
@@ -256,16 +276,19 @@ app.post('/:id/letter', async (c) => {
     const buffer = Buffer.from(await file.arrayBuffer());
     const { fileId, webViewLink } = await uploadTaxNoticeLetter(buffer, file.name, file.type || 'application/octet-stream', id);
 
-    const updated = await updateRecords(BASE_ID, TABLE, [{
-      id,
-      fields: {
-        'Letter Drive ID': fileId,
-        'Letter View URL': webViewLink,
-        'Letter File Name': file.name,
-      },
-    }]);
+    const [row] = await getDb()
+      .update(taxNotices)
+      .set({
+        letterDriveId: fileId,
+        letterViewUrl: webViewLink,
+        letterFileName: file.name,
+      })
+      .where(eq(taxNotices.id, id))
+      .returning();
 
-    const notice = mapRecordToNotice(updated[0]);
+    if (!row) return c.json({ success: false, error: 'Notice not found' }, 404);
+
+    const notice = mapRowToNotice(row);
     return c.json({ success: true, data: { ...notice, validNextStatuses: STATUS_TRANSITIONS[notice.status] || [] } });
   } catch (error) {
     console.error('Error uploading notice letter:', error);
@@ -277,17 +300,16 @@ app.post('/:id/letter', async (c) => {
 app.get('/:id/letter/download', async (c) => {
   try {
     const id = c.req.param('id');
-    const record = await getRecord(BASE_ID, TABLE, id);
-    const driveId = record.fields['Letter Drive ID'] as string | undefined;
-    const fileName = record.fields['Letter File Name'] as string | undefined;
+    const [row] = await getDb().select().from(taxNotices).where(eq(taxNotices.id, id)).limit(1);
 
-    if (!driveId) return c.json({ success: false, error: 'No letter attached to this notice' }, 404);
+    if (!row) return c.json({ success: false, error: 'Notice not found' }, 404);
+    if (!row.letterDriveId) return c.json({ success: false, error: 'No letter attached to this notice' }, 404);
 
-    const metadata = await getFileMetadata(driveId);
-    const buffer = await downloadFileFromGoogleDrive(driveId);
+    const metadata = await getFileMetadata(row.letterDriveId);
+    const buffer = await downloadFileFromGoogleDrive(row.letterDriveId);
 
     c.header('Content-Type', (metadata.mimeType as string) || 'application/octet-stream');
-    c.header('Content-Disposition', `attachment; filename="${encodeURIComponent(fileName || 'notice-letter')}"`);
+    c.header('Content-Disposition', `attachment; filename="${encodeURIComponent(row.letterFileName || 'notice-letter')}"`);
     c.header('Content-Length', buffer.length.toString());
     return c.body(buffer);
   } catch (error) {
@@ -300,19 +322,22 @@ app.get('/:id/letter/download', async (c) => {
 app.delete('/:id/letter', async (c) => {
   try {
     const id = c.req.param('id');
-    const record = await getRecord(BASE_ID, TABLE, id);
-    const driveId = record.fields['Letter Drive ID'] as string | undefined;
+    const db = getDb();
+    const [row] = await db.select().from(taxNotices).where(eq(taxNotices.id, id)).limit(1);
 
-    if (driveId) {
-      try { await deleteFileFromGoogleDrive(driveId); } catch { /* file may already be gone */ }
+    if (!row) return c.json({ success: false, error: 'Notice not found' }, 404);
+
+    if (row.letterDriveId) {
+      try { await deleteFileFromGoogleDrive(row.letterDriveId); } catch { /* file may already be gone */ }
     }
 
-    const updated = await updateRecords(BASE_ID, TABLE, [{
-      id,
-      fields: { 'Letter Drive ID': null, 'Letter View URL': null, 'Letter File Name': null },
-    }]);
+    const [updated] = await db
+      .update(taxNotices)
+      .set({ letterDriveId: null, letterViewUrl: null, letterFileName: null })
+      .where(eq(taxNotices.id, id))
+      .returning();
 
-    const notice = mapRecordToNotice(updated[0]);
+    const notice = mapRowToNotice(updated);
     return c.json({ success: true, data: { ...notice, validNextStatuses: STATUS_TRANSITIONS[notice.status] || [] } });
   } catch (error) {
     console.error('Error removing notice letter:', error);
@@ -324,8 +349,11 @@ app.delete('/:id/letter', async (c) => {
 app.get('/:id', async (c) => {
   try {
     const id = c.req.param('id');
-    const record = await getRecord(BASE_ID, TABLE, id);
-    const notice = mapRecordToNotice(record);
+    const [row] = await getDb().select().from(taxNotices).where(eq(taxNotices.id, id)).limit(1);
+
+    if (!row) return c.json({ success: false, error: 'Notice not found' }, 404);
+
+    const notice = mapRowToNotice(row);
 
     return c.json({
       success: true,
@@ -345,34 +373,41 @@ app.patch('/:id', async (c) => {
   try {
     const id = c.req.param('id');
     const body = await c.req.json();
-    const fields: Record<string, any> = {};
+    const values: Partial<typeof taxNotices.$inferInsert> = {};
 
-    if (body.clientName !== undefined) fields['Client Name'] = body.clientName;
-    if (body.entityName !== undefined) fields['Entity Name'] = body.entityName;
-    if (body.noticeAgency !== undefined) fields['Notice Agency'] = body.noticeAgency;
-    if (body.noticeNumber !== undefined) fields['Notice Number'] = body.noticeNumber;
-    if (body.noticeCategory !== undefined) fields['Notice Category'] = body.noticeCategory;
-    if (body.taxYear !== undefined) fields['Tax Year'] = body.taxYear;
-    if (body.taxType !== undefined) fields['Tax Type'] = body.taxType;
-    if (body.dateReceived !== undefined) fields['Date Received'] = body.dateReceived;
-    if (body.responseDueDate !== undefined) fields['Response Due Date'] = body.responseDueDate;
-    if (body.amountDue !== undefined) fields['Amount Due'] = body.amountDue;
-    if (body.assignedOwner !== undefined) fields['Assigned Owner'] = body.assignedOwner || null;
-    if (body.supportingTeamMember !== undefined) fields['Supporting Team Member'] = body.supportingTeamMember || null;
-    if (body.status !== undefined) fields['Status'] = body.status;
-    if (body.priority !== undefined) fields['Priority'] = body.priority;
-    if (body.danielReviewRequired !== undefined) fields['Daniel Review Required'] = body.danielReviewRequired;
-    if (body.clientDocumentsNeeded !== undefined) fields['Client Documents Needed'] = body.clientDocumentsNeeded;
-    if (body.responseFiledDate !== undefined) fields['Response Filed Date'] = body.responseFiledDate;
-    if (body.proofOfSubmissionUploaded !== undefined) fields['Proof of Submission Uploaded'] = body.proofOfSubmissionUploaded;
-    if (body.finalResolution !== undefined) fields['Final Resolution'] = body.finalResolution;
-    if (body.responseSentToClientDate !== undefined) fields['Response Sent to Client Date'] = body.responseSentToClientDate || null;
-    if (body.clientSignatureDate !== undefined) fields['Client Signature Date'] = body.clientSignatureDate || null;
-    if (body.responseSentToAgencyDate !== undefined) fields['Response Sent to Agency Date'] = body.responseSentToAgencyDate || null;
-    if (body.responseSubmissionMethod !== undefined) fields['Response Submission Method'] = body.responseSubmissionMethod || null;
+    if (body.clientName !== undefined) values.clientName = body.clientName;
+    if (body.entityName !== undefined) values.entityName = body.entityName;
+    if (body.noticeAgency !== undefined) values.noticeAgency = body.noticeAgency;
+    if (body.noticeNumber !== undefined) values.noticeNumber = body.noticeNumber;
+    if (body.noticeCategory !== undefined) values.noticeCategory = body.noticeCategory;
+    if (body.taxYear !== undefined) values.taxYear = body.taxYear;
+    if (body.taxType !== undefined) values.taxType = body.taxType;
+    if (body.dateReceived !== undefined) values.dateReceived = body.dateReceived;
+    if (body.responseDueDate !== undefined) values.responseDueDate = body.responseDueDate;
+    if (body.amountDue !== undefined) values.amountDue = body.amountDue != null ? String(body.amountDue) : null;
+    if (body.assignedOwner !== undefined) values.assignedOwner = body.assignedOwner || null;
+    if (body.supportingTeamMember !== undefined) values.supportingTeamMember = body.supportingTeamMember || null;
+    if (body.status !== undefined) values.status = body.status;
+    if (body.priority !== undefined) values.priority = body.priority;
+    if (body.danielReviewRequired !== undefined) values.danielReviewRequired = body.danielReviewRequired;
+    if (body.clientDocumentsNeeded !== undefined) values.clientDocumentsNeeded = body.clientDocumentsNeeded;
+    if (body.responseFiledDate !== undefined) values.responseFiledDate = body.responseFiledDate;
+    if (body.proofOfSubmissionUploaded !== undefined) values.proofOfSubmissionUploaded = body.proofOfSubmissionUploaded;
+    if (body.finalResolution !== undefined) values.finalResolution = body.finalResolution;
+    if (body.responseSentToClientDate !== undefined) values.responseSentToClientDate = body.responseSentToClientDate || null;
+    if (body.clientSignatureDate !== undefined) values.clientSignatureDate = body.clientSignatureDate || null;
+    if (body.responseSentToAgencyDate !== undefined) values.responseSentToAgencyDate = body.responseSentToAgencyDate || null;
+    if (body.responseSubmissionMethod !== undefined) values.responseSubmissionMethod = body.responseSubmissionMethod || null;
 
-    const records = await updateRecords(BASE_ID, TABLE, [{ id, fields }]);
-    const notice = mapRecordToNotice(records[0]);
+    const [row] = await getDb()
+      .update(taxNotices)
+      .set(values)
+      .where(eq(taxNotices.id, id))
+      .returning();
+
+    if (!row) return c.json({ success: false, error: 'Notice not found' }, 404);
+
+    const notice = mapRowToNotice(row);
 
     return c.json({
       success: true,
@@ -393,8 +428,11 @@ app.post('/:id/advance-status', async (c) => {
     const id = c.req.param('id');
     const { targetStatus } = await c.req.json();
 
-    const record = await getRecord(BASE_ID, TABLE, id);
-    const notice = mapRecordToNotice(record);
+    const db = getDb();
+    const [row] = await db.select().from(taxNotices).where(eq(taxNotices.id, id)).limit(1);
+    if (!row) return c.json({ success: false, error: 'Notice not found' }, 404);
+
+    const notice = mapRowToNotice(row);
 
     const validNext = STATUS_TRANSITIONS[notice.status] || [];
     if (!validNext.includes(targetStatus)) {
@@ -416,8 +454,13 @@ app.post('/:id/advance-status', async (c) => {
       return c.json({ success: false, error: 'Cannot mark as signed — Client Signature Date must be saved first.' }, 400);
     }
 
-    const updated = await updateRecords(BASE_ID, TABLE, [{ id, fields: { 'Status': targetStatus } }]);
-    const updatedNotice = mapRecordToNotice(updated[0]);
+    const [updated] = await db
+      .update(taxNotices)
+      .set({ status: targetStatus })
+      .where(eq(taxNotices.id, id))
+      .returning();
+
+    const updatedNotice = mapRowToNotice(updated);
 
     return c.json({
       success: true,
@@ -436,7 +479,10 @@ app.post('/:id/advance-status', async (c) => {
 app.delete('/:id', async (c) => {
   try {
     const id = c.req.param('id');
-    await updateRecords(BASE_ID, TABLE, [{ id, fields: { 'Status': 'Closed / Archived' } }]);
+    await getDb()
+      .update(taxNotices)
+      .set({ status: 'Closed / Archived' })
+      .where(eq(taxNotices.id, id));
     return c.json({ success: true, message: 'Notice archived successfully' });
   } catch (error) {
     console.error('Error archiving tax notice:', error);

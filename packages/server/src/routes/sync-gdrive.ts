@@ -1,13 +1,15 @@
 /**
  * Google Drive Sync Route
  *
- * Scans Google Drive and syncs file metadata to Airtable
+ * Scans Google Drive and syncs file metadata to Postgres
  */
 
 import { Hono } from 'hono';
 import { google } from 'googleapis';
 import { GoogleAuth } from 'google-auth-library';
-import Airtable from 'airtable';
+import { eq } from 'drizzle-orm';
+import { getDb } from '../db/client';
+import { documents } from '../db/schema';
 
 const app = new Hono();
 
@@ -20,10 +22,6 @@ const auth = new GoogleAuth({
 });
 
 const drive = google.drive({ version: 'v3', auth });
-
-// Initialize Airtable
-import { getTable } from '../lib/airtable-service';
-const DOCUMENTS_TABLE = 'Documents';
 
 interface GoogleDriveFile {
   id: string;
@@ -188,61 +186,57 @@ app.post('/', async (c) => {
         // Extract original filename (remove timestamp prefix if exists)
         const originalName = file.name.replace(/^\d+_/, '');
 
-        // Check if record already exists in Airtable
-        const existingRecords = await base(DOCUMENTS_TABLE)
-          .select({
-            filterByFormula: `{Google Drive File ID} = '${file.id}'`,
-            maxRecords: 1,
-          })
-          .firstPage();
+        // Check if a metadata row already exists for this Drive file
+        const db = getDb();
+        const [existing] = await db
+          .select({ id: documents.id })
+          .from(documents)
+          .where(eq(documents.googleDriveFileId, file.id))
+          .limit(1);
 
-        if (existingRecords.length > 0) {
+        if (existing) {
           // Update existing record
-          const recordId = existingRecords[0].id;
-          await base(DOCUMENTS_TABLE).update([
-            {
-              id: recordId,
-              fields: {
-                'Web View Link': file.webViewLink || '',
-                'Web Content Link': file.webContentLink || '',
-                'File Size': parseInt(file.size) || 0,
-              },
-            },
-          ]);
+          await db
+            .update(documents)
+            .set({
+              webViewLink: file.webViewLink || '',
+              webContentLink: file.webContentLink || '',
+              fileSize: parseInt(file.size) || 0,
+            })
+            .where(eq(documents.id, existing.id));
 
           results.updated++;
           results.details.push({
             fileName: file.name,
             status: 'updated',
-            recordId,
+            recordId: existing.id,
             clientCode: metadata.clientCode,
             taxYear: metadata.taxYear,
           });
         } else {
           // Create new record
-          const newRecord = await base(DOCUMENTS_TABLE).create([
-            {
-              fields: {
-                'Client Code': metadata.clientCode,
-                'Tax Year': metadata.taxYear,
-                'File Name': file.name,
-                'Original Name': originalName,
-                'Upload Date': file.createdTime.split('T')[0],
-                'File Size': parseInt(file.size) || 0,
-                'File Type': file.mimeType,
-                'Google Drive File ID': file.id,
-                'Web View Link': file.webViewLink || '',
-                'Web Content Link': file.webContentLink || '',
-                'Uploaded By': 'system-sync',
-              },
-            },
-          ]);
+          const [newRow] = await db
+            .insert(documents)
+            .values({
+              clientCode: metadata.clientCode,
+              taxYear: metadata.taxYear,
+              fileName: file.name,
+              originalName,
+              uploadDate: file.createdTime.split('T')[0],
+              fileSize: parseInt(file.size) || 0,
+              fileType: file.mimeType,
+              googleDriveFileId: file.id,
+              webViewLink: file.webViewLink || '',
+              webContentLink: file.webContentLink || '',
+              uploadedBy: 'system-sync',
+            })
+            .returning({ id: documents.id });
 
           results.created++;
           results.details.push({
             fileName: file.name,
             status: 'created',
-            recordId: newRecord[0].id,
+            recordId: newRow.id,
             clientCode: metadata.clientCode,
             taxYear: metadata.taxYear,
           });

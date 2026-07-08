@@ -106,8 +106,20 @@ const checks: Check[] = [
   { path: '/api/corporate-pipeline-notes', keys: ['success', 'data'] },
   { path: '/api/billing-notes', keys: ['success', 'data'] },
 
-  // Still Airtable-backed (regression canaries for untouched routes)
-  { path: '/api/tax-notices', keys: ['success'] },
+  // Phase 4 — documents + tax notices (Postgres-backed)
+  {
+    path: '/api/tax-notices',
+    keys: ['success', 'data', 'count'],
+    assert: (b) => (Array.isArray(b.data) && b.data.every((n: any) => 'daysUntilDue' in n) ? null : 'missing daysUntilDue'),
+  },
+  { path: '/api/tax-notices/review-queue', keys: ['success', 'data'] },
+  { path: '/api/tax-notices/deadline-monitor', keys: ['success', 'data'] },
+  {
+    path: '/api/documents?clientCode=3419&taxYear=2025',
+    keys: ['documents'],
+    assert: (b) => (Array.isArray(b.documents) && b.documents.length > 0 ? null : 'no documents'),
+  },
+  { path: '/api/documents/debug-all?maxRecords=5', keys: ['success', 'records'] },
 ];
 
 function getPath(obj: any, dotPath: string): unknown {
