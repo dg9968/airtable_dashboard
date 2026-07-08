@@ -1,24 +1,32 @@
 /**
- * Messages API Routes
+ * Messages API Routes (Postgres-backed)
  * Manage email messages for corporate communications
  */
 
 import { Hono } from 'hono';
-import { fetchAllRecords, createRecords } from '../lib/airtable-helpers';
+import { eq } from 'drizzle-orm';
+import { getDb } from '../db/client';
+import { messages } from '../db/schema';
 
 const app = new Hono();
 
-const MESSAGES_TABLE = 'Messages';
+type MessageRow = typeof messages.$inferSelect;
+
+// Legacy Airtable record shape
+function serialize(row: MessageRow) {
+  const fields: Record<string, unknown> = {};
+  if (row.emailSubject) fields['Email Subject'] = row.emailSubject;
+  if (row.emailContent) fields['Email Content'] = row.emailContent;
+  if (row.batchId) fields['Batch ID'] = row.batchId;
+  if (row.templateUsedId) fields['Template Used'] = [row.templateUsedId];
+  if (row.variablesUsed) fields['Variables Used'] = row.variablesUsed;
+  if (row.isBatchMessage) fields['Is Batch Message'] = true;
+  return { id: row.id, createdTime: row.createdAt.toISOString(), fields };
+}
 
 /**
  * POST /api/messages
  * Create a new message record
- *
- * Expected body:
- * {
- *   emailSubject: string,
- *   emailContent: string
- * }
  */
 app.post('/', async (c) => {
   try {
@@ -36,24 +44,15 @@ app.post('/', async (c) => {
 
     console.log('Creating Message record:', { emailSubject });
 
-    const baseId = process.env.AIRTABLE_BASE_ID || '';
+    const [row] = await getDb()
+      .insert(messages)
+      .values({ emailSubject, emailContent })
+      .returning();
 
-    // Create the message record
-    const fields: any = {
-      'Email Subject': emailSubject,
-      'Email Content': emailContent,
-    };
-
-    const records = await createRecords(baseId, MESSAGES_TABLE, [
-      { fields },
-    ]);
-
+    const record = serialize(row);
     return c.json({
       success: true,
-      data: {
-        id: records[0].id,
-        fields: records[0].fields,
-      },
+      data: { id: record.id, fields: record.fields },
     });
   } catch (error) {
     console.error('Error creating Message record:', error);
@@ -74,14 +73,11 @@ app.post('/', async (c) => {
  */
 app.get('/', async (c) => {
   try {
-    const baseId = process.env.AIRTABLE_BASE_ID || '';
-    const records = await fetchAllRecords(baseId, MESSAGES_TABLE, {
-      view: 'Grid view',
-    });
+    const rows = await getDb().select().from(messages);
 
     return c.json({
       success: true,
-      data: records,
+      data: rows.map(serialize),
     });
   } catch (error) {
     console.error('Error fetching messages:', error);
@@ -102,13 +98,10 @@ app.get('/', async (c) => {
 app.get('/:id', async (c) => {
   try {
     const id = c.req.param('id');
-    const baseId = process.env.AIRTABLE_BASE_ID || '';
 
-    const records = await fetchAllRecords(baseId, MESSAGES_TABLE, {
-      filterByFormula: `RECORD_ID() = "${id}"`,
-    });
+    const [row] = await getDb().select().from(messages).where(eq(messages.id, id)).limit(1);
 
-    if (records.length === 0) {
+    if (!row) {
       return c.json(
         {
           success: false,
@@ -120,7 +113,7 @@ app.get('/:id', async (c) => {
 
     return c.json({
       success: true,
-      data: records[0],
+      data: serialize(row),
     });
   } catch (error) {
     console.error('Error fetching message:', error);

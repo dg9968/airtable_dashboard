@@ -1,47 +1,22 @@
 /**
- * DocuSign Envelopes API Routes
+ * DocuSign/SignNow Envelopes API Routes (Postgres-backed)
  * Handles sending documents for signing and receiving status updates
  */
 
 import { Hono } from 'hono';
+import { and, desc, eq, or, sql } from 'drizzle-orm';
+import { getDb } from '../db/client';
 import {
-  fetchRecords,
-  findRecord,
-  createRecords,
-  updateRecords,
-  type AirtableRecord,
-  type SelectOptions
-} from '../lib/airtable-service';
+  signingEnvelopes,
+  signingTemplates,
+  personal,
+  corporations,
+} from '../db/schema';
 import { uploadSignedDocument } from '../googleDrive';
 
 const app = new Hono();
 
-// Helper functions to wrap the airtable-service exports
-async function createRecord(tableName: string, fields: Record<string, any>): Promise<AirtableRecord> {
-  const records = await createRecords(tableName, [{ fields }]);
-  return records[0];
-}
-
-async function updateRecord(tableName: string, recordId: string, fields: Record<string, any>): Promise<AirtableRecord> {
-  const records = await updateRecords(tableName, [{ id: recordId, fields }]);
-  return records[0];
-}
-
-async function getRecord(tableName: string, recordId: string): Promise<AirtableRecord | null> {
-  try {
-    return await findRecord(tableName, recordId);
-  } catch (error) {
-    return null;
-  }
-}
-
-async function getAllRecords(tableName: string, options?: SelectOptions): Promise<AirtableRecord[]> {
-  return fetchRecords(tableName, options);
-}
-
-// Table names
-const ENVELOPES_TABLE = 'Signing Envelopes';
-const TEMPLATES_TABLE = 'Signing Templates';
+type EnvelopeRow = typeof signingEnvelopes.$inferSelect;
 
 // SignNow OAuth token cache
 let signNowAccessToken: string | null = null;
@@ -126,7 +101,7 @@ interface SendForSigningRequest {
   signer2Name?: string;
   taxYear: string;
   documentType: DocumentType;
-  templateId?: string;  // Airtable record ID of the template
+  templateId?: string;
   triggeredBy: string;
   driveFileId: string;
 }
@@ -139,6 +114,37 @@ interface WebhookPayload {
   signedDocumentDriveId?: string;
   signedDocumentWebViewLink?: string;
   errorMessage?: string;
+}
+
+/** Legacy response shape: { id, ...fields } flattened at top level. */
+function flattenEnvelope(row: EnvelopeRow): Record<string, unknown> {
+  const out: Record<string, unknown> = { id: row.id };
+  const put = (name: string, value: unknown) => {
+    if (value === null || value === undefined || value === '') return;
+    out[name] = value;
+  };
+  put('Status', row.status);
+  put('Client Type', row.clientType);
+  put('Signer Email', row.signerEmail);
+  put('Signer Name', row.signerName);
+  put('Signer 2 Email', row.signer2Email);
+  put('Signer 2 Name', row.signer2Name);
+  put('Tax Year', row.taxYear);
+  put('Document Type', row.documentType);
+  put('Source Drive File ID', row.sourceDriveFileId);
+  put('Created By', row.createdBy);
+  put('Document', row.documentId ? [row.documentId] : null);
+  put('Personal', row.personalId ? [row.personalId] : null);
+  put('Corporation', row.corporationId ? [row.corporationId] : null);
+  put('Template Used', row.templateUsedId);
+  put('Envelope ID', row.envelopeId);
+  put('Error Message', row.errorMessage);
+  put('Sent At', row.sentAt);
+  put('Completed At', row.completedAt);
+  put('Signed Drive File ID', row.signedDriveFileId);
+  put('Voided At', row.voidedAt);
+  put('Void Reason', row.voidReason);
+  return out;
 }
 
 /**
@@ -163,7 +169,6 @@ app.post('/send', async (c) => {
       driveFileId,
     } = payload;
 
-    // Validate required fields
     if (!documentRecordId || !clientType || !clientId || !signerEmail || !signerName || !taxYear || !driveFileId) {
       return c.json(
         {
@@ -174,7 +179,6 @@ app.post('/send', async (c) => {
       );
     }
 
-    // Check webhook URL is configured
     const webhookUrl = process.env.N8N_DOCUSIGN_WEBHOOK_URL;
     if (!webhookUrl) {
       return c.json(
@@ -186,19 +190,24 @@ app.post('/send', async (c) => {
       );
     }
 
+    const db = getDb();
+
     // Look up template to get Dropbox Sign template ID
     let dropboxSignTemplateId: string | undefined;
     let numberOfSigners = 1;
     if (templateId) {
-      const templateRecord = await getRecord(TEMPLATES_TABLE, templateId);
-      if (templateRecord) {
-        dropboxSignTemplateId = templateRecord.fields['Dropbox Sign Template ID'];
-        numberOfSigners = templateRecord.fields['Number of Signers'] || 1;
-        console.log(`Using template: ${templateRecord.fields['Template Name']}, Dropbox Sign ID: ${dropboxSignTemplateId}`);
+      const [templateRow] = await db
+        .select()
+        .from(signingTemplates)
+        .where(eq(signingTemplates.id, templateId))
+        .limit(1);
+      if (templateRow) {
+        dropboxSignTemplateId = templateRow.dropboxSignTemplateId ?? undefined;
+        numberOfSigners = templateRow.numberOfSigners ?? 1;
+        console.log(`Using template: ${templateRow.templateName}, Dropbox Sign ID: ${dropboxSignTemplateId}`);
       }
     }
 
-    // Validate second signer if template requires 2 signers
     if (numberOfSigners === 2 && (!signer2Email || !signer2Name)) {
       return c.json(
         {
@@ -209,43 +218,31 @@ app.post('/send', async (c) => {
       );
     }
 
-    // Create envelope record in Airtable with "Created" status
-    const envelopeFields: Record<string, any> = {
-      'Status': 'Created',
-      'Client Type': clientType === 'personal' ? 'Personal' : 'Corporate',
-      'Signer Email': signerEmail,
-      'Signer Name': signerName,
-      'Tax Year': taxYear,
-      'Document Type': documentType || 'Other',
-      'Source Drive File ID': driveFileId,
-      'Created By': triggeredBy,
-      'Document': [documentRecordId], // Link to Documents table
-    };
+    const [envelopeRow] = await db
+      .insert(signingEnvelopes)
+      .values({
+        status: 'Created',
+        clientType: clientType === 'personal' ? 'Personal' : 'Corporate',
+        signerEmail,
+        signerName,
+        signer2Email: signer2Email || null,
+        signer2Name: signer2Name || null,
+        taxYear,
+        documentType: documentType || 'Other',
+        sourceDriveFileId: driveFileId,
+        createdBy: triggeredBy,
+        documentId: documentRecordId,
+        personalId: clientType === 'personal' ? clientId : null,
+        corporationId: clientType === 'corporate' ? clientId : null,
+        templateUsedId: templateId || null,
+      })
+      .returning();
 
-    // Add second signer info if provided
-    if (signer2Email && signer2Name) {
-      envelopeFields['Signer 2 Email'] = signer2Email;
-      envelopeFields['Signer 2 Name'] = signer2Name;
-    }
+    console.log(`Created envelope record: ${envelopeRow.id}`);
 
-    // Link to appropriate client table
-    if (clientType === 'personal') {
-      envelopeFields['Personal'] = [clientId];
-    } else {
-      envelopeFields['Corporation'] = [clientId];
-    }
-
-    if (templateId) {
-      envelopeFields['Template Used'] = templateId;
-    }
-
-    const envelopeRecord = await createRecord(ENVELOPES_TABLE, envelopeFields);
-    console.log(`Created envelope record: ${envelopeRecord.id}`);
-
-    // Prepare webhook payload for n8n
     const webhookPayload: Record<string, any> = {
       action: 'send',
-      airtableRecordId: envelopeRecord.id,
+      airtableRecordId: envelopeRow.id,
       documentRecordId,
       clientType,
       clientId,
@@ -254,27 +251,23 @@ app.post('/send', async (c) => {
       taxYear,
       documentType: documentType || 'Other',
       templateId,
-      dropboxSignTemplateId,  // The actual Dropbox Sign template ID for n8n to use
+      dropboxSignTemplateId,
       numberOfSigners,
       driveFileId,
       triggeredBy,
       timestamp: new Date().toISOString(),
     };
 
-    // Add second signer to payload if provided
     if (signer2Email && signer2Name) {
       webhookPayload.signer2Email = signer2Email;
       webhookPayload.signer2Name = signer2Name;
     }
 
-    console.log('Triggering n8n Dropbox Sign workflow:', { airtableRecordId: envelopeRecord.id, signerEmail, dropboxSignTemplateId });
+    console.log('Triggering n8n Dropbox Sign workflow:', { airtableRecordId: envelopeRow.id, signerEmail, dropboxSignTemplateId });
 
-    // Trigger n8n webhook
     const response = await fetch(webhookUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(webhookPayload),
     });
 
@@ -282,17 +275,16 @@ app.post('/send', async (c) => {
       const errorText = await response.text();
       console.error('n8n webhook failed:', errorText);
 
-      // Update envelope status to indicate error
-      await updateRecord(ENVELOPES_TABLE, envelopeRecord.id, {
-        'Status': 'Created',
-        'Error Message': `Webhook failed: ${response.statusText} - ${errorText}`,
-      });
+      await db
+        .update(signingEnvelopes)
+        .set({ status: 'Created', errorMessage: `Webhook failed: ${response.statusText} - ${errorText}` })
+        .where(eq(signingEnvelopes.id, envelopeRow.id));
 
       return c.json(
         {
           success: false,
           error: `Failed to trigger signing workflow: ${response.statusText}`,
-          envelopeRecordId: envelopeRecord.id,
+          envelopeRecordId: envelopeRow.id,
         },
         500
       );
@@ -303,7 +295,7 @@ app.post('/send', async (c) => {
     return c.json({
       success: true,
       message: 'Signing request initiated',
-      envelopeRecordId: envelopeRecord.id,
+      envelopeRecordId: envelopeRow.id,
       webhookResponse,
     });
   } catch (error) {
@@ -331,14 +323,12 @@ app.post('/webhook', async (c) => {
       status,
       timestamp,
       signedDocumentDriveId,
-      signedDocumentWebViewLink,
       errorMessage,
     } = payload;
 
     console.log('Received DocuSign webhook - full payload:', JSON.stringify(payload, null, 2));
     console.log('Extracted values:', { envelopeId, airtableRecordId, status });
 
-    // Validate payload
     if (!airtableRecordId && !envelopeId) {
       console.log('Webhook rejected: missing both airtableRecordId and envelopeId');
       return c.json(
@@ -351,31 +341,31 @@ app.post('/webhook', async (c) => {
       );
     }
 
+    const db = getDb();
+
     // Find the envelope record
     let recordId = airtableRecordId;
 
-    // If airtableRecordId provided, verify it exists
     if (recordId) {
       console.log(`Looking up record by airtableRecordId: ${recordId}`);
-      const existingRecord = await getRecord(ENVELOPES_TABLE, recordId);
-      if (!existingRecord) {
-        console.log(`Record ${recordId} not found in Airtable`);
-        // Clear recordId so we can try searching by envelopeId
+      const [existing] = await db.select({ id: signingEnvelopes.id }).from(signingEnvelopes).where(eq(signingEnvelopes.id, recordId)).limit(1);
+      if (!existing) {
+        console.log(`Record ${recordId} not found`);
         recordId = undefined;
       } else {
         console.log(`Found record: ${recordId}`);
       }
     }
 
-    // If no valid recordId yet, search by envelope ID
     if (!recordId && envelopeId) {
       console.log(`Searching by Envelope ID: ${envelopeId}`);
-      const records = await getAllRecords(ENVELOPES_TABLE, {
-        filterByFormula: `{Envelope ID} = '${envelopeId}'`,
-        maxRecords: 1,
-      });
-      if (records.length > 0) {
-        recordId = records[0].id;
+      const [found] = await db
+        .select({ id: signingEnvelopes.id })
+        .from(signingEnvelopes)
+        .where(eq(signingEnvelopes.envelopeId, envelopeId))
+        .limit(1);
+      if (found) {
+        recordId = found.id;
         console.log(`Found record by Envelope ID: ${recordId}`);
       } else {
         console.log(`No record found with Envelope ID: ${envelopeId}`);
@@ -395,7 +385,6 @@ app.post('/webhook', async (c) => {
       );
     }
 
-    // Map status to proper format
     const statusMap: Record<string, EnvelopeStatus> = {
       'sent': 'Sent',
       'delivered': 'Delivered',
@@ -406,39 +395,26 @@ app.post('/webhook', async (c) => {
       'voided': 'Voided',
     };
 
-    const normalizedStatus = statusMap[status.toLowerCase()] || status;
+    const normalizedStatus = statusMap[status.toLowerCase()] || (status as EnvelopeStatus);
 
-    // Prepare update fields
-    const updateFields: Record<string, any> = {
-      'Status': normalizedStatus,
+    const values: Partial<typeof signingEnvelopes.$inferInsert> = {
+      status: normalizedStatus,
     };
 
-    // Store envelope ID if provided
-    if (envelopeId) {
-      updateFields['Envelope ID'] = envelopeId;
-    }
+    if (envelopeId) values.envelopeId = envelopeId;
 
-    // Set timestamp based on status
     if (normalizedStatus === 'Sent') {
-      updateFields['Sent At'] = timestamp;
+      values.sentAt = timestamp;
     } else if (normalizedStatus === 'Completed' || normalizedStatus === 'Signed') {
-      updateFields['Completed At'] = timestamp;
+      values.completedAt = timestamp;
     } else if (normalizedStatus === 'Voided') {
-      updateFields['Voided At'] = timestamp;
+      values.voidedAt = timestamp;
     }
 
-    // Handle signed document
-    if (signedDocumentDriveId) {
-      updateFields['Signed Drive File ID'] = signedDocumentDriveId;
-    }
+    if (signedDocumentDriveId) values.signedDriveFileId = signedDocumentDriveId;
+    if (errorMessage) values.errorMessage = errorMessage;
 
-    // Handle errors
-    if (errorMessage) {
-      updateFields['Error Message'] = errorMessage;
-    }
-
-    // Update the envelope record
-    await updateRecord(ENVELOPES_TABLE, recordId, updateFields);
+    await db.update(signingEnvelopes).set(values).where(eq(signingEnvelopes.id, recordId));
     console.log(`Updated envelope ${recordId} to status: ${normalizedStatus}`);
 
     return c.json({
@@ -469,38 +445,22 @@ app.get('/envelopes', async (c) => {
     const clientType = c.req.query('clientType');
     const taxYear = c.req.query('taxYear');
 
-    const filterParts: string[] = [];
+    const conditions = [];
+    if (status) conditions.push(eq(signingEnvelopes.status, status as EnvelopeStatus));
+    if (clientType) conditions.push(eq(signingEnvelopes.clientType, clientType === 'personal' ? 'Personal' : 'Corporate'));
+    if (taxYear) conditions.push(eq(signingEnvelopes.taxYear, taxYear));
 
-    if (status) {
-      filterParts.push(`{Status} = '${status}'`);
-    }
-    if (clientType) {
-      const formattedType = clientType === 'personal' ? 'Personal' : 'Corporate';
-      filterParts.push(`{Client Type} = '${formattedType}'`);
-    }
-    if (taxYear) {
-      filterParts.push(`{Tax Year} = '${taxYear}'`);
-    }
-
-    const options: any = {
-      sort: [{ field: 'Sent At', direction: 'desc' }],
-    };
-
-    if (filterParts.length > 0) {
-      options.filterByFormula = filterParts.length === 1
-        ? filterParts[0]
-        : `AND(${filterParts.join(', ')})`;
-    }
-
-    const records = await getAllRecords(ENVELOPES_TABLE, options);
+    const db = getDb();
+    const rows = await db
+      .select()
+      .from(signingEnvelopes)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(desc(signingEnvelopes.sentAt));
 
     return c.json({
       success: true,
-      envelopes: records.map(record => ({
-        id: record.id,
-        ...record.fields,
-      })),
-      total: records.length,
+      envelopes: rows.map(flattenEnvelope),
+      total: rows.length,
     });
   } catch (error) {
     console.error('Error fetching envelopes:', error);
@@ -521,9 +481,9 @@ app.get('/envelopes', async (c) => {
 app.get('/envelopes/:id', async (c) => {
   try {
     const id = c.req.param('id');
-    const record = await getRecord(ENVELOPES_TABLE, id);
+    const [row] = await getDb().select().from(signingEnvelopes).where(eq(signingEnvelopes.id, id)).limit(1);
 
-    if (!record) {
+    if (!row) {
       return c.json(
         {
           success: false,
@@ -535,10 +495,7 @@ app.get('/envelopes/:id', async (c) => {
 
     return c.json({
       success: true,
-      envelope: {
-        id: record.id,
-        ...record.fields,
-      },
+      envelope: flattenEnvelope(row),
     });
   } catch (error) {
     console.error('Error fetching envelope:', error);
@@ -561,20 +518,21 @@ app.get('/client/:clientId', async (c) => {
     const clientId = c.req.param('clientId');
     const clientType = c.req.query('clientType') || 'personal';
 
-    const linkField = clientType === 'personal' ? 'Personal' : 'Corporation';
-
-    const records = await getAllRecords(ENVELOPES_TABLE, {
-      filterByFormula: `FIND('${clientId}', ARRAYJOIN({${linkField}}))`,
-      sort: [{ field: 'Sent At', direction: 'desc' }],
-    });
+    const db = getDb();
+    const rows = await db
+      .select()
+      .from(signingEnvelopes)
+      .where(
+        clientType === 'personal'
+          ? eq(signingEnvelopes.personalId, clientId)
+          : eq(signingEnvelopes.corporationId, clientId)
+      )
+      .orderBy(desc(signingEnvelopes.sentAt));
 
     return c.json({
       success: true,
-      envelopes: records.map(record => ({
-        id: record.id,
-        ...record.fields,
-      })),
-      total: records.length,
+      envelopes: rows.map(flattenEnvelope),
+      total: rows.length,
     });
   } catch (error) {
     console.error('Error fetching client envelopes:', error);
@@ -598,9 +556,9 @@ app.post('/void/:envelopeId', async (c) => {
     const body = await c.req.json().catch(() => ({}));
     const { reason, voidedBy } = body;
 
-    // Get the envelope record
-    const record = await getRecord(ENVELOPES_TABLE, envelopeId);
-    if (!record) {
+    const db = getDb();
+    const [row] = await db.select().from(signingEnvelopes).where(eq(signingEnvelopes.id, envelopeId)).limit(1);
+    if (!row) {
       return c.json(
         {
           success: false,
@@ -610,28 +568,25 @@ app.post('/void/:envelopeId', async (c) => {
       );
     }
 
-    // Check if envelope can be voided (not already completed or voided)
-    const currentStatus = record.fields['Status'];
-    if (currentStatus === 'Completed' || currentStatus === 'Voided') {
+    if (row.status === 'Completed' || row.status === 'Voided') {
       return c.json(
         {
           success: false,
-          error: `Cannot void envelope with status: ${currentStatus}`,
+          error: `Cannot void envelope with status: ${row.status}`,
         },
         400
       );
     }
 
-    // Trigger n8n to void in DocuSign
     const webhookUrl = process.env.N8N_DOCUSIGN_WEBHOOK_URL;
-    if (webhookUrl && record.fields['Envelope ID']) {
+    if (webhookUrl && row.envelopeId) {
       try {
         await fetch(webhookUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             action: 'void',
-            envelopeId: record.fields['Envelope ID'],
+            envelopeId: row.envelopeId,
             airtableRecordId: envelopeId,
             reason,
             voidedBy,
@@ -643,12 +598,14 @@ app.post('/void/:envelopeId', async (c) => {
       }
     }
 
-    // Update the envelope record
-    await updateRecord(ENVELOPES_TABLE, envelopeId, {
-      'Status': 'Voided',
-      'Voided At': new Date().toISOString(),
-      'Void Reason': reason || 'Voided by user',
-    });
+    await db
+      .update(signingEnvelopes)
+      .set({
+        status: 'Voided',
+        voidedAt: new Date().toISOString(),
+        voidReason: reason || 'Voided by user',
+      })
+      .where(eq(signingEnvelopes.id, envelopeId));
 
     return c.json({
       success: true,
@@ -674,9 +631,8 @@ app.post('/resend/:envelopeId', async (c) => {
   try {
     const envelopeId = c.req.param('envelopeId');
 
-    // Get the envelope record
-    const record = await getRecord(ENVELOPES_TABLE, envelopeId);
-    if (!record) {
+    const [row] = await getDb().select().from(signingEnvelopes).where(eq(signingEnvelopes.id, envelopeId)).limit(1);
+    if (!row) {
       return c.json(
         {
           success: false,
@@ -686,19 +642,16 @@ app.post('/resend/:envelopeId', async (c) => {
       );
     }
 
-    // Check if envelope can be resent (must be sent or delivered)
-    const currentStatus = record.fields['Status'];
-    if (!['Sent', 'Delivered', 'Viewed'].includes(currentStatus)) {
+    if (!['Sent', 'Delivered', 'Viewed'].includes(row.status)) {
       return c.json(
         {
           success: false,
-          error: `Cannot resend envelope with status: ${currentStatus}`,
+          error: `Cannot resend envelope with status: ${row.status}`,
         },
         400
       );
     }
 
-    // Trigger n8n to resend
     const webhookUrl = process.env.N8N_DOCUSIGN_WEBHOOK_URL;
     if (!webhookUrl) {
       return c.json(
@@ -715,10 +668,10 @@ app.post('/resend/:envelopeId', async (c) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         action: 'resend',
-        envelopeId: record.fields['Envelope ID'],
+        envelopeId: row.envelopeId,
         airtableRecordId: envelopeId,
-        signerEmail: record.fields['Signer Email'],
-        signerName: record.fields['Signer Name'],
+        signerEmail: row.signerEmail,
+        signerName: row.signerName,
         timestamp: new Date().toISOString(),
       }),
     });
@@ -771,13 +724,14 @@ app.get('/document/:documentId/signing-status', async (c) => {
   try {
     const documentId = c.req.param('documentId');
 
-    const records = await getAllRecords(ENVELOPES_TABLE, {
-      filterByFormula: `FIND('${documentId}', ARRAYJOIN({Document}))`,
-      sort: [{ field: 'Sent At', direction: 'desc' }],
-      maxRecords: 1,
-    });
+    const [row] = await getDb()
+      .select()
+      .from(signingEnvelopes)
+      .where(eq(signingEnvelopes.documentId, documentId))
+      .orderBy(desc(signingEnvelopes.sentAt))
+      .limit(1);
 
-    if (records.length === 0) {
+    if (!row) {
       return c.json({
         success: true,
         hasEnvelope: false,
@@ -785,17 +739,16 @@ app.get('/document/:documentId/signing-status', async (c) => {
       });
     }
 
-    const record = records[0];
     return c.json({
       success: true,
       hasEnvelope: true,
       envelope: {
-        id: record.id,
-        status: record.fields['Status'],
-        sentAt: record.fields['Sent At'],
-        completedAt: record.fields['Completed At'],
-        signerEmail: record.fields['Signer Email'],
-        signerName: record.fields['Signer Name'],
+        id: row.id,
+        status: row.status,
+        sentAt: row.sentAt,
+        completedAt: row.completedAt,
+        signerEmail: row.signerEmail,
+        signerName: row.signerName,
       },
     });
   } catch (error) {
@@ -819,42 +772,33 @@ app.get('/templates', async (c) => {
     const documentType = c.req.query('documentType');
     const clientType = c.req.query('clientType');
 
-    const filterParts: string[] = [];
-
-    // Always filter for active templates
-    filterParts.push(`{Status} = 'Active'`);
-
-    // Filter by document type if provided
+    const conditions = [eq(signingTemplates.status, 'Active')];
     if (documentType) {
-      filterParts.push(`FIND('${documentType}', ARRAYJOIN({Document Types}, ','))`);
+      // documentTypes is text[]; match if the array contains the requested type
+      conditions.push(sql`${documentType} = ANY(${signingTemplates.documentTypes})`);
     }
-
-    // Filter by client type if provided (Personal, Corporate, or Both)
     if (clientType) {
       const formattedType = clientType === 'personal' ? 'Personal' : 'Corporate';
-      filterParts.push(`OR({Client Type} = '${formattedType}', {Client Type} = 'Both')`);
+      conditions.push(or(eq(signingTemplates.clientType, formattedType), eq(signingTemplates.clientType, 'Both'))!);
     }
 
-    const options: SelectOptions = {
-      filterByFormula: filterParts.length === 1
-        ? filterParts[0]
-        : `AND(${filterParts.join(', ')})`,
-      sort: [{ field: 'Sort Order', direction: 'asc' }],
-    };
+    const rows = await getDb()
+      .select()
+      .from(signingTemplates)
+      .where(and(...conditions))
+      .orderBy(signingTemplates.sortOrder);
 
-    const records = await getAllRecords(TEMPLATES_TABLE, options);
-
-    const templates: SigningTemplate[] = records.map(record => ({
-      id: record.id,
-      templateName: record.fields['Template Name'] || '',
-      templateCode: record.fields['Template Code'] || '',
-      dropboxSignTemplateId: record.fields['Dropbox Sign Template ID'] || '',
-      documentTypes: record.fields['Document Types'] || [],
-      clientType: record.fields['Client Type'] || 'Both',
-      numberOfSigners: record.fields['Number of Signers'] || 1,
-      description: record.fields['Description'] || '',
-      status: record.fields['Status'] || 'Draft',
-      sortOrder: record.fields['Sort Order'] || 0,
+    const templates: SigningTemplate[] = rows.map(row => ({
+      id: row.id,
+      templateName: row.templateName || '',
+      templateCode: row.templateCode || '',
+      dropboxSignTemplateId: row.dropboxSignTemplateId || '',
+      documentTypes: row.documentTypes || [],
+      clientType: (row.clientType as SigningTemplate['clientType']) || 'Both',
+      numberOfSigners: row.numberOfSigners || 1,
+      description: row.description || '',
+      status: (row.status as SigningTemplate['status']) || 'Draft',
+      sortOrder: row.sortOrder || 0,
     }));
 
     return c.json({
@@ -881,9 +825,9 @@ app.get('/templates', async (c) => {
 app.get('/templates/:id', async (c) => {
   try {
     const id = c.req.param('id');
-    const record = await getRecord(TEMPLATES_TABLE, id);
+    const [row] = await getDb().select().from(signingTemplates).where(eq(signingTemplates.id, id)).limit(1);
 
-    if (!record) {
+    if (!row) {
       return c.json(
         {
           success: false,
@@ -894,16 +838,16 @@ app.get('/templates/:id', async (c) => {
     }
 
     const template: SigningTemplate = {
-      id: record.id,
-      templateName: record.fields['Template Name'] || '',
-      templateCode: record.fields['Template Code'] || '',
-      dropboxSignTemplateId: record.fields['Dropbox Sign Template ID'] || '',
-      documentTypes: record.fields['Document Types'] || [],
-      clientType: record.fields['Client Type'] || 'Both',
-      numberOfSigners: record.fields['Number of Signers'] || 1,
-      description: record.fields['Description'] || '',
-      status: record.fields['Status'] || 'Draft',
-      sortOrder: record.fields['Sort Order'] || 0,
+      id: row.id,
+      templateName: row.templateName || '',
+      templateCode: row.templateCode || '',
+      dropboxSignTemplateId: row.dropboxSignTemplateId || '',
+      documentTypes: row.documentTypes || [],
+      clientType: (row.clientType as SigningTemplate['clientType']) || 'Both',
+      numberOfSigners: row.numberOfSigners || 1,
+      description: row.description || '',
+      status: (row.status as SigningTemplate['status']) || 'Draft',
+      sortOrder: row.sortOrder || 0,
     };
 
     return c.json({
@@ -936,7 +880,6 @@ app.post('/upload-signed', async (c) => {
     const body = await c.req.json();
     let {
       airtableRecordId,
-      signatureRequestId,
       fileBase64,
       fileName,
       clientCode,
@@ -944,7 +887,6 @@ app.post('/upload-signed', async (c) => {
       clientType,
     } = body;
 
-    // Validate required fields
     if (!fileBase64) {
       return c.json(
         {
@@ -955,34 +897,27 @@ app.post('/upload-signed', async (c) => {
       );
     }
 
+    const db = getDb();
+
     // If clientCode/taxYear not provided, look up from envelope record
     if ((!clientCode || !taxYear) && airtableRecordId) {
       console.log(`Looking up client info from envelope record: ${airtableRecordId}`);
-      const envelopeRecord = await getRecord(ENVELOPES_TABLE, airtableRecordId);
+      const [envelopeRow] = await db.select().from(signingEnvelopes).where(eq(signingEnvelopes.id, airtableRecordId)).limit(1);
 
-      if (envelopeRecord) {
-        taxYear = taxYear || envelopeRecord.fields['Tax Year'];
-        clientType = clientType || envelopeRecord.fields['Client Type'];
+      if (envelopeRow) {
+        taxYear = taxYear || envelopeRow.taxYear;
+        clientType = clientType || envelopeRow.clientType;
 
-        // Get client code from linked Personal or Corporation record
-        const personalIds = envelopeRecord.fields['Personal'] as string[] | undefined;
-        const corporationIds = envelopeRecord.fields['Corporation'] as string[] | undefined;
-
-        if (personalIds && personalIds.length > 0) {
-          const personalRecord = await getRecord('Personal', personalIds[0]);
-          if (personalRecord) {
-            clientCode = personalRecord.fields['Client Code'] || personalRecord.fields['Code'];
-          }
-        } else if (corporationIds && corporationIds.length > 0) {
-          const corpRecord = await getRecord('Corporations', corporationIds[0]);
-          if (corpRecord) {
-            clientCode = corpRecord.fields['Client Code'] || corpRecord.fields['Code'];
-          }
+        if (envelopeRow.personalId) {
+          const [personalRow] = await db.select({ clientCode: personal.clientCode }).from(personal).where(eq(personal.id, envelopeRow.personalId)).limit(1);
+          if (personalRow) clientCode = personalRow.clientCode;
+        } else if (envelopeRow.corporationId) {
+          const [corpRow] = await db.select({ clientCode: corporations.clientCode }).from(corporations).where(eq(corporations.id, envelopeRow.corporationId)).limit(1);
+          if (corpRow) clientCode = corpRow.clientCode;
         }
       }
     }
 
-    // Still missing required fields?
     if (!clientCode || !taxYear) {
       return c.json(
         {
@@ -995,16 +930,10 @@ app.post('/upload-signed', async (c) => {
 
     console.log(`Uploading signed document for client ${clientCode}, tax year ${taxYear}`);
 
-    // Decode base64 to buffer
     const fileBuffer = Buffer.from(fileBase64, 'base64');
-
-    // Generate filename if not provided
     const finalFileName = fileName || `signed_${Date.now()}.pdf`;
-
-    // Determine if corporate based on clientType
     const isCorporate = clientType === 'corporate' || clientType === 'Corporate';
 
-    // Upload to Google Drive using the app's credentials
     const uploadResult = await uploadSignedDocument(
       fileBuffer,
       finalFileName,
@@ -1016,18 +945,19 @@ app.post('/upload-signed', async (c) => {
 
     console.log(`Signed document uploaded: ${uploadResult.fileId}`);
 
-    // If airtableRecordId provided, update the envelope record
     if (airtableRecordId) {
       try {
-        await updateRecord(ENVELOPES_TABLE, airtableRecordId, {
-          'Signed Drive File ID': uploadResult.fileId,
-          'Status': 'Completed',
-          'Completed At': new Date().toISOString(),
-        });
+        await db
+          .update(signingEnvelopes)
+          .set({
+            signedDriveFileId: uploadResult.fileId,
+            status: 'Completed',
+            completedAt: new Date().toISOString(),
+          })
+          .where(eq(signingEnvelopes.id, airtableRecordId));
         console.log(`Updated envelope record ${airtableRecordId} with signed document`);
       } catch (updateError) {
         console.error('Failed to update envelope record:', updateError);
-        // Don't fail the whole request if Airtable update fails
       }
     }
 
@@ -1057,7 +987,7 @@ app.post('/upload-signed', async (c) => {
  * Alternative endpoint that handles the full flow:
  * 1. Download signed PDF from SignNow using document ID
  * 2. Upload to Google Drive
- * 3. Update Airtable record
+ * 3. Update envelope record
  *
  * Note: This requires SignNow credentials to be configured
  * If clientCode/taxYear not provided, looks them up from the envelope record.
@@ -1074,7 +1004,6 @@ app.post('/download-and-upload', async (c) => {
       fileName,
     } = body;
 
-    // Validate required fields
     if (!signatureRequestId) {
       return c.json(
         {
@@ -1085,34 +1014,27 @@ app.post('/download-and-upload', async (c) => {
       );
     }
 
+    const db = getDb();
+
     // If clientCode/taxYear not provided, look up from envelope record
     if ((!clientCode || !taxYear) && airtableRecordId) {
       console.log(`Looking up client info from envelope record: ${airtableRecordId}`);
-      const envelopeRecord = await getRecord(ENVELOPES_TABLE, airtableRecordId);
+      const [envelopeRow] = await db.select().from(signingEnvelopes).where(eq(signingEnvelopes.id, airtableRecordId)).limit(1);
 
-      if (envelopeRecord) {
-        taxYear = taxYear || envelopeRecord.fields['Tax Year'];
-        clientType = clientType || envelopeRecord.fields['Client Type'];
+      if (envelopeRow) {
+        taxYear = taxYear || envelopeRow.taxYear;
+        clientType = clientType || envelopeRow.clientType;
 
-        // Get client code from linked Personal or Corporation record
-        const personalIds = envelopeRecord.fields['Personal'] as string[] | undefined;
-        const corporationIds = envelopeRecord.fields['Corporation'] as string[] | undefined;
-
-        if (personalIds && personalIds.length > 0) {
-          const personalRecord = await getRecord('Personal', personalIds[0]);
-          if (personalRecord) {
-            clientCode = personalRecord.fields['Client Code'] || personalRecord.fields['Code'];
-          }
-        } else if (corporationIds && corporationIds.length > 0) {
-          const corpRecord = await getRecord('Corporations', corporationIds[0]);
-          if (corpRecord) {
-            clientCode = corpRecord.fields['Client Code'] || corpRecord.fields['Code'];
-          }
+        if (envelopeRow.personalId) {
+          const [personalRow] = await db.select({ clientCode: personal.clientCode }).from(personal).where(eq(personal.id, envelopeRow.personalId)).limit(1);
+          if (personalRow) clientCode = personalRow.clientCode;
+        } else if (envelopeRow.corporationId) {
+          const [corpRow] = await db.select({ clientCode: corporations.clientCode }).from(corporations).where(eq(corporations.id, envelopeRow.corporationId)).limit(1);
+          if (corpRow) clientCode = corpRow.clientCode;
         }
       }
     }
 
-    // Still missing required fields?
     if (!clientCode || !taxYear) {
       return c.json(
         {
@@ -1136,17 +1058,13 @@ app.post('/download-and-upload', async (c) => {
 
     console.log(`Downloading signed document from SignNow: ${signatureRequestId}`);
 
-    // Get SignNow access token and download PDF
     const signNowApiUrl = process.env.SIGNNOW_API_URL || 'https://api.signnow.com';
     const accessToken = await getSignNowAccessToken();
 
-    // In SignNow, signatureRequestId is the document ID
     const signNowResponse = await fetch(
       `${signNowApiUrl}/document/${signatureRequestId}/download?type=collapsed`,
       {
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-        },
+        headers: { 'Authorization': `Bearer ${accessToken}` },
       }
     );
 
@@ -1165,13 +1083,9 @@ app.post('/download-and-upload', async (c) => {
     const fileBuffer = Buffer.from(await signNowResponse.arrayBuffer());
     console.log(`Downloaded ${fileBuffer.length} bytes from SignNow`);
 
-    // Generate filename
     const finalFileName = fileName || `signed_${signatureRequestId}.pdf`;
-
-    // Determine if corporate
     const isCorporate = clientType === 'corporate' || clientType === 'Corporate';
 
-    // Upload to Google Drive
     const uploadResult = await uploadSignedDocument(
       fileBuffer,
       finalFileName,
@@ -1183,14 +1097,16 @@ app.post('/download-and-upload', async (c) => {
 
     console.log(`Signed document uploaded: ${uploadResult.fileId}`);
 
-    // Update Airtable record if provided
     if (airtableRecordId) {
       try {
-        await updateRecord(ENVELOPES_TABLE, airtableRecordId, {
-          'Signed Drive File ID': uploadResult.fileId,
-          'Status': 'Completed',
-          'Completed At': new Date().toISOString(),
-        });
+        await db
+          .update(signingEnvelopes)
+          .set({
+            signedDriveFileId: uploadResult.fileId,
+            status: 'Completed',
+            completedAt: new Date().toISOString(),
+          })
+          .where(eq(signingEnvelopes.id, airtableRecordId));
         console.log(`Updated envelope record ${airtableRecordId}`);
       } catch (updateError) {
         console.error('Failed to update envelope record:', updateError);

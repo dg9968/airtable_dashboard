@@ -16,3 +16,5 @@ export * from './people';
 export * from './subscriptions';
 export * from './documents';
 export * from './tax-notices';
+export * from './communications';
+export * from './envelopes';

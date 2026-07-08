@@ -120,6 +120,24 @@ const checks: Check[] = [
     assert: (b) => (Array.isArray(b.documents) && b.documents.length > 0 ? null : 'no documents'),
   },
   { path: '/api/documents/debug-all?maxRecords=5', keys: ['success', 'records'] },
+
+  // Phase 5 — messages / communications / signing envelopes (Postgres-backed)
+  {
+    path: '/api/messages',
+    keys: ['success', 'data'],
+    assert: (b) => (Array.isArray(b.data) && b.data.length > 0 ? null : 'no messages'),
+  },
+  {
+    path: '/api/communications-corporate',
+    keys: ['success', 'data'],
+    assert: (b) => (Array.isArray(b.data) && b.data.length > 0 ? null : 'no communications'),
+  },
+  {
+    path: '/api/docusign/envelopes',
+    keys: ['success', 'envelopes', 'total'],
+    assert: (b) => (Array.isArray(b.envelopes) && b.envelopes.length > 0 ? null : 'no envelopes'),
+  },
+  { path: '/api/docusign/status', keys: ['success', 'configured'] },
 ];
 
 function getPath(obj: any, dotPath: string): unknown {

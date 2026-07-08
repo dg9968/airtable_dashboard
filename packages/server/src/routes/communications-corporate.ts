@@ -1,25 +1,36 @@
 /**
- * Communications Corporate API Routes
+ * Communications Corporate API Routes (Postgres-backed)
  * Junction table that links Message records to Corporations (Corporate clients)
  */
 
 import { Hono } from 'hono';
-import { fetchAllRecords, createRecords } from '../lib/airtable-helpers';
+import { eq } from 'drizzle-orm';
+import { getDb } from '../db/client';
+import { communicationsCorporate } from '../db/schema';
 
 const app = new Hono();
 
-const COMMUNICATIONS_CORPORATE_TABLE = 'Communications Corporate';
+type CommRow = typeof communicationsCorporate.$inferSelect;
+
+// Legacy Airtable record shape. 'Email Subject' / 'Company_Contacts (from
+// Corporate)' / 'To Email' were Airtable formula/lookup fields — not stored,
+// and unused by the client (grep-confirmed), so intentionally omitted.
+function serialize(row: CommRow) {
+  const fields: Record<string, unknown> = {};
+  if (row.messageId) fields['Message'] = [row.messageId];
+  if (row.corporationId) fields['Corporate'] = [row.corporationId];
+  if (row.status) fields['Status'] = row.status;
+  if (row.description) fields['Description'] = row.description;
+  if (row.batchId) fields['Batch ID'] = row.batchId;
+  if (row.personalizedSubject) fields['Personalized Subject'] = row.personalizedSubject;
+  if (row.personalizedContent) fields['Personalized Content'] = row.personalizedContent;
+  if (row.variableValues) fields['Variable Values'] = row.variableValues;
+  return { id: row.id, createdTime: row.createdAt.toISOString(), fields };
+}
 
 /**
  * POST /api/communications-corporate
  * Create a new junction record linking Message to Corporations
- *
- * Expected body:
- * {
- *   messageId: string,       // Airtable record ID from Message table
- *   corporateId: string,     // Airtable record ID from Corporations table
- *   description?: string     // Optional description
- * }
  */
 app.post('/', async (c) => {
   try {
@@ -37,30 +48,19 @@ app.post('/', async (c) => {
 
     console.log('Creating Communications Corporate junction record:', { messageId, corporateId });
 
-    const baseId = process.env.AIRTABLE_BASE_ID || '';
+    const [row] = await getDb()
+      .insert(communicationsCorporate)
+      .values({
+        messageId,
+        corporationId: corporateId,
+        description: description || null,
+      })
+      .returning();
 
-    // Create the junction record
-    // Field names must match Airtable exactly
-    const fields: any = {
-      'Message': [messageId],      // Link to Message table (array format)
-      'Corporate': [corporateId],  // Link to Corporations table (array format)
-    };
-
-    // Add optional description if provided
-    if (description) {
-      fields['Description'] = description;
-    }
-
-    const records = await createRecords(baseId, COMMUNICATIONS_CORPORATE_TABLE, [
-      { fields },
-    ]);
-
+    const record = serialize(row);
     return c.json({
       success: true,
-      data: {
-        id: records[0].id,
-        fields: records[0].fields,
-      },
+      data: { id: record.id, fields: record.fields },
     });
   } catch (error) {
     console.error('Error creating Communications Corporate record:', error);
@@ -81,14 +81,11 @@ app.post('/', async (c) => {
  */
 app.get('/', async (c) => {
   try {
-    const baseId = process.env.AIRTABLE_BASE_ID || '';
-    const records = await fetchAllRecords(baseId, COMMUNICATIONS_CORPORATE_TABLE, {
-      view: 'Grid view',
-    });
+    const rows = await getDb().select().from(communicationsCorporate);
 
     return c.json({
       success: true,
-      data: records,
+      data: rows.map(serialize),
     });
   } catch (error) {
     console.error('Error fetching communications:', error);
@@ -109,15 +106,15 @@ app.get('/', async (c) => {
 app.get('/corporate/:corporateId', async (c) => {
   try {
     const corporateId = c.req.param('corporateId');
-    const baseId = process.env.AIRTABLE_BASE_ID || '';
 
-    const records = await fetchAllRecords(baseId, COMMUNICATIONS_CORPORATE_TABLE, {
-      filterByFormula: `FIND("${corporateId}", ARRAYJOIN({Corporate}))`,
-    });
+    const rows = await getDb()
+      .select()
+      .from(communicationsCorporate)
+      .where(eq(communicationsCorporate.corporationId, corporateId));
 
     return c.json({
       success: true,
-      data: records,
+      data: rows.map(serialize),
     });
   } catch (error) {
     console.error('Error fetching corporate communications:', error);

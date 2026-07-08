@@ -4,15 +4,12 @@
  */
 
 import { Hono } from 'hono';
-import { createRecords, getRecord } from '../lib/airtable-helpers.js';
+import { eq } from 'drizzle-orm';
+import { getDb } from '../db/client';
+import { messages, communicationsCorporate, messageTemplates } from '../db/schema';
 import { renderMessage, type CorporateClient, type VariableDefinition } from '../lib/template-engine.js';
 
 const app = new Hono();
-
-const BASE_ID = process.env.AIRTABLE_BASE_ID || '';
-const MESSAGES_TABLE = 'Messages';
-const COMMUNICATIONS_CORPORATE_TABLE = 'Communications Corporate';
-const TEMPLATES_TABLE = 'Message Templates';
 
 interface BatchClient {
   corporateId: string;
@@ -206,56 +203,56 @@ app.post('/batch', async (c) => {
 
     console.log(`[Batch ${batchId}] Creating batch communication for ${clients.length} clients`);
 
+    const db = getDb();
+
     // Get template if provided
     let templateData = null;
     if (templateId) {
-      try {
-        const templateRecord = await getRecord(BASE_ID, TEMPLATES_TABLE, templateId);
-        templateData = {
-          id: templateRecord.id,
-          name: templateRecord.fields['Template Name'],
-          category: templateRecord.fields['Category'],
-        };
-      } catch (error) {
+      const [templateRow] = await db
+        .select({ id: messageTemplates.id, name: messageTemplates.templateName, category: messageTemplates.category })
+        .from(messageTemplates)
+        .where(eq(messageTemplates.id, templateId))
+        .limit(1);
+      if (templateRow) {
+        templateData = { id: templateRow.id, name: templateRow.name, category: templateRow.category };
+      } else {
         console.warn(`Template ${templateId} not found, proceeding without template link`);
       }
     }
 
     // Step 1: Create Message records for each client
-    const messageRecords = clients.map((client: BatchClient) => ({
-      fields: {
-        'Email Subject': client.personalizedSubject,
-        'Email Content': client.personalizedContent,
-        'Is Batch Message': true,
-        'Batch ID': batchId,
-        'Variables Used': JSON.stringify(client.variableValues),
-        ...(templateData ? { 'Template Used': [templateId] } : {}),
-      },
-    }));
-
-    console.log(`[Batch ${batchId}] Creating ${messageRecords.length} message records...`);
-    const createdMessages = await createRecords(BASE_ID, MESSAGES_TABLE, messageRecords);
+    console.log(`[Batch ${batchId}] Creating ${clients.length} message records...`);
+    const createdMessages = await db
+      .insert(messages)
+      .values(
+        clients.map((client: BatchClient) => ({
+          emailSubject: client.personalizedSubject,
+          emailContent: client.personalizedContent,
+          isBatchMessage: true,
+          batchId,
+          variablesUsed: JSON.stringify(client.variableValues),
+          templateUsedId: templateData ? templateId : null,
+        }))
+      )
+      .returning({ id: messages.id });
     console.log(`[Batch ${batchId}] Created ${createdMessages.length} message records`);
 
     // Step 2: Create junction records linking messages to corporations
-    const junctionRecords = clients.map((client: BatchClient, index: number) => ({
-      fields: {
-        Message: [createdMessages[index].id],
-        Corporate: [client.corporateId],
-        'Batch ID': batchId,
-        'Personalized Subject': client.personalizedSubject,
-        'Personalized Content': client.personalizedContent,
-        'Variable Values': JSON.stringify(client.variableValues),
-        Status: 'Pending',
-      },
-    }));
-
-    console.log(`[Batch ${batchId}] Creating ${junctionRecords.length} junction records...`);
-    const createdJunctions = await createRecords(
-      BASE_ID,
-      COMMUNICATIONS_CORPORATE_TABLE,
-      junctionRecords
-    );
+    console.log(`[Batch ${batchId}] Creating ${clients.length} junction records...`);
+    const createdJunctions = await db
+      .insert(communicationsCorporate)
+      .values(
+        clients.map((client: BatchClient, index: number) => ({
+          messageId: createdMessages[index].id,
+          corporationId: client.corporateId,
+          batchId,
+          personalizedSubject: client.personalizedSubject,
+          personalizedContent: client.personalizedContent,
+          variableValues: JSON.stringify(client.variableValues),
+          status: 'Pending',
+        }))
+      )
+      .returning({ id: communicationsCorporate.id });
     console.log(`[Batch ${batchId}] Created ${createdJunctions.length} junction records`);
 
     // Small delay to ensure Airtable has committed all records
