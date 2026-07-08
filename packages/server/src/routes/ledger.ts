@@ -1,46 +1,25 @@
 /**
- * Ledger API Routes
+ * Ledger API Routes (Postgres-backed)
  *
  * Manages ledger entries for tracking service revenue
  */
 
 import { Hono } from 'hono';
-import { testConnection } from '../airtable';
-import { fetchAllRecords, createRecords } from '../lib/airtable-helpers';
+import { and, desc, eq, gt, inArray, lt } from 'drizzle-orm';
+import { getDb } from '../db/client';
+import { ledger, servicesRendered, subscriptionsPersonal, subscriptionsCorporate } from '../db/schema';
+import { ledgerToAirtableRecord } from '../db/serializers-subscriptions';
 
 const app = new Hono();
 
 /**
  * POST /api/ledger
- * Create a new ledger entry when a file return is completed or corporate service is rendered
- *
- * Expected body:
- * {
- *   subscriptionId: string,         // Airtable record ID from Subscriptions Personal or Subscriptions Corporate table
- *   subscriptionType: "personal" | "corporate",  // Type of subscription
- *   clientName: string,             // Full name of the client or company name
- *   serviceType: string,            // Service type (e.g., "Personal Tax Return", "Reconciling Banks for Tax Prep", "Payroll", etc.)
- *   amountCharged: number,          // Amount charged for the service
- *   receiptDate: string,            // ISO date string for when the service was rendered
- *   paymentMethod: string           // Payment method used (Credit Card, Cash, Zelle, Check, ACH, Other)
- * }
+ * Create a new ledger entry
  */
 app.post('/', async (c) => {
   try {
-    const connectionTest = await testConnection();
-    if (!connectionTest.success) {
-      return c.json(
-        {
-          success: false,
-          error: `Connection failed: ${connectionTest.message}`,
-        },
-        401
-      );
-    }
-
     const { subscriptionId, subscriptionType, clientName, serviceType, amountCharged, receiptDate, paymentMethod } = await c.req.json();
 
-    // Validate required fields
     if (!subscriptionId || !clientName || !amountCharged || !receiptDate || !paymentMethod) {
       return c.json(
         {
@@ -51,57 +30,48 @@ app.post('/', async (c) => {
       );
     }
 
-    // Default to personal if subscriptionType not provided (backwards compatibility)
     const type = subscriptionType || 'personal';
     const service = serviceType || 'Personal Tax Return';
 
     console.log('Creating Ledger entry:', { subscriptionId, subscriptionType: type, clientName, serviceType: service, amountCharged, receiptDate, paymentMethod });
 
-    const baseId = process.env.AIRTABLE_BASE_ID || '';
+    const db = getDb();
 
-    // Get the subscription record to verify it exists
-    const tableName = type === 'corporate' ? 'Subscriptions Corporate' : 'Subscriptions Personal';
-    const subscriptions = await fetchAllRecords(baseId, tableName);
-    const subscription = subscriptions.find((s: any) => s.id === subscriptionId);
+    // Verify the subscription exists
+    const table = type === 'corporate' ? subscriptionsCorporate : subscriptionsPersonal;
+    const [subscription] = await db
+      .select({ id: table.id })
+      .from(table as any)
+      .where(eq(table.id, subscriptionId))
+      .limit(1);
 
     if (!subscription) {
       return c.json(
         {
           success: false,
-          error: `Subscription not found in ${tableName}`,
+          error: `Subscription not found in ${type === 'corporate' ? 'Subscriptions Corporate' : 'Subscriptions Personal'}`,
         },
         404
       );
     }
 
-    // Create the ledger record
-    // Field names: "Service Rendered" (text), "Receipt Date" (date), "Amount Charged" (currency), "Name of Client" (text), "Payment Method" (single select)
-    // For subscriptions: "Subscription" (link to Subscriptions Personal) OR "Related Corporate Subscriptions" (link to Subscriptions Corporate)
-    const recordData: any = {
-      'Service Rendered': service,
-      'Receipt Date': receiptDate,
-      'Amount Charged': amountCharged,
-      'Name of Client': clientName,
-      'Payment Method': paymentMethod,
-    };
+    const [row] = await db
+      .insert(ledger)
+      .values({
+        serviceRendered: service,
+        receiptDate,
+        amountCharged: String(amountCharged),
+        nameOfClient: clientName,
+        paymentMethod,
+        subscriptionPersonalId: type === 'personal' ? subscriptionId : null,
+        subscriptionCorporateId: type === 'corporate' ? subscriptionId : null,
+      })
+      .returning();
 
-    // Link to the appropriate subscription table
-    if (type === 'corporate') {
-      recordData['Related Corporate Subscriptions'] = [subscriptionId];
-    } else {
-      recordData['Subscription'] = [subscriptionId];
-    }
-
-    const records = await createRecords(baseId, 'Ledger', [
-      { fields: recordData },
-    ]);
-
+    const record = ledgerToAirtableRecord(row);
     return c.json({
       success: true,
-      data: {
-        id: records[0].id,
-        fields: records[0].fields,
-      },
+      data: { id: record.id, fields: record.fields },
     });
   } catch (error) {
     console.error('Error creating Ledger entry:', error);
@@ -119,89 +89,66 @@ app.post('/', async (c) => {
 /**
  * GET /api/ledger
  * Fetch ledger entries with filtering and grouping
- *
- * Query params:
- * - startDate: Entries after this date
- * - endDate: Entries before this date
- * - clientName: Filter by client name (partial match)
- * - paymentMethod: Filter by payment method
- * - groupBy: "client" | "date" | "payment" (default: "client")
  */
 app.get('/', async (c) => {
   try {
-    const connectionTest = await testConnection();
-    if (!connectionTest.success) {
-      return c.json(
-        {
-          success: false,
-          error: `Connection failed: ${connectionTest.message}`,
-        },
-        401
-      );
-    }
+    const db = getDb();
 
-    const baseId = process.env.AIRTABLE_BASE_ID || '';
-
-    // Get query parameters
     const startDate = c.req.query('startDate');
     const endDate = c.req.query('endDate');
     const clientName = c.req.query('clientName');
     const paymentMethod = c.req.query('paymentMethod');
     const groupBy = c.req.query('groupBy') || 'client';
 
-    // Build filter formula
-    const filters: string[] = [];
+    const conditions = [];
+    if (startDate) conditions.push(gt(ledger.receiptDate, startDate));
+    if (endDate) conditions.push(lt(ledger.receiptDate, endDate));
+    if (paymentMethod) conditions.push(eq(ledger.paymentMethod, paymentMethod));
 
-    if (startDate) {
-      filters.push(`IS_AFTER({Receipt Date}, '${startDate}')`);
+    const rows = await db
+      .select()
+      .from(ledger)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(desc(ledger.receiptDate));
+
+    console.log(`Fetched ${rows.length} Ledger records`);
+
+    // Reverse links + processor lookup from services_rendered
+    const linkedServices = rows.length > 0
+      ? await db
+          .select({
+            id: servicesRendered.id,
+            ledgerEntryId: servicesRendered.ledgerEntryId,
+            processor: servicesRendered.processor,
+          })
+          .from(servicesRendered)
+          .where(inArray(servicesRendered.ledgerEntryId, rows.map((r) => r.id)))
+      : [];
+    const serviceIdsByLedger = new Map<string, string[]>();
+    const processorByLedger = new Map<string, string | null>();
+    for (const s of linkedServices) {
+      if (!s.ledgerEntryId) continue;
+      const list = serviceIdsByLedger.get(s.ledgerEntryId) ?? [];
+      list.push(s.id);
+      serviceIdsByLedger.set(s.ledgerEntryId, list);
+      if (!processorByLedger.has(s.ledgerEntryId)) processorByLedger.set(s.ledgerEntryId, s.processor);
     }
 
-    if (endDate) {
-      filters.push(`IS_BEFORE({Receipt Date}, '${endDate}')`);
-    }
-
-    if (paymentMethod) {
-      filters.push(`{Payment Method} = "${paymentMethod}"`);
-    }
-
-    const filterByFormula = filters.length > 0 ? `AND(${filters.join(', ')})` : undefined;
-
-    // Fetch all ledger records
-    const records = await fetchAllRecords(baseId, 'Ledger', {
-      filterByFormula,
-      sort: [{ field: 'Receipt Date', direction: 'desc' }]
-    });
-
-    console.log(`Fetched ${records.length} Ledger records`);
-
-    // Process records
-    let processedEntries = records.map(record => {
-      const clientNameRaw = record.fields['Name of Client'];
-      const clientNameStr = Array.isArray(clientNameRaw) ? clientNameRaw[0] : clientNameRaw;
-
-      const serviceRenderedRaw = record.fields['Service Rendered'];
-      const serviceRenderedStr = Array.isArray(serviceRenderedRaw) ? serviceRenderedRaw[0] : serviceRenderedRaw;
-
-      const paymentMethodRaw = record.fields['Payment Method'];
-      const paymentMethodStr = Array.isArray(paymentMethodRaw) ? paymentMethodRaw[0] : paymentMethodRaw;
-
-      const processorRaw = record.fields['Processor'];
-      const processorStr = Array.isArray(processorRaw) ? processorRaw[0] : processorRaw;
-
+    let processedEntries = rows.map((row) => {
+      const record = ledgerToAirtableRecord(row, serviceIdsByLedger.get(row.id), processorByLedger.get(row.id));
       return {
-        id: record.id,
+        id: row.id,
         fields: record.fields,
-        clientName: clientNameStr || 'Unknown Client',
-        serviceRendered: serviceRenderedStr || 'Service',
-        receiptDate: record.fields['Receipt Date'] || '',
-        amountCharged: record.fields['Amount Charged'] || 0,
-        paymentMethod: paymentMethodStr || 'Unknown',
-        processor: processorStr || '',
-        createdTime: record.fields['Created Time'],
+        clientName: row.nameOfClient || 'Unknown Client',
+        serviceRendered: row.serviceRendered || 'Service',
+        receiptDate: row.receiptDate || '',
+        amountCharged: row.amountCharged != null ? Number(row.amountCharged) : 0,
+        paymentMethod: row.paymentMethod || 'Unknown',
+        processor: processorByLedger.get(row.id) || '',
+        createdTime: row.createdAt.toISOString(),
       };
     });
 
-    // Apply client name filter if provided
     if (clientName) {
       const lowerClientName = clientName.toLowerCase();
       processedEntries = processedEntries.filter(e =>
@@ -209,14 +156,12 @@ app.get('/', async (c) => {
       );
     }
 
-    // Calculate summary statistics
     const summary = {
       totalRevenue: processedEntries.reduce((sum, e) => sum + (e.amountCharged || 0), 0),
       totalEntries: processedEntries.length,
       uniqueClients: new Set(processedEntries.map(e => e.clientName)).size,
     };
 
-    // Group records based on groupBy parameter
     const grouped = groupRecords(processedEntries, groupBy as 'client' | 'date' | 'payment');
 
     return c.json({
@@ -277,23 +222,18 @@ function groupRecords(records: any[], groupBy: 'client' | 'date' | 'payment') {
     grouped[key].count++;
   });
 
-  // Convert to array
   const groupedArray = Object.values(grouped) as any[];
 
-  // Sort groups based on groupBy type
   if (groupBy === 'date') {
-    // Sort by date (newest first) - parse the month/year string back to date for comparison
     groupedArray.sort((a: any, b: any) => {
       const dateA = new Date(a.groupName);
       const dateB = new Date(b.groupName);
       return dateB.getTime() - dateA.getTime();
     });
   } else {
-    // Sort by total amount (descending) for client and payment method
     groupedArray.sort((a: any, b: any) => b.totalAmount - a.totalAmount);
   }
 
-  // Sort entries within each group by date (newest first)
   groupedArray.forEach((group: any) => {
     group.entries.sort((a: any, b: any) => {
       const dateA = new Date(a.receiptDate);

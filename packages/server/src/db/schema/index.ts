@@ -13,3 +13,4 @@
 export * from './catalogs';
 export * from './knowledge';
 export * from './people';
+export * from './subscriptions';

@@ -1,42 +1,33 @@
 /**
- * Service by Client Routes
+ * Service by Client Routes (Postgres-backed)
  */
 
 import { Hono } from 'hono';
-import { testConnection, fetchRecords } from '../lib/airtable-service';
+import { getDb } from '../db/client';
+import { subscriptionsCorporate } from '../db/schema';
+import {
+  loadSubsCorporateContext,
+  subsCorporateToAirtableRecord,
+} from '../db/serializers-subscriptions';
 
 const app = new Hono();
 
 /**
  * GET /api/service-by-client
- * Fetch services grouped by client from Subscriptions Corporate table
+ * Fetch all corporate subscriptions (legacy Airtable record shape)
  */
 app.get('/', async (c) => {
   try {
-    const connectionTest = await testConnection();
-    if (!connectionTest.success) {
-      return c.json(
-        {
-          success: false,
-          error: `Connection failed: ${connectionTest.message}`,
-          suggestion: 'Please check your AIRTABLE_PERSONAL_ACCESS_TOKEN and AIRTABLE_BASE_ID in .env.local'
-        },
-        401
-      );
-    }
+    const db = getDb();
+    const rows = await db.select().from(subscriptionsCorporate);
+    const ctx = await loadSubsCorporateContext(db);
+    const records = rows.map((row) => subsCorporateToAirtableRecord(row, ctx));
 
-    const tableName = 'Subscriptions Corporate';
-
-    // Fetch all records from Subscriptions Corporate table
-    // This shows all corporate subscriptions regardless of view filters
-    console.log(`Fetching all records from table "${tableName}"`);
-
-    const records = await fetchRecords(tableName, {});
     console.log(`Total records fetched: ${records.length}`);
 
     const stats = {
       totalRecords: records.length,
-      tableName,
+      tableName: 'Subscriptions Corporate',
       viewName: 'All Records',
       lastUpdated: new Date().toISOString()
     };
@@ -51,29 +42,11 @@ app.get('/', async (c) => {
 
   } catch (error) {
     console.error('Error in service by client API route:', error);
-
-    let errorMessage = 'Failed to fetch service by client data';
-    let suggestion = 'Please check your configuration and try again';
-
-    if (error instanceof Error) {
-      errorMessage = error.message;
-
-      if (error.message.includes('Table') && error.message.includes('not found')) {
-        suggestion = 'Please check that the "Subscriptions Corporate" table exists in your Airtable base';
-      } else if (error.message.includes('View') && error.message.includes('not found')) {
-        suggestion = 'Please check that the "Service by Client" view exists in your Subscriptions Corporate table';
-      } else if (error.message.includes('AIRTABLE_PERSONAL_ACCESS_TOKEN')) {
-        suggestion = 'Create a Personal Access Token at https://airtable.com/create/tokens with data.records:read scope';
-      } else if (error.message.includes('AIRTABLE_BASE_ID')) {
-        suggestion = 'Check your Base ID in the Airtable URL or API documentation';
-      }
-    }
-
     return c.json(
       {
         success: false,
-        error: errorMessage,
-        suggestion
+        error: error instanceof Error ? error.message : 'Failed to fetch service by client data',
+        suggestion: 'Check the database connection and try again'
       },
       500
     );

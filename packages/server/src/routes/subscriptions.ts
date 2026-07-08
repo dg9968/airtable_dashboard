@@ -1,9 +1,16 @@
 /**
- * Subscriptions Routes
+ * Subscriptions Routes (Postgres-backed)
+ * Legacy generic create/update/delete against subscriptions_corporate.
  */
 
 import { Hono } from 'hono';
-import { getTable } from '../lib/airtable-service';
+import { eq } from 'drizzle-orm';
+import { getDb } from '../db/client';
+import { subscriptionsCorporate } from '../db/schema';
+import {
+  loadSubsCorporateContext,
+  subsCorporateToAirtableRecord,
+} from '../db/serializers-subscriptions';
 
 const app = new Hono();
 
@@ -24,29 +31,23 @@ app.post('/', async (c) => {
       );
     }
 
-    const recordData: any = {
-      'Name': subscriptionName,
-    };
+    // Legacy behavior: "Name" was an Airtable formula, so only status/price
+    // actually persist; the name comes from linked company + service.
+    const db = getDb();
+    const [row] = await db
+      .insert(subscriptionsCorporate)
+      .values({
+        status: status !== undefined && status !== '' ? status : null,
+        billingAmount: price !== undefined ? String(price) : null,
+      })
+      .returning();
 
-    if (status !== undefined) {
-      recordData['Status'] = status;
-    }
-
-    if (price !== undefined) {
-      recordData['Billing Amount'] = price;
-    }
-
-    console.log('Creating record with data:', recordData);
-
-    const table = getTable('Subscriptions Corporate');
-    const record = await table.create(recordData);
+    const ctx = await loadSubsCorporateContext(db);
+    const record = subsCorporateToAirtableRecord(row, ctx);
 
     return c.json({
       success: true,
-      data: {
-        id: (record as any).id,
-        fields: (record as any).fields
-      }
+      data: { id: record.id, fields: record.fields }
     });
 
   } catch (error) {
@@ -79,32 +80,33 @@ app.patch('/', async (c) => {
       );
     }
 
-    const updateFields: any = {};
+    const values: Partial<typeof subscriptionsCorporate.$inferInsert> = {};
 
     if (status !== undefined) {
-      if (status === '' || status === null) {
-        updateFields['Status'] = [];
-        console.log('Clearing Status field (setting to empty array)');
-      } else {
-        updateFields['Status'] = [status];
-        console.log('Setting Status to:', [status]);
-      }
+      values.status = status === '' || status === null ? null : status;
     }
 
     if (price !== undefined) {
-      updateFields['Billing Amount'] = price;
+      values.billingAmount = String(price);
     }
 
-    console.log('Updating record with fields:', updateFields);
+    const db = getDb();
+    const [row] = await db
+      .update(subscriptionsCorporate)
+      .set(values)
+      .where(eq(subscriptionsCorporate.id, subscriptionId))
+      .returning();
 
-    const record = await base('Subscriptions Corporate').update(subscriptionId, updateFields);
+    if (!row) {
+      return c.json({ success: false, error: 'Subscription not found' }, 404);
+    }
+
+    const ctx = await loadSubsCorporateContext(db);
+    const record = subsCorporateToAirtableRecord(row, ctx);
 
     return c.json({
       success: true,
-      data: {
-        id: (record as any).id,
-        fields: (record as any).fields
-      }
+      data: { id: record.id, fields: record.fields }
     });
 
   } catch (error) {
@@ -135,7 +137,7 @@ app.delete('/', async (c) => {
       );
     }
 
-    await base('Subscriptions Corporate').destroy(subscriptionId);
+    await getDb().delete(subscriptionsCorporate).where(eq(subscriptionsCorporate.id, subscriptionId));
 
     return c.json({
       success: true,

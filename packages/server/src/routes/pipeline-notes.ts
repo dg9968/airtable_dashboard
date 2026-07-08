@@ -1,26 +1,48 @@
 /**
- * Pipeline Notes API Routes
+ * Pipeline Notes API Routes (Postgres-backed)
  * Message board / conversation system for Tax Prep Pipeline
  */
 
 import { Hono } from 'hono';
-import { fetchAllRecords, createRecords, updateRecords, deleteRecords } from '../lib/airtable-helpers';
+import { asc, desc, eq } from 'drizzle-orm';
+import { getDb } from '../db/client';
+import { pipelineNotes, subscriptionsPersonal, personal } from '../db/schema';
+import { noteToAirtableRecord } from '../db/serializers-subscriptions';
 
 const app = new Hono();
 
-const PIPELINE_NOTES_TABLE = 'Pipeline Notes';
+type NoteRow = typeof pipelineNotes.$inferSelect;
+
+/** Client Name lookup: note → subscription → personal full name. */
+async function loadClientNames(rows: NoteRow[]): Promise<Map<string, string | null>> {
+  const map = new Map<string, string | null>();
+  const subIds = [...new Set(rows.map((r) => r.subscriptionPersonalId).filter(Boolean))] as string[];
+  if (subIds.length === 0) return map;
+  const db = getDb();
+  const subs = await db
+    .select({
+      id: subscriptionsPersonal.id,
+      firstName: personal.firstName,
+      lastName: personal.lastName,
+    })
+    .from(subscriptionsPersonal)
+    .leftJoin(personal, eq(subscriptionsPersonal.personalId, personal.id));
+  for (const s of subs) {
+    map.set(s.id, [s.firstName, s.lastName].filter(Boolean).join(' ') || null);
+  }
+  return map;
+}
+
+function serialize(row: NoteRow, clientNames: Map<string, string | null>) {
+  return noteToAirtableRecord(row, 'Subscription', row.subscriptionPersonalId, {
+    name: 'Client Name',
+    value: row.subscriptionPersonalId ? clientNames.get(row.subscriptionPersonalId) ?? null : null,
+  });
+}
 
 /**
  * POST /api/pipeline-notes
  * Create a new note/message for a subscription
- *
- * Expected body:
- * {
- *   subscriptionId: string,  // Airtable record ID from Subscriptions Personal
- *   authorName: string,      // Name of the person writing the note
- *   authorEmail: string,     // Email of the author
- *   note: string            // The note content
- * }
  */
 app.post('/', async (c) => {
   try {
@@ -38,30 +60,22 @@ app.post('/', async (c) => {
 
     console.log('Creating Pipeline Note:', { subscriptionId, authorName });
 
-    const baseId = process.env.AIRTABLE_BASE_ID || '';
+    const [row] = await getDb()
+      .insert(pipelineNotes)
+      .values({
+        subscriptionPersonalId: subscriptionId,
+        authorName,
+        authorEmail: authorEmail || null,
+        note,
+      })
+      .returning();
 
-    // Create the note record
-    const fields: any = {
-      'Subscription': [subscriptionId],
-      'Author Name': authorName,
-      'Note': note,
-    };
-
-    // Only add email if provided
-    if (authorEmail) {
-      fields['Author Email'] = authorEmail;
-    }
-
-    const records = await createRecords(baseId, PIPELINE_NOTES_TABLE, [
-      { fields },
-    ]);
+    const clientNames = await loadClientNames([row]);
+    const record = serialize(row, clientNames);
 
     return c.json({
       success: true,
-      data: {
-        id: records[0].id,
-        fields: records[0].fields,
-      },
+      data: { id: record.id, fields: record.fields },
     });
   } catch (error) {
     console.error('Error creating Pipeline Note:', error);
@@ -83,24 +97,19 @@ app.post('/', async (c) => {
 app.get('/subscription/:subscriptionId', async (c) => {
   try {
     const subscriptionId = c.req.param('subscriptionId');
-    const baseId = process.env.AIRTABLE_BASE_ID || '';
 
-    console.log('[pipeline-notes] Fetching notes for subscription:', subscriptionId);
+    const rows = await getDb()
+      .select()
+      .from(pipelineNotes)
+      .where(eq(pipelineNotes.subscriptionPersonalId, subscriptionId))
+      .orderBy(asc(pipelineNotes.createdAt));
 
-    const allRecords = await fetchAllRecords(baseId, PIPELINE_NOTES_TABLE, {
-      sort: [{ field: 'Created Time', direction: 'asc' }],
-    });
+    console.log('[pipeline-notes] Found', rows.length, 'notes for subscription', subscriptionId);
 
-    const records = allRecords.filter((record: any) => {
-      const subscriptionField = record.fields['Subscription'];
-      return Array.isArray(subscriptionField) && subscriptionField.includes(subscriptionId);
-    });
-
-    console.log('[pipeline-notes] Found', records.length, 'notes for subscription', subscriptionId);
-
+    const clientNames = await loadClientNames(rows);
     return c.json({
       success: true,
-      data: records,
+      data: rows.map((row) => serialize(row, clientNames)),
     });
   } catch (error) {
     console.error('Error fetching pipeline notes:', error);
@@ -120,14 +129,15 @@ app.get('/subscription/:subscriptionId', async (c) => {
  */
 app.get('/', async (c) => {
   try {
-    const baseId = process.env.AIRTABLE_BASE_ID || '';
-    const records = await fetchAllRecords(baseId, PIPELINE_NOTES_TABLE, {
-      sort: [{ field: 'Created Time', direction: 'desc' }],
-    });
+    const rows = await getDb()
+      .select()
+      .from(pipelineNotes)
+      .orderBy(desc(pipelineNotes.createdAt));
 
+    const clientNames = await loadClientNames(rows);
     return c.json({
       success: true,
-      data: records,
+      data: rows.map((row) => serialize(row, clientNames)),
     });
   } catch (error) {
     console.error('Error fetching pipeline notes:', error);
@@ -149,7 +159,6 @@ app.patch('/:id', async (c) => {
   try {
     const id = c.req.param('id');
     const { note } = await c.req.json();
-    const baseId = process.env.AIRTABLE_BASE_ID || '';
 
     if (!note) {
       return c.json(
@@ -161,21 +170,22 @@ app.patch('/:id', async (c) => {
       );
     }
 
-    const records = await updateRecords(baseId, PIPELINE_NOTES_TABLE, [
-      {
-        id,
-        fields: {
-          'Note': note,
-        },
-      },
-    ]);
+    const [row] = await getDb()
+      .update(pipelineNotes)
+      .set({ note })
+      .where(eq(pipelineNotes.id, id))
+      .returning();
+
+    if (!row) {
+      return c.json({ success: false, error: 'Note not found' }, 404);
+    }
+
+    const clientNames = await loadClientNames([row]);
+    const record = serialize(row, clientNames);
 
     return c.json({
       success: true,
-      data: {
-        id: records[0].id,
-        fields: records[0].fields,
-      },
+      data: { id: record.id, fields: record.fields },
     });
   } catch (error) {
     console.error('Error updating pipeline note:', error);
@@ -196,9 +206,8 @@ app.patch('/:id', async (c) => {
 app.delete('/:id', async (c) => {
   try {
     const id = c.req.param('id');
-    const baseId = process.env.AIRTABLE_BASE_ID || '';
 
-    await deleteRecords(baseId, PIPELINE_NOTES_TABLE, [id]);
+    await getDb().delete(pipelineNotes).where(eq(pipelineNotes.id, id));
 
     return c.json({
       success: true,

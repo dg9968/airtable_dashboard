@@ -1,38 +1,30 @@
 /**
- * Subscriptions Personal API Routes
+ * Subscriptions Personal API Routes (Postgres-backed)
  *
- * Junction table that links Personal records to Services (Tax Prep Pipeline)
+ * Junction table that links personal records to services (Tax Prep Pipeline etc).
+ * Responses keep the legacy Airtable record shape. The legacy ?view= parameter
+ * (Airtable view names) maps to service-name filters — see PERSONAL_VIEW_FILTERS.
  */
 
 import { Hono } from 'hono';
-import { testConnection } from '../airtable';
-import { fetchAllRecords, createRecords, updateRecords, deleteRecords } from '../lib/airtable-helpers';
+import { and, eq, inArray } from 'drizzle-orm';
+import { getDb } from '../db/client';
+import { subscriptionsPersonal, personalServices } from '../db/schema';
+import {
+  loadSubsPersonalContext,
+  subsPersonalToAirtableRecord,
+  subsPersonalFieldsToColumns,
+  PERSONAL_VIEW_FILTERS,
+} from '../db/serializers-subscriptions';
 
 const app = new Hono();
 
 /**
  * POST /api/subscriptions-personal
- * Create a new subscription record linking Personal to Services
- *
- * Expected body:
- * {
- *   personalId: string,  // Airtable record ID from Personal table
- *   serviceId: string    // Airtable record ID from Services table (Tax Prep Pipeline)
- * }
+ * Create a new subscription record linking a personal record to a service.
  */
 app.post('/', async (c) => {
   try {
-    const connectionTest = await testConnection();
-    if (!connectionTest.success) {
-      return c.json(
-        {
-          success: false,
-          error: `Connection failed: ${connectionTest.message}`,
-        },
-        401
-      );
-    }
-
     const { personalId, serviceId } = await c.req.json();
 
     if (!personalId || !serviceId) {
@@ -47,46 +39,40 @@ app.post('/', async (c) => {
 
     console.log('Creating Subscriptions Personal record:', { personalId, serviceId });
 
-    const baseId = process.env.AIRTABLE_BASE_ID || '';
+    const db = getDb();
 
-    // Guard against duplicates: check if this personalId + serviceId combo already exists.
-    // This is the authoritative server-side check; client-side checks are unreliable due to
-    // Airtable backlink eventual consistency.
-    const existing = await fetchAllRecords(baseId, 'Subscriptions Personal');
-    const duplicate = existing.find(sub => {
-      const linkedPersonals = sub.fields['Last Name'] || [];
-      const linkedServices = sub.fields['Service'] || [];
-      return linkedPersonals.includes(personalId) && linkedServices.includes(serviceId);
-    });
+    // Guard against duplicates (authoritative server-side check)
+    const [duplicate] = await db
+      .select()
+      .from(subscriptionsPersonal)
+      .where(
+        and(
+          eq(subscriptionsPersonal.personalId, personalId),
+          eq(subscriptionsPersonal.serviceId, serviceId)
+        )
+      )
+      .limit(1);
+
+    const ctx = await loadSubsPersonalContext(db);
 
     if (duplicate) {
       console.log('Subscription already exists, returning existing record:', duplicate.id);
+      const record = subsPersonalToAirtableRecord(duplicate, ctx);
       return c.json({
         success: true,
-        data: {
-          id: duplicate.id,
-          fields: duplicate.fields,
-        },
+        data: { id: record.id, fields: record.fields },
       });
     }
 
-    // Create the junction record
-    // Field names: "Last Name" links to Personal, "Service" links to Personal Services
-    const recordData: any = {
-      'Last Name': [personalId],  // Link to Personal table
-      'Service': [serviceId],      // Link to Personal Services table
-    };
+    const [row] = await db
+      .insert(subscriptionsPersonal)
+      .values({ personalId, serviceId })
+      .returning();
 
-    const records = await createRecords(baseId, 'Subscriptions Personal', [
-      { fields: recordData },
-    ]);
-
+    const record = subsPersonalToAirtableRecord(row, ctx);
     return c.json({
       success: true,
-      data: {
-        id: records[0].id,
-        fields: records[0].fields,
-      },
+      data: { id: record.id, fields: record.fields },
     });
   } catch (error) {
     console.error('Error creating Subscriptions Personal record:', error);
@@ -103,28 +89,35 @@ app.post('/', async (c) => {
 
 /**
  * GET /api/subscriptions-personal
- * Get all subscription records (optionally filtered by view)
- * Defaults to "Tax Prep Pipeline" view for backward compatibility
+ * Get all subscription records (optionally filtered by legacy view name).
+ * Defaults to "Tax Prep Pipeline" for backward compatibility.
  */
 app.get('/', async (c) => {
   try {
     const view = c.req.query('view');
-    const baseId = process.env.AIRTABLE_BASE_ID || '';
-
-    let records;
-
-    // Use provided view, or default to Tax Prep Pipeline for backward compatibility
     const targetView = view || 'Tax Prep Pipeline';
 
-    try {
-      records = await fetchAllRecords(baseId, 'Subscriptions Personal', { view: targetView });
-    } catch (viewError) {
-      console.warn(`View "${targetView}" not found, fetching from Tax Prep Pipeline instead`);
-      // Fall back to Tax Prep Pipeline if specified view doesn't exist
-      records = await fetchAllRecords(baseId, 'Subscriptions Personal', {
-        view: 'Tax Prep Pipeline',
-      });
+    const db = getDb();
+    // Unknown view names fall back to Tax Prep Pipeline (legacy behavior)
+    const filter =
+      targetView in PERSONAL_VIEW_FILTERS
+        ? PERSONAL_VIEW_FILTERS[targetView]
+        : PERSONAL_VIEW_FILTERS['Tax Prep Pipeline'];
+
+    let rows;
+    if (filter) {
+      rows = await db
+        .select({ sub: subscriptionsPersonal })
+        .from(subscriptionsPersonal)
+        .innerJoin(personalServices, eq(subscriptionsPersonal.serviceId, personalServices.id))
+        .where(eq(personalServices.name, filter.serviceName))
+        .then((rs) => rs.map((r) => r.sub));
+    } else {
+      rows = await db.select().from(subscriptionsPersonal);
     }
+
+    const ctx = await loadSubsPersonalContext(db);
+    const records = rows.map((row) => subsPersonalToAirtableRecord(row, ctx));
 
     return c.json({
       success: true,
@@ -149,71 +142,20 @@ app.get('/', async (c) => {
 app.get('/personal/:personalId', async (c) => {
   try {
     const personalId = c.req.param('personalId');
-    const baseId = process.env.AIRTABLE_BASE_ID || '';
+    const db = getDb();
 
-    // First, fetch the personal record to get subscription IDs
-    const Airtable = require('airtable');
-    const airtable = new Airtable({
-      apiKey: process.env.AIRTABLE_PERSONAL_ACCESS_TOKEN,
+    const rows = await db
+      .select()
+      .from(subscriptionsPersonal)
+      .where(eq(subscriptionsPersonal.personalId, personalId));
+
+    const ctx = await loadSubsPersonalContext(db);
+    const records = rows.map((row) => subsPersonalToAirtableRecord(row, ctx));
+
+    return c.json({
+      success: true,
+      data: records,
     });
-    const base = airtable.base(baseId);
-
-    try {
-      const personalRecord = await base('Personal').find(personalId);
-
-      console.log('[DEBUG API] Personal Record ID:', personalId);
-      console.log('[DEBUG API] All personal fields:', JSON.stringify(personalRecord.fields, null, 2));
-
-      // Try different possible field names for subscriptions
-      const subscriptionIds = personalRecord.fields['Subscriptions Personal'] ||
-                              personalRecord.fields['Subscriptions'] ||
-                              personalRecord.fields['Personal Subscriptions'] ||
-                              [];
-
-      console.log('[DEBUG API] Subscription IDs from Personal record:', subscriptionIds);
-
-      if (!Array.isArray(subscriptionIds) || subscriptionIds.length === 0) {
-        console.log('[DEBUG API] No subscriptions found for this client');
-        return c.json({
-          success: true,
-          data: [],
-        });
-      }
-
-      // Fetch each subscription record by ID
-      console.log('[DEBUG API] Fetching', subscriptionIds.length, 'subscription records...');
-      const records = await Promise.all(
-        subscriptionIds.map(async (id: string) => {
-          try {
-            const record = await base('Subscriptions Personal').find(id);
-            return record;
-          } catch (error) {
-            console.error('[DEBUG API] Error fetching subscription record', id, ':', error);
-            return null;
-          }
-        })
-      );
-
-      // Filter out any null records (failed fetches)
-      const validRecords = records.filter(record => record !== null);
-
-      console.log('[DEBUG API] Successfully fetched', validRecords.length, 'subscription records');
-      if (validRecords.length > 0) {
-        console.log('[DEBUG API] First record fields:', JSON.stringify(validRecords[0].fields, null, 2));
-      }
-
-      return c.json({
-        success: true,
-        data: validRecords,
-      });
-    } catch (error) {
-      console.error('[API] Error fetching personal or subscriptions:', error);
-      console.error('[API] Error details:', error);
-      return c.json({
-        success: true,
-        data: [],
-      });
-    }
   } catch (error) {
     console.error('Error fetching personal subscriptions:', error);
     return c.json(
@@ -234,7 +176,6 @@ app.patch('/:id', async (c) => {
   try {
     const id = c.req.param('id');
     const { fields } = await c.req.json();
-    const baseId = process.env.AIRTABLE_BASE_ID || '';
 
     if (!fields) {
       return c.json(
@@ -248,25 +189,29 @@ app.patch('/:id', async (c) => {
 
     console.log('Updating Subscriptions Personal record:', id);
     console.log('Fields to update:', JSON.stringify(fields, null, 2));
-    console.log('Base ID:', baseId);
 
-    const records = await updateRecords(baseId, 'Subscriptions Personal', [
-      {
-        id,
-        fields,
-      },
-    ]);
+    const db = getDb();
+    const values = subsPersonalFieldsToColumns(fields);
+
+    const [row] = await db
+      .update(subscriptionsPersonal)
+      .set(values)
+      .where(eq(subscriptionsPersonal.id, id))
+      .returning();
+
+    if (!row) {
+      return c.json({ success: false, error: 'Subscription not found' }, 404);
+    }
+
+    const ctx = await loadSubsPersonalContext(db);
+    const record = subsPersonalToAirtableRecord(row, ctx);
 
     return c.json({
       success: true,
-      data: {
-        id: records[0].id,
-        fields: records[0].fields,
-      },
+      data: { id: record.id, fields: record.fields },
     });
   } catch (error) {
     console.error('Error updating subscription:', error);
-    console.error('Error details:', error instanceof Error ? error.stack : error);
     return c.json(
       {
         success: false,
@@ -285,9 +230,8 @@ app.patch('/:id', async (c) => {
 app.delete('/:id', async (c) => {
   try {
     const id = c.req.param('id');
-    const baseId = process.env.AIRTABLE_BASE_ID || '';
 
-    await deleteRecords(baseId, 'Subscriptions Personal', [id]);
+    await getDb().delete(subscriptionsPersonal).where(eq(subscriptionsPersonal.id, id));
 
     return c.json({
       success: true,

@@ -73,8 +73,38 @@ const checks: Check[] = [
     keys: ['success', 'data.records'],
     assert: (b) => (Array.isArray(b.data?.records) && b.data.records.length > 0 ? null : 'no records'),
   },
-  // Airtable-backed until Phase 3 (team IDs must match subscription link fields)
-  { path: '/api/teams', keys: ['success', 'data'] },
+  // Phase 3 — subscriptions / billing / notes (Postgres-backed)
+  {
+    path: '/api/teams',
+    keys: ['success', 'data'],
+    assert: (b) => (Array.isArray(b.data) && b.data.length > 0 ? null : 'no team members'),
+  },
+  {
+    path: '/api/subscriptions-personal',
+    keys: ['success', 'data'],
+    assert: (b) => (Array.isArray(b.data) ? null : 'data not array'),
+  },
+  { path: '/api/subscriptions-personal?view=File Extension', keys: ['success', 'data'] },
+  {
+    path: '/api/subscriptions-corporate',
+    keys: ['success', 'data'],
+    assert: (b) => (Array.isArray(b.data) && b.data.length > 0 ? null : 'no corporate subscriptions'),
+  },
+  {
+    path: '/api/services-rendered',
+    keys: ['success', 'data.services', 'data.summary'],
+  },
+  {
+    path: '/api/ledger',
+    keys: ['success', 'data.entries', 'data.summary'],
+    assert: (b) => (b.data.summary.totalRevenue > 0 ? null : 'zero revenue'),
+  },
+  { path: '/api/processor-billing', keys: ['success', 'data.records'] },
+  { path: '/api/service-by-client', keys: ['success', 'data.records'] },
+  { path: '/api/business-stats', keys: ['success', 'data.totalClients'] },
+  { path: '/api/pipeline-notes', keys: ['success', 'data'] },
+  { path: '/api/corporate-pipeline-notes', keys: ['success', 'data'] },
+  { path: '/api/billing-notes', keys: ['success', 'data'] },
 
   // Still Airtable-backed (regression canaries for untouched routes)
   { path: '/api/tax-notices', keys: ['success'] },

@@ -9,12 +9,31 @@ import { Hono } from 'hono';
 import { PDFDocument } from 'pdf-lib';
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { getRecord, updateRecords } from '../lib/airtable-helpers';
+import { eq } from 'drizzle-orm';
+import { getDb } from '../db/client';
+import { subscriptionsPersonal, personal } from '../db/schema';
+import {
+  subsPersonalFieldsToColumns,
+  subsPersonalToAirtableRecord,
+  loadSubsPersonalContext,
+} from '../db/serializers-subscriptions';
 
 const app = new Hono();
 
-const SUBSCRIPTIONS_TABLE = 'Subscriptions Personal';
-const PERSONAL_TABLE = 'Personal';
+/** Fetch subscription + linked personal record from Postgres (or nulls). */
+async function loadSubscriptionWithClient(subscriptionId: string) {
+  const db = getDb();
+  const [sub] = await db
+    .select()
+    .from(subscriptionsPersonal)
+    .where(eq(subscriptionsPersonal.id, subscriptionId))
+    .limit(1);
+  if (!sub) return { sub: null, person: null };
+  const person = sub.personalId
+    ? (await db.select().from(personal).where(eq(personal.id, sub.personalId)).limit(1))[0] ?? null
+    : null;
+  return { sub, person };
+}
 
 function formatCurrency(val: number): string {
   return val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -105,54 +124,44 @@ async function fillForm4868(data: {
  */
 app.get('/:subscriptionId', async (c) => {
   try {
-    const baseId = process.env.AIRTABLE_BASE_ID || '';
     const subscriptionId = c.req.param('subscriptionId');
 
-    const subscription = await getRecord(baseId, SUBSCRIPTIONS_TABLE, subscriptionId);
-
-    // The "Last Name" field is the linked record field to the Personal table
-    const linkedPersonal = subscription.fields['Last Name'];
-    const personalId = Array.isArray(linkedPersonal) ? linkedPersonal[0] : linkedPersonal;
-
-    if (!personalId) {
+    const { sub, person } = await loadSubscriptionWithClient(subscriptionId);
+    if (!sub) {
+      return c.json({ success: false, error: 'Subscription not found' }, 404);
+    }
+    if (!person) {
       return c.json({ success: false, error: 'No linked personal record found on subscription' }, 400);
     }
 
-    const personal = await getRecord(baseId, PERSONAL_TABLE, personalId);
-    const pf = personal.fields;
-
-    const fullName =
-      pf['Full Name'] ||
-      `${pf['First Name'] || ''} ${pf['Last Name'] || ''}`.trim() ||
-      'Unnamed';
+    const fullName = [person.firstName, person.lastName].filter(Boolean).join(' ') || 'Unnamed';
 
     const client = {
-      id: personal.id,
+      id: person.id,
       clientName: fullName,
-      ssn: pf['SSN'] || pf['Tax ID'] || '',
-      address: pf['Address'] || pf['ADDRESS'] || '',
-      city: pf['City'] || pf['CITY'] || '',
-      state: pf['State'] || pf['STATE'] || '',
-      zip: pf['ZIP'] || pf['Zip'] || pf['ZIP CODE'] || '',
-      phone: pf['📞Phone number'] || pf['Phone'] || '',
-      email: pf['📧 Email'] || pf['Email'] || '',
-      clientCode: pf['Client Code'] || '',
+      ssn: person.ssn || '',
+      address: person.mailingAddress || '',
+      city: person.city || '',
+      state: person.state || '',
+      zip: person.zip || '',
+      phone: person.phone || '',
+      email: person.email || '',
+      clientCode: person.clientCode || '',
     };
 
-    const sf = subscription.fields;
     const extensionData = {
-      taxYear: sf['Extension Tax Year'] || null,
-      estimatedTax: sf['Extension Estimated Tax'] || null,
-      paymentsCredits: sf['Extension Payments Credits'] || null,
-      status: sf['Extension Status'] || 'Not Filed',
-      filedDate: sf['Extension Filed Date'] || null,
+      taxYear: sub.extensionTaxYear || null,
+      estimatedTax: sub.extensionEstimatedTax != null ? Number(sub.extensionEstimatedTax) : null,
+      paymentsCredits: sub.extensionPaymentsCredits != null ? Number(sub.extensionPaymentsCredits) : null,
+      status: sub.extensionStatus || 'Not Filed',
+      filedDate: sub.extensionFiledDate || null,
     };
 
     return c.json({
       success: true,
       data: {
         subscription: {
-          id: subscription.id,
+          id: sub.id,
           ...extensionData,
         },
         client,
@@ -171,34 +180,26 @@ app.get('/:subscriptionId', async (c) => {
  */
 app.get('/:subscriptionId/pdf', async (c) => {
   try {
-    const baseId = process.env.AIRTABLE_BASE_ID || '';
     const subscriptionId = c.req.param('subscriptionId');
 
-    const subscription = await getRecord(baseId, SUBSCRIPTIONS_TABLE, subscriptionId);
-
-    const linkedPersonal = subscription.fields['Last Name'];
-    const personalId = Array.isArray(linkedPersonal) ? linkedPersonal[0] : linkedPersonal;
-    if (!personalId) {
+    const { sub, person } = await loadSubscriptionWithClient(subscriptionId);
+    if (!sub) {
+      return c.json({ success: false, error: 'Subscription not found' }, 404);
+    }
+    if (!person) {
       return c.json({ success: false, error: 'No linked personal record found' }, 400);
     }
 
-    const personal = await getRecord(baseId, PERSONAL_TABLE, personalId);
-    const pf = personal.fields;
-    const sf = subscription.fields;
+    const clientName = [person.firstName, person.lastName].filter(Boolean).join(' ') || '';
+    const ssn = person.ssn || '';
+    const address = person.mailingAddress || '';
+    const city = person.city || '';
+    const state = person.state || '';
+    const zip = person.zip || '';
 
-    const clientName =
-      pf['Full Name'] ||
-      `${pf['First Name'] || ''} ${pf['Last Name'] || ''}`.trim() ||
-      '';
-    const ssn = pf['SSN'] || pf['Tax ID'] || '';
-    const address = pf['Address'] || pf['ADDRESS'] || '';
-    const city = pf['City'] || pf['CITY'] || '';
-    const state = pf['State'] || pf['STATE'] || '';
-    const zip = pf['ZIP'] || pf['Zip'] || pf['ZIP CODE'] || '';
-
-    const taxYear = sf['Extension Tax Year'] || new Date().getFullYear() - 1;
-    const estimatedTax = parseFloat(sf['Extension Estimated Tax'] || '0') || 0;
-    const paymentsCredits = parseFloat(sf['Extension Payments Credits'] || '0') || 0;
+    const taxYear = sub.extensionTaxYear || new Date().getFullYear() - 1;
+    const estimatedTax = sub.extensionEstimatedTax != null ? Number(sub.extensionEstimatedTax) : 0;
+    const paymentsCredits = sub.extensionPaymentsCredits != null ? Number(sub.extensionPaymentsCredits) : 0;
     const balanceDue = estimatedTax - paymentsCredits;
 
     const filledPdf = await fillForm4868({
@@ -229,7 +230,6 @@ app.get('/:subscriptionId/pdf', async (c) => {
  */
 app.patch('/:subscriptionId', async (c) => {
   try {
-    const baseId = process.env.AIRTABLE_BASE_ID || '';
     const subscriptionId = c.req.param('subscriptionId');
     const body = await c.req.json();
 
@@ -237,11 +237,19 @@ app.patch('/:subscriptionId', async (c) => {
       return c.json({ success: false, error: 'Missing or invalid fields in request body' }, 400);
     }
 
-    const updated = await updateRecords(baseId, SUBSCRIPTIONS_TABLE, [
-      { id: subscriptionId, fields: body.fields },
-    ]);
+    const db = getDb();
+    const [row] = await db
+      .update(subscriptionsPersonal)
+      .set(subsPersonalFieldsToColumns(body.fields))
+      .where(eq(subscriptionsPersonal.id, subscriptionId))
+      .returning();
 
-    return c.json({ success: true, data: updated[0] });
+    if (!row) {
+      return c.json({ success: false, error: 'Subscription not found' }, 404);
+    }
+
+    const ctx = await loadSubsPersonalContext(db);
+    return c.json({ success: true, data: subsPersonalToAirtableRecord(row, ctx) });
   } catch (error: any) {
     console.error('PATCH /api/extensions-personal/:id error:', error);
     return c.json({ success: false, error: error.message }, 500);

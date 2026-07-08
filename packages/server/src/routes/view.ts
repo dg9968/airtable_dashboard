@@ -1,4 +1,4 @@
-/**
+﻿/**
  * View API Routes
  *
  * Handles fetching Airtable views with various query parameters
@@ -8,7 +8,7 @@ import { Hono } from 'hono';
 import { eq } from 'drizzle-orm';
 import { testConnection, fetchRecords, findRecord, createRecords, updateRecords } from '../lib/airtable-service';
 import { getDb } from '../db/client';
-import { personal, corporations } from '../db/schema';
+import { personal, corporations, subscriptionsPersonal, subscriptionsCorporate } from '../db/schema';
 import {
   personalToAirtableRecord,
   corporationToAirtableRecord,
@@ -18,12 +18,26 @@ import {
   computeClientCode,
   type AirtableShapedRecord,
 } from '../db/serializers';
+import {
+  loadSubsPersonalContext,
+  loadSubsCorporateContext,
+  subsPersonalToAirtableRecord,
+  subsCorporateToAirtableRecord,
+} from '../db/serializers-subscriptions';
 
 const app = new Hono();
 
 // Tables already migrated to Postgres — served from the DB in the legacy
 // Airtable record shape. Everything else still proxies to Airtable.
-const MIGRATED_TABLES = new Set(['Personal', 'Corporations']);
+const MIGRATED_TABLES = new Set([
+  'Personal',
+  'Corporations',
+  'Subscriptions Personal',
+  'Subscriptions Corporate',
+]);
+// Single-record GET/POST/PATCH by table name only support the entity tables
+// (the only ones the client uses that way).
+const MIGRATED_ENTITY_TABLES = new Set(['Personal', 'Corporations']);
 
 async function fetchMigratedRecords(tableName: string): Promise<AirtableShapedRecord[]> {
   const db = getDb();
@@ -31,6 +45,16 @@ async function fetchMigratedRecords(tableName: string): Promise<AirtableShapedRe
     const rows = await db.select().from(personal);
     const { relMap, lookup } = await loadPersonalRelationships(db);
     return rows.map((row) => personalToAirtableRecord(row, relMap.get(row.id), lookup));
+  }
+  if (tableName === 'Subscriptions Personal') {
+    const rows = await db.select().from(subscriptionsPersonal);
+    const ctx = await loadSubsPersonalContext(db);
+    return rows.map((row) => subsPersonalToAirtableRecord(row, ctx));
+  }
+  if (tableName === 'Subscriptions Corporate') {
+    const rows = await db.select().from(subscriptionsCorporate);
+    const ctx = await loadSubsCorporateContext(db);
+    return rows.map((row) => subsCorporateToAirtableRecord(row, ctx));
   }
   const rows = await db.select().from(corporations);
   return rows.map(corporationToAirtableRecord);
@@ -230,7 +254,7 @@ app.get('/:tableName/:recordId', async (c) => {
 
     console.log(`[View API] Fetching record ${recordId} from table "${tableName}"`);
 
-    if (MIGRATED_TABLES.has(tableName)) {
+    if (MIGRATED_ENTITY_TABLES.has(tableName)) {
       const db = getDb();
       if (tableName === 'Personal') {
         const [row] = await db.select().from(personal).where(eq(personal.id, recordId)).limit(1);
@@ -293,7 +317,7 @@ app.post('/:tableName', async (c) => {
 
     console.log(`Creating record in table "${tableName}"`, fields);
 
-    if (MIGRATED_TABLES.has(tableName)) {
+    if (MIGRATED_ENTITY_TABLES.has(tableName)) {
       const db = getDb();
       if (tableName === 'Personal') {
         const values = personalFieldsToColumns(fields);
@@ -346,7 +370,7 @@ app.patch('/:tableName/:recordId', async (c) => {
 
     console.log(`Updating record ${recordId} in table "${tableName}"`, fields);
 
-    if (MIGRATED_TABLES.has(tableName)) {
+    if (MIGRATED_ENTITY_TABLES.has(tableName)) {
       const db = getDb();
       if (tableName === 'Personal') {
         const values = personalFieldsToColumns(fields);

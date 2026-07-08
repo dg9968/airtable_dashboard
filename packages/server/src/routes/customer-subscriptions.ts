@@ -1,15 +1,21 @@
 /**
- * Customer Subscriptions Routes
+ * Customer Subscriptions Routes (Postgres-backed)
  */
 
 import { Hono } from 'hono';
-import { fetchRecords } from '../lib/airtable-service';
+import { eq } from 'drizzle-orm';
+import { getDb } from '../db/client';
+import { subscriptionsCorporate, corporations } from '../db/schema';
+import {
+  loadSubsCorporateContext,
+  subsCorporateToAirtableRecord,
+} from '../db/serializers-subscriptions';
 
 const app = new Hono();
 
 /**
  * GET /api/customer-subscriptions?customer=CustomerName
- * Fetch all subscriptions for a specific customer
+ * Fetch all subscriptions for a specific customer (matched by company name)
  */
 app.get('/', async (c) => {
   try {
@@ -24,13 +30,18 @@ app.get('/', async (c) => {
 
     console.log(`Fetching subscriptions for customer: ${customerName}`);
 
-    const records = await fetchRecords('Subscriptions Corporate', {
-      view: 'Services by Client All',
-      filterByFormula: `SEARCH("${customerName} - ", {Name}) = 1`,
-      maxRecords: 100
-    });
+    const db = getDb();
+    const rows = await db
+      .select({ sub: subscriptionsCorporate })
+      .from(subscriptionsCorporate)
+      .innerJoin(corporations, eq(subscriptionsCorporate.corporationId, corporations.id))
+      .where(eq(corporations.company, customerName))
+      .then((rs) => rs.map((r) => r.sub));
 
-    const subscriptions = records.map((record) => {
+    const ctx = await loadSubsCorporateContext(db);
+
+    const subscriptions = rows.map((row) => {
+      const record = subsCorporateToAirtableRecord(row, ctx);
       const subscriptionName = String(record.fields['Name'] || '');
       const serviceName = subscriptionName.replace(customerName + ' - ', '');
 
@@ -38,7 +49,7 @@ app.get('/', async (c) => {
         id: record.id,
         clientId: customerName,
         serviceId: serviceName,
-        status: Array.isArray(record.fields['Status']) ? record.fields['Status'] : [],
+        status: record.fields['Status'] ? [record.fields['Status']] : [],
         price: Number(record.fields['Billing Amount']) || 0,
         fields: record.fields
       };

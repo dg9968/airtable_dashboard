@@ -1,26 +1,46 @@
 /**
- * Corporate Pipeline Notes API Routes
+ * Corporate Pipeline Notes API Routes (Postgres-backed)
  * Message board / conversation system for Corporate Services Pipeline
  */
 
 import { Hono } from 'hono';
-import { fetchAllRecords, createRecords, updateRecords, deleteRecords } from '../lib/airtable-helpers';
+import { asc, desc, eq } from 'drizzle-orm';
+import { getDb } from '../db/client';
+import { corporatePipelineNotes, subscriptionsCorporate, corporations } from '../db/schema';
+import { noteToAirtableRecord } from '../db/serializers-subscriptions';
 
 const app = new Hono();
 
-const CORPORATE_PIPELINE_NOTES_TABLE = 'Corporate Pipeline Notes';
+type NoteRow = typeof corporatePipelineNotes.$inferSelect;
+
+/** Company Name lookup: note → subscription → corporation company. */
+async function loadCompanyNames(rows: NoteRow[]): Promise<Map<string, string | null>> {
+  const map = new Map<string, string | null>();
+  const subIds = [...new Set(rows.map((r) => r.subscriptionCorporateId).filter(Boolean))] as string[];
+  if (subIds.length === 0) return map;
+  const subs = await getDb()
+    .select({
+      id: subscriptionsCorporate.id,
+      company: corporations.company,
+    })
+    .from(subscriptionsCorporate)
+    .leftJoin(corporations, eq(subscriptionsCorporate.corporationId, corporations.id));
+  for (const s of subs) {
+    map.set(s.id, s.company ?? null);
+  }
+  return map;
+}
+
+function serialize(row: NoteRow, companyNames: Map<string, string | null>) {
+  return noteToAirtableRecord(row, 'Subscription', row.subscriptionCorporateId, {
+    name: 'Company Name',
+    value: row.subscriptionCorporateId ? companyNames.get(row.subscriptionCorporateId) ?? null : null,
+  });
+}
 
 /**
  * POST /api/corporate-pipeline-notes
  * Create a new note/message for a corporate subscription
- *
- * Expected body:
- * {
- *   subscriptionId: string,  // Airtable record ID from Subscriptions Corporate
- *   authorName: string,      // Name of the person writing the note
- *   authorEmail: string,     // Email of the author
- *   note: string            // The note content
- * }
  */
 app.post('/', async (c) => {
   try {
@@ -38,30 +58,22 @@ app.post('/', async (c) => {
 
     console.log('Creating Corporate Pipeline Note:', { subscriptionId, authorName });
 
-    const baseId = process.env.AIRTABLE_BASE_ID || '';
+    const [row] = await getDb()
+      .insert(corporatePipelineNotes)
+      .values({
+        subscriptionCorporateId: subscriptionId,
+        authorName,
+        authorEmail: authorEmail || null,
+        note,
+      })
+      .returning();
 
-    // Create the note record
-    const fields: any = {
-      'Subscription': [subscriptionId],
-      'Author Name': authorName,
-      'Note': note,
-    };
-
-    // Only add email if provided
-    if (authorEmail) {
-      fields['Author Email'] = authorEmail;
-    }
-
-    const records = await createRecords(baseId, CORPORATE_PIPELINE_NOTES_TABLE, [
-      { fields },
-    ]);
+    const companyNames = await loadCompanyNames([row]);
+    const record = serialize(row, companyNames);
 
     return c.json({
       success: true,
-      data: {
-        id: records[0].id,
-        fields: records[0].fields,
-      },
+      data: { id: record.id, fields: record.fields },
     });
   } catch (error) {
     console.error('Error creating Corporate Pipeline Note:', error);
@@ -78,29 +90,24 @@ app.post('/', async (c) => {
 
 /**
  * GET /api/corporate-pipeline-notes/subscription/:subscriptionId
- * Get all notes for a specific corporate subscription (ordered by creation time)
+ * Get all notes for a specific corporate subscription
  */
 app.get('/subscription/:subscriptionId', async (c) => {
   try {
     const subscriptionId = c.req.param('subscriptionId');
-    const baseId = process.env.AIRTABLE_BASE_ID || '';
 
-    console.log('[corporate-pipeline-notes] Fetching notes for subscription:', subscriptionId);
+    const rows = await getDb()
+      .select()
+      .from(corporatePipelineNotes)
+      .where(eq(corporatePipelineNotes.subscriptionCorporateId, subscriptionId))
+      .orderBy(asc(corporatePipelineNotes.createdAt));
 
-    const allRecords = await fetchAllRecords(baseId, CORPORATE_PIPELINE_NOTES_TABLE, {
-      sort: [{ field: 'Created Time', direction: 'asc' }],
-    });
+    console.log('[corporate-pipeline-notes] Found', rows.length, 'notes for subscription', subscriptionId);
 
-    const records = allRecords.filter((record: any) => {
-      const subscriptionField = record.fields['Subscription'];
-      return Array.isArray(subscriptionField) && subscriptionField.includes(subscriptionId);
-    });
-
-    console.log('[corporate-pipeline-notes] Found', records.length, 'notes for subscription', subscriptionId);
-
+    const companyNames = await loadCompanyNames(rows);
     return c.json({
       success: true,
-      data: records,
+      data: rows.map((row) => serialize(row, companyNames)),
     });
   } catch (error) {
     console.error('Error fetching corporate pipeline notes:', error);
@@ -116,18 +123,19 @@ app.get('/subscription/:subscriptionId', async (c) => {
 
 /**
  * GET /api/corporate-pipeline-notes
- * Get all corporate pipeline notes (useful for admin purposes)
+ * Get all corporate pipeline notes
  */
 app.get('/', async (c) => {
   try {
-    const baseId = process.env.AIRTABLE_BASE_ID || '';
-    const records = await fetchAllRecords(baseId, CORPORATE_PIPELINE_NOTES_TABLE, {
-      sort: [{ field: 'Created Time', direction: 'desc' }],
-    });
+    const rows = await getDb()
+      .select()
+      .from(corporatePipelineNotes)
+      .orderBy(desc(corporatePipelineNotes.createdAt));
 
+    const companyNames = await loadCompanyNames(rows);
     return c.json({
       success: true,
-      data: records,
+      data: rows.map((row) => serialize(row, companyNames)),
     });
   } catch (error) {
     console.error('Error fetching corporate pipeline notes:', error);
@@ -149,7 +157,6 @@ app.patch('/:id', async (c) => {
   try {
     const id = c.req.param('id');
     const { note } = await c.req.json();
-    const baseId = process.env.AIRTABLE_BASE_ID || '';
 
     if (!note) {
       return c.json(
@@ -161,21 +168,22 @@ app.patch('/:id', async (c) => {
       );
     }
 
-    const records = await updateRecords(baseId, CORPORATE_PIPELINE_NOTES_TABLE, [
-      {
-        id,
-        fields: {
-          'Note': note,
-        },
-      },
-    ]);
+    const [row] = await getDb()
+      .update(corporatePipelineNotes)
+      .set({ note })
+      .where(eq(corporatePipelineNotes.id, id))
+      .returning();
+
+    if (!row) {
+      return c.json({ success: false, error: 'Note not found' }, 404);
+    }
+
+    const companyNames = await loadCompanyNames([row]);
+    const record = serialize(row, companyNames);
 
     return c.json({
       success: true,
-      data: {
-        id: records[0].id,
-        fields: records[0].fields,
-      },
+      data: { id: record.id, fields: record.fields },
     });
   } catch (error) {
     console.error('Error updating corporate pipeline note:', error);
@@ -196,9 +204,8 @@ app.patch('/:id', async (c) => {
 app.delete('/:id', async (c) => {
   try {
     const id = c.req.param('id');
-    const baseId = process.env.AIRTABLE_BASE_ID || '';
 
-    await deleteRecords(baseId, CORPORATE_PIPELINE_NOTES_TABLE, [id]);
+    await getDb().delete(corporatePipelineNotes).where(eq(corporatePipelineNotes.id, id));
 
     return c.json({
       success: true,

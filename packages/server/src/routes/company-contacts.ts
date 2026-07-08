@@ -12,8 +12,7 @@ import { Hono } from 'hono';
 import { and, eq, ilike, inArray } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { getDb } from '../db/client';
-import { companyContacts, corporations, personal, servicesCorporate } from '../db/schema';
-import { fetchRecords } from '../lib/airtable-service';
+import { companyContacts, corporations, personal, servicesCorporate, subscriptionsCorporate } from '../db/schema';
 
 const app = new Hono();
 
@@ -506,9 +505,6 @@ app.post('/contact/:contactId/set-primary', async (c) => {
 /**
  * GET /api/company-contacts/service/:serviceName/subscribers
  * Get all subscribers of a specific service with their contact information
- *
- * Hybrid during migration: services/entities/relationships from Postgres,
- * subscriptions from Airtable (until Phase 3).
  */
 app.get('/service/:serviceName/subscribers', async (c) => {
   try {
@@ -540,34 +536,22 @@ app.get('/service/:serviceName/subscribers', async (c) => {
     }
 
     // Step 2: Find company IDs with an Active subscription to those services
-    // (Airtable until Phase 3)
-    const SUBSCRIPTIONS_TABLE = 'Subscriptions Corporate';
     const companyIdsWithService: Set<string> = new Set();
 
-    const subscriptionsRecords = await fetchRecords(SUBSCRIPTIONS_TABLE, {});
-    subscriptionsRecords.forEach((record) => {
-      const serviceIds = record.fields['Services'];
-      const companyId = Array.isArray(record.fields['Customer'])
-        ? record.fields['Customer'][0]
-        : record.fields['Customer'];
-
-      const status = record.fields['Status']
-        || record.fields['Active']
-        || record.fields['Is Active']
-        || record.fields['Subscription Status'];
-      const statusValue = Array.isArray(status) ? status : [status];
-
-      if (serviceIds && Array.isArray(serviceIds) && companyId) {
-        const hasMatchingService = serviceIds.some(sid =>
-          matchingServiceIds.includes(String(sid))
-        );
-        const isActive = statusValue.includes('Active');
-
-        if (hasMatchingService && isActive) {
-          companyIdsWithService.add(String(companyId));
-        }
-      }
-    });
+    const subscriptionRows = await db
+      .select({
+        corporationId: subscriptionsCorporate.corporationId,
+      })
+      .from(subscriptionsCorporate)
+      .where(
+        and(
+          inArray(subscriptionsCorporate.serviceId, matchingServiceIds),
+          eq(subscriptionsCorporate.status, 'Active')
+        )
+      );
+    for (const row of subscriptionRows) {
+      if (row.corporationId) companyIdsWithService.add(row.corporationId);
+    }
 
     console.log(`[Service Subscribers] Found ${companyIdsWithService.size} companies with service "${serviceName}"`);
 

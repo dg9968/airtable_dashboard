@@ -1,26 +1,25 @@
 /**
- * Billing Notes API Routes
+ * Billing Notes API Routes (Postgres-backed)
  * Conversation system for Services Rendered / Billing
  */
 
 import { Hono } from 'hono';
-import { fetchAllRecords, createRecords, updateRecords, deleteRecords } from '../lib/airtable-helpers';
+import { asc, desc, eq } from 'drizzle-orm';
+import { getDb } from '../db/client';
+import { billingNotes } from '../db/schema';
+import { noteToAirtableRecord } from '../db/serializers-subscriptions';
 
 const app = new Hono();
 
-const BILLING_NOTES_TABLE = 'Billing Notes';
+type NoteRow = typeof billingNotes.$inferSelect;
+
+function serialize(row: NoteRow) {
+  return noteToAirtableRecord(row, 'Services Rendered', row.servicesRenderedId);
+}
 
 /**
  * POST /api/billing-notes
  * Create a new note for a service rendered record
- *
- * Expected body:
- * {
- *   serviceRenderedId: string,  // Airtable record ID from Services Rendered
- *   authorName: string,         // Name of the person writing the note
- *   authorEmail?: string,       // Email of the author (optional)
- *   note: string               // The note content
- * }
  */
 app.post('/', async (c) => {
   try {
@@ -38,30 +37,20 @@ app.post('/', async (c) => {
 
     console.log('Creating Billing Note:', { serviceRenderedId, authorName });
 
-    const baseId = process.env.AIRTABLE_BASE_ID || '';
+    const [row] = await getDb()
+      .insert(billingNotes)
+      .values({
+        servicesRenderedId: serviceRenderedId,
+        authorName,
+        authorEmail: authorEmail || null,
+        note,
+      })
+      .returning();
 
-    // Create the note record
-    const fields: any = {
-      'Services Rendered': [serviceRenderedId],
-      'Author Name': authorName,
-      'Note': note,
-    };
-
-    // Only add email if provided
-    if (authorEmail) {
-      fields['Author Email'] = authorEmail;
-    }
-
-    const records = await createRecords(baseId, BILLING_NOTES_TABLE, [
-      { fields },
-    ]);
-
+    const record = serialize(row);
     return c.json({
       success: true,
-      data: {
-        id: records[0].id,
-        fields: records[0].fields,
-      },
+      data: { id: record.id, fields: record.fields },
     });
   } catch (error) {
     console.error('Error creating Billing Note:', error);
@@ -78,29 +67,23 @@ app.post('/', async (c) => {
 
 /**
  * GET /api/billing-notes/service/:serviceId
- * Get all notes for a specific service rendered record (ordered by creation time)
+ * Get all notes for a specific services-rendered record
  */
 app.get('/service/:serviceId', async (c) => {
   try {
     const serviceId = c.req.param('serviceId');
-    const baseId = process.env.AIRTABLE_BASE_ID || '';
 
-    console.log('[billing-notes] Fetching notes for service:', serviceId);
+    const rows = await getDb()
+      .select()
+      .from(billingNotes)
+      .where(eq(billingNotes.servicesRenderedId, serviceId))
+      .orderBy(asc(billingNotes.createdAt));
 
-    const allRecords = await fetchAllRecords(baseId, BILLING_NOTES_TABLE, {
-      sort: [{ field: 'Created Time', direction: 'asc' }],
-    });
-
-    const records = allRecords.filter((record: any) => {
-      const servicesField = record.fields['Services Rendered'];
-      return Array.isArray(servicesField) && servicesField.includes(serviceId);
-    });
-
-    console.log('[billing-notes] Found', records.length, 'notes for service', serviceId);
+    console.log('[billing-notes] Found', rows.length, 'notes for service', serviceId);
 
     return c.json({
       success: true,
-      data: records,
+      data: rows.map(serialize),
     });
   } catch (error) {
     console.error('Error fetching billing notes:', error);
@@ -116,18 +99,18 @@ app.get('/service/:serviceId', async (c) => {
 
 /**
  * GET /api/billing-notes
- * Get all billing notes (useful for admin purposes)
+ * Get all billing notes
  */
 app.get('/', async (c) => {
   try {
-    const baseId = process.env.AIRTABLE_BASE_ID || '';
-    const records = await fetchAllRecords(baseId, BILLING_NOTES_TABLE, {
-      sort: [{ field: 'Created Time', direction: 'desc' }],
-    });
+    const rows = await getDb()
+      .select()
+      .from(billingNotes)
+      .orderBy(desc(billingNotes.createdAt));
 
     return c.json({
       success: true,
-      data: records,
+      data: rows.map(serialize),
     });
   } catch (error) {
     console.error('Error fetching billing notes:', error);
@@ -149,7 +132,6 @@ app.patch('/:id', async (c) => {
   try {
     const id = c.req.param('id');
     const { note } = await c.req.json();
-    const baseId = process.env.AIRTABLE_BASE_ID || '';
 
     if (!note) {
       return c.json(
@@ -161,21 +143,20 @@ app.patch('/:id', async (c) => {
       );
     }
 
-    const records = await updateRecords(baseId, BILLING_NOTES_TABLE, [
-      {
-        id,
-        fields: {
-          'Note': note,
-        },
-      },
-    ]);
+    const [row] = await getDb()
+      .update(billingNotes)
+      .set({ note })
+      .where(eq(billingNotes.id, id))
+      .returning();
 
+    if (!row) {
+      return c.json({ success: false, error: 'Note not found' }, 404);
+    }
+
+    const record = serialize(row);
     return c.json({
       success: true,
-      data: {
-        id: records[0].id,
-        fields: records[0].fields,
-      },
+      data: { id: record.id, fields: record.fields },
     });
   } catch (error) {
     console.error('Error updating billing note:', error);
@@ -196,9 +177,8 @@ app.patch('/:id', async (c) => {
 app.delete('/:id', async (c) => {
   try {
     const id = c.req.param('id');
-    const baseId = process.env.AIRTABLE_BASE_ID || '';
 
-    await deleteRecords(baseId, BILLING_NOTES_TABLE, [id]);
+    await getDb().delete(billingNotes).where(eq(billingNotes.id, id));
 
     return c.json({
       success: true,

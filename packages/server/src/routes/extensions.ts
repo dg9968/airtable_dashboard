@@ -9,7 +9,14 @@ import { Hono } from 'hono';
 import { PDFDocument } from 'pdf-lib';
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { getRecord, updateRecords } from '../lib/airtable-helpers';
+import { eq } from 'drizzle-orm';
+import { getDb } from '../db/client';
+import { subscriptionsCorporate, corporations } from '../db/schema';
+import {
+  subsCorporateFieldsToColumns,
+  subsCorporateToAirtableRecord,
+  loadSubsCorporateContext,
+} from '../db/serializers-subscriptions';
 
 // ---------------------------------------------------------------------------
 // Form 7004 field mapping (AcroForm fields after XFA strip by pdf-lib)
@@ -113,8 +120,20 @@ async function fillForm7004(data: {
 
 const app = new Hono();
 
-const SUBSCRIPTIONS_TABLE = 'Subscriptions Corporate';
-const CORPORATIONS_TABLE = 'Corporations';
+/** Fetch subscription + linked corporation from Postgres (or nulls). */
+async function loadSubscriptionWithCompany(subscriptionId: string) {
+  const db = getDb();
+  const [sub] = await db
+    .select()
+    .from(subscriptionsCorporate)
+    .where(eq(subscriptionsCorporate.id, subscriptionId))
+    .limit(1);
+  if (!sub) return { sub: null, corp: null };
+  const corp = sub.corporationId
+    ? (await db.select().from(corporations).where(eq(corporations.id, sub.corporationId)).limit(1))[0] ?? null
+    : null;
+  return { sub, corp };
+}
 
 /**
  * GET /api/extensions/:subscriptionId
@@ -124,56 +143,43 @@ const CORPORATIONS_TABLE = 'Corporations';
  */
 app.get('/:subscriptionId', async (c) => {
   try {
-    const baseId = process.env.AIRTABLE_BASE_ID || '';
     const subscriptionId = c.req.param('subscriptionId');
 
-    // Fetch subscription record
-    const subscription = await getRecord(baseId, SUBSCRIPTIONS_TABLE, subscriptionId);
-
-    // Extract the linked corporate ID from the "Customer" linked record field
-    const customerField = subscription.fields['Customer'];
-    const corporateId = Array.isArray(customerField) ? customerField[0] : customerField;
-
-    if (!corporateId) {
+    const { sub, corp } = await loadSubscriptionWithCompany(subscriptionId);
+    if (!sub) {
+      return c.json({ success: false, error: 'Subscription not found' }, 404);
+    }
+    if (!corp) {
       return c.json({ success: false, error: 'No linked corporation found on subscription' }, 400);
     }
 
-    // Fetch corporation record in parallel (nothing else to parallelize here
-    // since we need the subscription first to get the corporateId)
-    const corporation = await getRecord(baseId, CORPORATIONS_TABLE, corporateId);
-
-    // Normalize company fields defensively
-    const fields = corporation.fields;
     const company = {
-      id: corporation.id,
-      companyName:
-        fields['Company'] || fields['Company Name'] || fields['Name'] || 'Unnamed',
-      ein: fields['EIN'] || fields['Tax ID'] || '',
-      entityType: fields['Type of Entity'] || '',
-      fiscalYearEnd: fields['Fiscal Year End'] || '12/31',
-      address: fields['ADDRESS'] || fields['Address'] || '',
-      city: fields['CITY'] || fields['City'] || '',
-      state: fields['STATE'] || fields['State'] || '',
-      zip: fields['ZIP CODE'] || fields['ZIP'] || fields['Zip'] || '',
-      phone: fields['Phone'] || '',
-      email: fields['Email'] || fields['🤷‍♂️Email'] || '',
+      id: corp.id,
+      companyName: corp.company || 'Unnamed',
+      ein: corp.ein || '',
+      entityType: corp.typeOfEntity || '',
+      fiscalYearEnd: corp.fiscalYearEnd || '12/31',
+      address: corp.address || '',
+      city: corp.city || '',
+      state: corp.state || '',
+      zip: corp.zip || '',
+      phone: corp.phone || '',
+      email: corp.email || '',
     };
 
-    // Normalize extension-specific subscription fields
-    const sf = subscription.fields;
     const extensionData = {
-      taxYear: sf['Extension Tax Year'] || null,
-      estimatedTax: sf['Extension Estimated Tax'] || null,
-      paymentsCredits: sf['Extension Payments Credits'] || null,
-      status: sf['Extension Status'] || 'Not Filed',
-      filedDate: sf['Extension Filed Date'] || null,
+      taxYear: sub.extensionTaxYear || null,
+      estimatedTax: sub.extensionEstimatedTax != null ? Number(sub.extensionEstimatedTax) : null,
+      paymentsCredits: sub.extensionPaymentsCredits != null ? Number(sub.extensionPaymentsCredits) : null,
+      status: sub.extensionStatus || 'Not Filed',
+      filedDate: sub.extensionFiledDate || null,
     };
 
     return c.json({
       success: true,
       data: {
         subscription: {
-          id: subscription.id,
+          id: sub.id,
           ...extensionData,
         },
         company,
@@ -192,33 +198,28 @@ app.get('/:subscriptionId', async (c) => {
  */
 app.get('/:subscriptionId/pdf', async (c) => {
   try {
-    const baseId = process.env.AIRTABLE_BASE_ID || '';
     const subscriptionId = c.req.param('subscriptionId');
 
-    const subscription = await getRecord(baseId, SUBSCRIPTIONS_TABLE, subscriptionId);
-
-    const customerField = subscription.fields['Customer'];
-    const corporateId = Array.isArray(customerField) ? customerField[0] : customerField;
-    if (!corporateId) {
+    const { sub, corp } = await loadSubscriptionWithCompany(subscriptionId);
+    if (!sub) {
+      return c.json({ success: false, error: 'Subscription not found' }, 404);
+    }
+    if (!corp) {
       return c.json({ success: false, error: 'No linked corporation found' }, 400);
     }
 
-    const corporation = await getRecord(baseId, CORPORATIONS_TABLE, corporateId);
-    const cf = corporation.fields;
-    const sf = subscription.fields;
+    const companyName = corp.company || '';
+    const ein = corp.ein || '';
+    const entityType = corp.typeOfEntity || '';
+    const fiscalYearEnd = corp.fiscalYearEnd || '12/31';
+    const address = corp.address || '';
+    const city = corp.city || '';
+    const state = corp.state || '';
+    const zip = corp.zip || '';
 
-    const companyName = cf['Company'] || cf['Company Name'] || cf['Name'] || '';
-    const ein = cf['EIN'] || cf['Tax ID'] || '';
-    const entityType = cf['Type of Entity'] || '';
-    const fiscalYearEnd = cf['Fiscal Year End'] || '12/31';
-    const address = cf['ADDRESS'] || cf['Address'] || '';
-    const city = cf['CITY'] || cf['City'] || '';
-    const state = cf['STATE'] || cf['State'] || '';
-    const zip = cf['ZIP CODE'] || cf['ZIP'] || cf['Zip'] || '';
-
-    const taxYear = sf['Extension Tax Year'] || new Date().getFullYear() - 1;
-    const estimatedTax = parseFloat(sf['Extension Estimated Tax'] || '0') || 0;
-    const paymentsCredits = parseFloat(sf['Extension Payments Credits'] || '0') || 0;
+    const taxYear = sub.extensionTaxYear || new Date().getFullYear() - 1;
+    const estimatedTax = sub.extensionEstimatedTax != null ? Number(sub.extensionEstimatedTax) : 0;
+    const paymentsCredits = sub.extensionPaymentsCredits != null ? Number(sub.extensionPaymentsCredits) : 0;
     const balanceDue = estimatedTax - paymentsCredits;
 
     const filledPdf = await fillForm7004({
@@ -253,7 +254,6 @@ app.get('/:subscriptionId/pdf', async (c) => {
  */
 app.patch('/:subscriptionId', async (c) => {
   try {
-    const baseId = process.env.AIRTABLE_BASE_ID || '';
     const subscriptionId = c.req.param('subscriptionId');
     const body = await c.req.json();
 
@@ -261,11 +261,19 @@ app.patch('/:subscriptionId', async (c) => {
       return c.json({ success: false, error: 'Missing or invalid fields in request body' }, 400);
     }
 
-    const updated = await updateRecords(baseId, SUBSCRIPTIONS_TABLE, [
-      { id: subscriptionId, fields: body.fields },
-    ]);
+    const db = getDb();
+    const [row] = await db
+      .update(subscriptionsCorporate)
+      .set(subsCorporateFieldsToColumns(body.fields))
+      .where(eq(subscriptionsCorporate.id, subscriptionId))
+      .returning();
 
-    return c.json({ success: true, data: updated[0] });
+    if (!row) {
+      return c.json({ success: false, error: 'Subscription not found' }, 404);
+    }
+
+    const ctx = await loadSubsCorporateContext(db);
+    return c.json({ success: true, data: subsCorporateToAirtableRecord(row, ctx) });
   } catch (error: any) {
     console.error('PATCH /api/extensions/:id error:', error);
     return c.json({ success: false, error: error.message }, 500);

@@ -15,6 +15,20 @@
       "when": 1783460016324,
       "tag": "0001_parallel_proteus",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1783461570608,
+      "tag": "0002_perfect_zaladane",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1783477325050,
+      "tag": "0003_military_terrax",
+      "breakpoints": true
     }
   ]
 }

@@ -1,61 +1,33 @@
 /**
- * Teams API Routes
+ * Teams API Routes (Postgres-backed)
  *
- * Fetch tax preparers from the Teams table
+ * Fetch tax preparers/processors from the Better Auth user table. Team-member
+ * IDs stored on subscriptions (tax_preparer_id / processor_id) were remapped
+ * to these user IDs during the Phase 3 ETL, so IDs are consistent end-to-end.
  */
 
 import { Hono } from 'hono';
-import { testConnection } from '../airtable';
-import { fetchAllRecords } from '../lib/airtable-helpers';
+import { asc } from 'drizzle-orm';
+import { getDb } from '../db/client';
+import { authUser } from '../db/auth-readonly';
 
 const app = new Hono();
 
 /**
  * GET /api/teams
- * Get all tax preparers from the Teams table
+ * Get all team members
  */
 app.get('/', async (c) => {
   try {
-    const connectionTest = await testConnection();
-    if (!connectionTest.success) {
-      return c.json(
-        {
-          success: false,
-          error: `Connection failed: ${connectionTest.message}`,
-        },
-        401
-      );
-    }
+    const rows = await getDb()
+      .select({ id: authUser.id, name: authUser.name, email: authUser.email })
+      .from(authUser)
+      .orderBy(asc(authUser.name));
 
-    const baseId = process.env.AIRTABLE_BASE_ID || '';
-
-    // Try different possible table names - prioritize Team/Teams tables over Users
-    const possibleTableNames = ['Team', 'Teams', 'team', 'teams', 'Users'];
-    let records = [];
-    let tableName = '';
-
-    for (const name of possibleTableNames) {
-      try {
-        console.log(`Trying table name: ${name}`);
-        records = await fetchAllRecords(baseId, name);
-        tableName = name;
-        console.log(`Successfully fetched from table: ${name} (${records.length} records)`);
-        break;
-      } catch (err) {
-        console.log(`Failed to fetch from table: ${name}`);
-        continue;
-      }
-    }
-
-    if (records.length === 0 && !tableName) {
-      throw new Error('Could not find Team/Teams table. Please check the table name in Airtable.');
-    }
-
-    // Map to a simpler format
-    const teams = records.map((record: any) => ({
-      id: record.id,
-      name: record.fields.Name || record.fields.Extension || '',
-      email: record.fields.Email || '',
+    const teams = rows.map((row) => ({
+      id: row.id,
+      name: row.name || '',
+      email: row.email || '',
     }));
 
     return c.json({
