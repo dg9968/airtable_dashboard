@@ -4,7 +4,6 @@ const PROTECTED_PREFIXES = [
   '/dashboard',
   '/admin',
   '/airtable-dashboard',
-  '/view-display',
   '/document-management',
 ]
 
@@ -34,7 +33,6 @@ export const config = {
     '/dashboard/:path*',
     '/admin/:path*',
     '/airtable-dashboard/:path*',
-    '/view-display/:path*',
     '/document-management/:path*',
   ],
 }

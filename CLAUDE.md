@@ -13,7 +13,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Architecture Overview
 
-This is a **Bun monorepo** with separate client and server packages. The client is a Next.js 15 App Router application, and the server is a Bun + Hono API. The system serves as a business management dashboard for tax preparation services, integrating with Airtable as the primary database and using NextAuth.js for authentication.
+This is a **Bun monorepo** with separate client and server packages. The client is a Next.js 15 App Router application, and the server is a Bun + Hono API. The system serves as a business management dashboard for tax preparation services. The database is Postgres (Drizzle ORM), and the client uses Better Auth for authentication.
 
 ### Monorepo Structure
 
@@ -26,22 +26,22 @@ packages/
 │   └── public/     # Static assets
 └── server/          # Bun + Hono API
     └── src/
-        ├── api/    # API route handlers (from Next.js API routes)
-        ├── lib/    # Utility libraries (auth, airtable, googleDrive)
+        ├── routes/ # API route handlers, one file per resource
+        ├── db/     # Drizzle schema (db/schema/), client, serializers
+        ├── lib/    # Utility libraries (googleDrive, template-engine, family-record-helpers)
         └── index.ts # Server entry point
 ```
 
 ### Authentication & Authorization
-- NextAuth.js with credentials provider using Airtable for user storage
+- Better Auth (client-side), backed by Postgres `user`/`session`/`account`/`verification` tables
 - Role-based access control: `admin`, `staff`, `user`
 - Middleware handles route protection with role-specific restrictions
 - Password hashing using bcryptjs
-- User data stored in Airtable Users table
 
 ### Data Management
-- **Airtable Integration**: Primary database using Personal Access Token authentication
-- **Google Drive API**: Document management and file operations
-- **AWS S3**: File storage for document uploads
+- **Postgres** (Render-hosted): primary database, owned via Drizzle ORM — see "Database" below
+- **Google Drive API**: document/file storage; Postgres stores only metadata + Drive file IDs
+- **AWS S3**: bank-statement file storage
 - Configuration handled via environment variables in production (Render.com)
 
 ### UI Framework
@@ -52,18 +52,17 @@ packages/
 
 ### Key Application Features
 1. **Dashboard**: Overview with stats and recent activity
-2. **Airtable Dashboard**: Direct Airtable data visualization
-3. **Document Management**: File upload, storage, and Google Drive integration
-4. **Bank Statement Processing**: Financial document processing workflows
-5. **Processor Billing**: Service billing and client management
-6. **Training Videos**: YouTube video integration for staff training
-7. **Filing Deadlines**: Tax deadline tracking and management
+2. **Document Management**: File upload, storage, and Google Drive integration
+3. **Bank Statement Processing**: Financial document processing workflows
+4. **Processor Billing**: Service billing and client management
+5. **Training Videos**: YouTube video integration for staff training
+6. **Filing Deadlines**: Tax deadline tracking and management
 
 ### Route Structure
 - `/` - Public home page
 - `/dashboard` - Main authenticated dashboard
 - `/admin` - Admin-only section
-- `/airtable-dashboard`, `/view-display`, `/document-management` - Staff/Admin only
+- `/airtable-dashboard`, `/document-management` - Staff/Admin only (name is historical; data is Postgres)
 - `/training-videos` - Public access
 - API routes in `/api/` for backend operations
 
@@ -80,9 +79,7 @@ NEXT_PUBLIC_API_URL=http://localhost:3001
 ```
 PORT=3001
 CLIENT_URL=http://localhost:3000
-AIRTABLE_PERSONAL_ACCESS_TOKEN
-AIRTABLE_BASE_ID
-AIRTABLE_USERS_TABLE=Users
+DATABASE_URL
 AWS_ACCESS_KEY_ID
 AWS_SECRET_ACCESS_KEY
 AWS_REGION
@@ -90,6 +87,7 @@ AWS_S3_BUCKET
 GOOGLE_DRIVE_CREDENTIALS_JSON
 GOOGLE_DRIVE_FOLDER_ID
 ```
+`AIRTABLE_PERSONAL_ACCESS_TOKEN` / `AIRTABLE_BASE_ID` are no longer read at runtime — only kept for `packages/server/scripts/etl/*.ts` if a corrective re-import or final export is ever needed.
 
 ### Development Notes
 - Uses **Bun** as the runtime and package manager
@@ -103,5 +101,7 @@ GOOGLE_DRIVE_FOLDER_ID
 ### Adding New Server Routes
 Register new route files from `packages/server/src/routes/` in **`packages/server/src/app.ts`** — the single shared Hono app. The entry points (`src/index.ts` for Bun dev, `src/node-server.ts` for production/Render) are thin wrappers around it and must not register routes themselves.
 
-### Airtable → Postgres Migration (in progress)
-The server is being migrated from Airtable to the existing Render Postgres (`DATABASE_URL`, shared with the client's Better Auth). Drizzle ORM owns the business schema in `packages/server/src/db/schema/`; migrations via `bun run db:generate` + `bun run db:migrate` (**never** `drizzle-kit push` — the DB also holds Better Auth tables owned by `packages/client/scripts/run-migrations.ts`). ETL scripts live in `packages/server/scripts/etl/`. Airtable rec IDs are preserved as Postgres text PKs.
+### Database
+Postgres (Render-hosted, `DATABASE_URL`), shared with the client's Better Auth. Drizzle ORM owns the business schema in `packages/server/src/db/schema/`; migrations via `bun run db:generate` + `bun run db:migrate` (**never** `drizzle-kit push` — the DB also holds Better Auth tables owned by `packages/client/scripts/run-migrations.ts`). `packages/server/src/db/client.ts` exports `getDb()`.
+
+The app was migrated off Airtable in 2026 (six phases: catalogs → entities → subscriptions/billing → documents/tax-notices → communications/signing → retirement). Historical ETL scripts (`packages/server/scripts/etl/phase*.ts`) preserved Airtable `rec...` IDs as Postgres text primary keys — every business record's ID is still the original Airtable record ID. Some routes still return legacy Airtable-shaped JSON (`{ id, fields: {...}, createdTime }`) via compat serializers in `packages/server/src/db/serializers*.ts`, to avoid a client-side rewrite; new routes should not follow this shape.

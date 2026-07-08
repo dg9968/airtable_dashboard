@@ -5,7 +5,6 @@ import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 
 // Import routes
-import airtableRoutes from './routes/airtable';
 import documentsRoutes from './routes/documents';
 import bankStatementRoutes from './routes/bank-statement-processing';
 import csvToQboRoutes from './routes/csv-to-qbo';
@@ -83,7 +82,6 @@ app.get('/health', (c) => {
 
 // API Routes
 app.route('/api/health', healthDbRoutes);
-app.route('/api/airtable', airtableRoutes);
 app.route('/api/documents', documentsRoutes);
 app.route('/api/bank-statement-processing', bankStatementRoutes);
 app.route('/api/csv-to-qbo', csvToQboRoutes);

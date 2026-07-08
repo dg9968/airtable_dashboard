@@ -35,9 +35,6 @@ export default function Footer({ className = '' }: FooterProps) {
             <a href="/airtable-dashboard" className="link link-hover opacity-70">
               Dashboard
             </a>
-            <a href="/view-display" className="link link-hover opacity-70">
-              Views
-            </a>
             <a href="/processor-billing" className="link link-hover opacity-70">
               Billing
             </a>

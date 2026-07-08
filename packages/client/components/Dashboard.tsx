@@ -151,14 +151,6 @@ export default function Dashboard() {
         icon: "🎥",
         color: "text-red-600",
         bgColor: "bg-red-50 hover:bg-red-100 border-red-200"
-      },
-      {
-        title: "View Display",
-        description: "Configure and display data views",
-        href: "/view-display",
-        icon: "👁️",
-        color: "text-purple-600",
-        bgColor: "bg-purple-50 hover:bg-purple-100 border-purple-200"
       }
     ];
 

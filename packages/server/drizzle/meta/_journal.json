@@ -43,6 +43,13 @@
       "when": 1783512228115,
       "tag": "0005_next_blue_blade",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1783514451975,
+      "tag": "0006_dark_felicia_hardy",
+      "breakpoints": true
     }
   ]
 }
