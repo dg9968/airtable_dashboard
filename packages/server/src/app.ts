@@ -45,6 +45,7 @@ import taxNoticesRoutes from './routes/tax-notices';
 import taxNoticeNotesRoutes from './routes/tax-notice-notes';
 import taxNoticeAttachmentsRoutes from './routes/tax-notice-attachments';
 import healthDbRoutes from './routes/health-db';
+import teamDirectoryRoutes from './routes/team-directory';
 
 const app = new Hono();
 
@@ -102,6 +103,7 @@ app.route('/api/personal', personalRoutes);
 app.route('/api/subscriptions-personal', subscriptionsPersonalRoutes);
 app.route('/api/subscriptions-corporate', subscriptionsCorporateRoutes);
 app.route('/api/teams', teamsRoutes);
+app.route('/api/team-directory', teamDirectoryRoutes);
 app.route('/api/ledger', ledgerRoutes);
 app.route('/api/business-stats', businessStatsRoutes);
 app.route('/api/services-rendered', servicesRenderedRoutes);

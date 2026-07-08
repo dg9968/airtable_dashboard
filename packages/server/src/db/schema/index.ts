@@ -19,3 +19,4 @@ export * from './tax-notices';
 export * from './communications';
 export * from './envelopes';
 export * from './sales-tax-certificates';
+export * from './staff-directory';

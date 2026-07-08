@@ -40,6 +40,9 @@ export default function Header() {
                 <li>
                   <Link href="/airtable-dashboard">Manage Business</Link>
                 </li>
+                <li>
+                  <Link href="/team-directory">Team Directory</Link>
+                </li>
                 {((session.user as any).role === "staff" ||
                   (session.user as any).role === "admin") && (
                   <>
@@ -96,6 +99,11 @@ export default function Header() {
               <li>
                 <Link href="/airtable-dashboard" className="btn btn-ghost">
                   Manage Business
+                </Link>
+              </li>
+              <li>
+                <Link href="/team-directory" className="btn btn-ghost">
+                  Team Directory
                 </Link>
               </li>
               {((session.user as any).role === "staff" ||

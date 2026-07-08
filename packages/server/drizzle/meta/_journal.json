@@ -50,6 +50,13 @@
       "when": 1783514451975,
       "tag": "0006_dark_felicia_hardy",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1783532327910,
+      "tag": "0007_skinny_cassandra_nova",
+      "breakpoints": true
     }
   ]
 }
