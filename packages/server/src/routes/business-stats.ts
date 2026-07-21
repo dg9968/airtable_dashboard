@@ -4,7 +4,7 @@
  */
 
 import { Hono } from 'hono';
-import { and, count, eq, sql } from 'drizzle-orm';
+import { and, count, eq, gte, lte, sql } from 'drizzle-orm';
 import { getDb } from '../db/client';
 import { corporations, personal, corporateBillingBundles, corporateBillingBundleItems, billingRecords } from '../db/schema';
 import { authUser } from '../db/auth-readonly';
@@ -19,12 +19,21 @@ app.get('/', async (c) => {
   try {
     const db = getDb();
 
+    // Now that receipt_date is a real `date` column (verified 100% clean
+    // 'YYYY-MM-DD' data — see migration 0010), this month-revenue figure is
+    // a single filtered SQL aggregate instead of pulling every paid record
+    // over the wire and bucketing in JS.
+    const now = new Date();
+    const startOfMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+    const endOfMonthDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    const endOfMonth = `${endOfMonthDate.getFullYear()}-${String(endOfMonthDate.getMonth() + 1).padStart(2, '0')}-${String(endOfMonthDate.getDate()).padStart(2, '0')}`;
+
     const [
       [{ corporateClients }],
       [{ personalClients }],
       [{ activeProcessors }],
       [{ monthlyRevenue }],
-      paidRecords,
+      [{ tasksCompletedThisMonth, monthlyTaskRevenue }],
     ] = await Promise.all([
       db.select({ corporateClients: count() }).from(corporations),
       db.select({ personalClients: count() }).from(personal),
@@ -39,29 +48,19 @@ app.get('/', async (c) => {
         .innerJoin(corporateBillingBundles, eq(corporateBillingBundleItems.bundleId, corporateBillingBundles.id))
         .where(and(eq(corporateBillingBundleItems.status, 'active'), eq(corporateBillingBundles.status, 'active'))),
       db
-        .select({ receiptDate: billingRecords.receiptDate, amountCharged: billingRecords.amountCharged })
+        .select({
+          tasksCompletedThisMonth: count(),
+          monthlyTaskRevenue: sql<string>`coalesce(sum(${billingRecords.amountCharged}), 0)`,
+        })
         .from(billingRecords)
-        .where(eq(billingRecords.billingStatus, 'Billed - Paid')),
+        .where(
+          and(
+            eq(billingRecords.billingStatus, 'Billed - Paid'),
+            gte(billingRecords.receiptDate, startOfMonth),
+            lte(billingRecords.receiptDate, endOfMonth)
+          )
+        ),
     ]);
-
-    // Tasks completed this month = paid billing records with Receipt Date in
-    // the current month. receipt_date holds mixed date / ISO strings, so
-    // month-bucketing still happens in JS, but the paid-only filter is now a
-    // SQL predicate instead of scanning every historical record.
-    const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
-
-    let tasksCompletedThisMonth = 0;
-    let monthlyTaskRevenue = 0;
-    for (const entry of paidRecords) {
-      if (!entry.receiptDate) continue;
-      const date = new Date(entry.receiptDate);
-      if (date >= startOfMonth && date <= endOfMonth) {
-        tasksCompletedThisMonth++;
-        monthlyTaskRevenue += entry.amountCharged != null ? Number(entry.amountCharged) : 0;
-      }
-    }
 
     return c.json({
       success: true,
@@ -70,10 +69,10 @@ app.get('/', async (c) => {
         corporateClients,
         personalClients,
         monthlyRevenue: Number(monthlyRevenue),
-        monthlyRevenueRecorded: monthlyTaskRevenue,
+        monthlyRevenueRecorded: Number(monthlyTaskRevenue),
         activeProcessors,
-        tasksCompletedThisMonth,
-        monthlyTaskRevenue,
+        tasksCompletedThisMonth: Number(tasksCompletedThisMonth),
+        monthlyTaskRevenue: Number(monthlyTaskRevenue),
         lastUpdated: new Date().toISOString()
       }
     });

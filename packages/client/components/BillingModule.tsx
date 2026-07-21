@@ -332,7 +332,7 @@ export default function BillingModule() {
       <div className="mb-6">
         <div className="flex justify-between items-start mb-4">
           <div>
-            <button onClick={() => router.push('/dashboard')} className="btn btn-ghost btn-sm mb-4">
+            <button onClick={() => router.push('/airtable-dashboard')} className="btn btn-ghost btn-sm mb-4">
               ← Back to Dashboard
             </button>
             <div className="flex items-center gap-3">

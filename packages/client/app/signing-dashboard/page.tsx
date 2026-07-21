@@ -34,7 +34,7 @@ function SigningDashboardContent() {
       <div className="text-sm breadcrumbs mb-4">
         <ul>
           <li>
-            <Link href="/dashboard">Dashboard</Link>
+            <Link href="/airtable-dashboard">Dashboard</Link>
           </li>
           <li>Signing Dashboard</li>
         </ul>

@@ -52,6 +52,7 @@ export default function Subscriptions() {
   const [newItemServiceId, setNewItemServiceId] = useState('')
   const [newItemAmount, setNewItemAmount] = useState('')
   const [addingItem, setAddingItem] = useState(false)
+  const [generatingTickets, setGeneratingTickets] = useState(false)
 
   useEffect(() => {
     loadCorporateCustomers()
@@ -167,6 +168,31 @@ export default function Subscriptions() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update bundle status')
       console.error('Error updating bundle status:', err)
+    }
+  }
+
+  const generateThisMonthsTickets = async () => {
+    if (!bundle) return
+    try {
+      setGeneratingTickets(true)
+      const response = await fetch(`/api/corporate-billing-bundles/generate-tickets`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bundleId: bundle.id }),
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || 'Failed to generate tickets')
+      const { ticketsCreated, ticketsSkippedExisting, period } = data.data
+      alert(
+        ticketsCreated > 0
+          ? `Created ${ticketsCreated} pipeline ticket(s) for ${period}.${ticketsSkippedExisting > 0 ? ` (${ticketsSkippedExisting} already existed.)` : ''}`
+          : `No new tickets needed for ${period} — all ${ticketsSkippedExisting} already exist.`
+      )
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to generate tickets')
+      console.error('Error generating tickets:', err)
+    } finally {
+      setGeneratingTickets(false)
     }
   }
 
@@ -307,15 +333,27 @@ export default function Subscriptions() {
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-xl font-semibold">Bundle Line Items</h3>
-                <select
-                  className="select select-bordered select-sm"
-                  value={bundle.status}
-                  onChange={(e) => updateBundleStatus(e.target.value as Bundle['status'])}
-                >
-                  <option value="active">Active</option>
-                  <option value="paused">Paused</option>
-                  <option value="cancelled">Cancelled</option>
-                </select>
+                <div className="flex items-center gap-2">
+                  {bundle.status === 'active' && (
+                    <button
+                      className="btn btn-outline btn-sm"
+                      disabled={generatingTickets || activeItems.length === 0}
+                      onClick={generateThisMonthsTickets}
+                      title="Create this month's pipeline ticket for each active service in this bundle"
+                    >
+                      {generatingTickets ? <span className="loading loading-spinner loading-xs"></span> : 'Generate This Month\'s Tickets'}
+                    </button>
+                  )}
+                  <select
+                    className="select select-bordered select-sm"
+                    value={bundle.status}
+                    onChange={(e) => updateBundleStatus(e.target.value as Bundle['status'])}
+                  >
+                    <option value="active">Active</option>
+                    <option value="paused">Paused</option>
+                    <option value="cancelled">Cancelled</option>
+                  </select>
+                </div>
               </div>
 
               <div className="overflow-x-auto">

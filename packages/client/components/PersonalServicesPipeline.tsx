@@ -14,6 +14,7 @@ import {
   urgencyToBadgeClass,
   formatDaysLabel,
 } from "@/lib/extensionHelpers";
+import { PIPELINE_IN_PROGRESS_STATUSES, resolvePipelineStatusBadge } from "@/lib/pipelineStatus";
 
 interface PipelineClient {
   id: string;
@@ -449,51 +450,19 @@ export default function PersonalServicesPipeline() {
     }
   };
 
+  const PERSONAL_TERMINAL_STATUSES = {
+    "File Return": { badgeColor: "success", badgeLabel: "Filed" },
+    "Filed Elsewhere": { badgeColor: "neutral", badgeLabel: "Filed Elsewhere" },
+  };
+
   const getStatusBadge = (status?: string) => {
-    switch (status) {
-      case "Hold for Customer":
-        return (
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-warning"></span>
-            <span className="text-xs whitespace-nowrap">On Hold</span>
-          </div>
-        );
-      case "Ready for Customer Review":
-        return (
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-secondary"></span>
-            <span className="text-xs whitespace-nowrap">Ready for Review</span>
-          </div>
-        );
-      case "Escalate to Manager":
-        return (
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-error"></span>
-            <span className="text-xs whitespace-nowrap">Escalated</span>
-          </div>
-        );
-      case "File Return":
-        return (
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-success"></span>
-            <span className="text-xs whitespace-nowrap">Filed</span>
-          </div>
-        );
-      case "Filed Elsewhere":
-        return (
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-neutral"></span>
-            <span className="text-xs whitespace-nowrap">Filed Elsewhere</span>
-          </div>
-        );
-      default:
-        return (
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-info"></span>
-            <span className="text-xs whitespace-nowrap">Active</span>
-          </div>
-        );
-    }
+    const { badgeColor, badgeLabel } = resolvePipelineStatusBadge(status, PERSONAL_TERMINAL_STATUSES);
+    return (
+      <div className="flex items-center gap-2">
+        <span className={`w-3 h-3 rounded-full bg-${badgeColor}`}></span>
+        <span className="text-xs whitespace-nowrap">{badgeLabel}</span>
+      </div>
+    );
   };
 
   const handleFileReturn = async (clientId: string, amount?: number, note?: string, billingStatus?: string) => {
@@ -779,11 +748,11 @@ export default function PersonalServicesPipeline() {
                   onChange={(e) => setStatusFilter(e.target.value)}
                 >
                   <option value="">All Statuses</option>
-                  <option value="Active">Active</option>
-                  <option value="Hold for Customer">Hold for Customer</option>
-                  <option value="Ready for Customer Review">Ready for Customer Review</option>
-                  <option value="Escalate to Manager">Escalate to Manager</option>
+                  {PIPELINE_IN_PROGRESS_STATUSES.map((s) => (
+                    <option key={s.value} value={s.value}>{s.value}</option>
+                  ))}
                   <option value="File Return">File Return</option>
+                  <option value="Filed Elsewhere">Filed Elsewhere</option>
                 </select>
               </div>
 
@@ -1128,46 +1097,19 @@ export default function PersonalServicesPipeline() {
               Select the new status for this client:
             </p>
             <div className="flex flex-col gap-2">
-              <button
-                className="btn btn-outline btn-block justify-start"
-                onClick={() => {
-                  handleStatusChange(selectedClientForStatus, "Active");
-                  setShowStatusModal(false);
-                  setSelectedClientForStatus(null);
-                }}
-              >
-                ▶️ Set Active
-              </button>
-              <button
-                className="btn btn-outline btn-block justify-start"
-                onClick={() => {
-                  handleStatusChange(selectedClientForStatus, "Hold for Customer");
-                  setShowStatusModal(false);
-                  setSelectedClientForStatus(null);
-                }}
-              >
-                ⏸️ Hold for Customer
-              </button>
-              <button
-                className="btn btn-outline btn-block justify-start"
-                onClick={() => {
-                  handleStatusChange(selectedClientForStatus, "Ready for Customer Review");
-                  setShowStatusModal(false);
-                  setSelectedClientForStatus(null);
-                }}
-              >
-                👀 Ready for Customer Review
-              </button>
-              <button
-                className="btn btn-outline btn-block justify-start"
-                onClick={() => {
-                  handleStatusChange(selectedClientForStatus, "Escalate to Manager");
-                  setShowStatusModal(false);
-                  setSelectedClientForStatus(null);
-                }}
-              >
-                ⬆️ Escalate to Manager
-              </button>
+              {PIPELINE_IN_PROGRESS_STATUSES.map((s) => (
+                <button
+                  key={s.value}
+                  className="btn btn-outline btn-block justify-start"
+                  onClick={() => {
+                    handleStatusChange(selectedClientForStatus, s.value);
+                    setShowStatusModal(false);
+                    setSelectedClientForStatus(null);
+                  }}
+                >
+                  {s.actionLabel}
+                </button>
+              ))}
               <button
                 className="btn btn-success btn-block justify-start font-semibold"
                 onClick={() => {

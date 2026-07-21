@@ -15,6 +15,7 @@ import { getDb } from '../db/client';
 import {
   corporateBillingBundles,
   corporateBillingBundleItems,
+  corporatePipelineTickets,
   servicesCorporate,
   corporations,
 } from '../db/schema';
@@ -296,6 +297,101 @@ app.patch('/:id/items/:itemId', async (c) => {
     console.error('Error updating bundle item:', error);
     return c.json(
       { success: false, error: error instanceof Error ? error.message : 'Failed to update bundle item' },
+      500
+    );
+  }
+});
+
+/**
+ * POST /api/corporate-billing-bundles/generate-tickets
+ * Generate this period's pipeline ticket for each active bundle line item
+ * (optionally scoped to one bundle via { bundleId }; defaults to the
+ * current YYYY-MM). Idempotent per (bundle item, period) — the DB unique
+ * index on (bundle_item_id, billing_period) guarantees no duplicate ticket
+ * is ever created for the same line item in the same period, so this is
+ * safe to run more than once. Manual trigger for now (called from the
+ * bundle screen) rather than a scheduled job.
+ */
+app.post('/generate-tickets', async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const bundleId: string | undefined = body?.bundleId;
+    const period: string = body?.period || new Date().toISOString().slice(0, 7); // 'YYYY-MM'
+
+    const db = getDb();
+
+    const bundleRows = await db
+      .select()
+      .from(corporateBillingBundles)
+      .where(
+        bundleId
+          ? and(eq(corporateBillingBundles.id, bundleId), eq(corporateBillingBundles.status, 'active'))
+          : eq(corporateBillingBundles.status, 'active')
+      );
+
+    if (bundleId && bundleRows.length === 0) {
+      return c.json({ success: false, error: 'Active bundle not found' }, 404);
+    }
+
+    let created = 0;
+    let skipped = 0;
+    const createdTicketIds: string[] = [];
+
+    for (const bundle of bundleRows) {
+      const items = await db
+        .select()
+        .from(corporateBillingBundleItems)
+        .where(
+          and(eq(corporateBillingBundleItems.bundleId, bundle.id), eq(corporateBillingBundleItems.status, 'active'))
+        );
+
+      for (const item of items) {
+        const [existing] = await db
+          .select({ id: corporatePipelineTickets.id })
+          .from(corporatePipelineTickets)
+          .where(
+            and(
+              eq(corporatePipelineTickets.bundleItemId, item.id),
+              eq(corporatePipelineTickets.billingPeriod, period)
+            )
+          )
+          .limit(1);
+
+        if (existing) {
+          skipped++;
+          continue;
+        }
+
+        const [ticket] = await db
+          .insert(corporatePipelineTickets)
+          .values({
+            corporationId: bundle.corporationId,
+            serviceId: item.serviceId,
+            status: 'Active',
+            bundleItemId: item.id,
+            billingPeriod: period,
+            dateAssigned: new Date().toISOString().split('T')[0],
+          })
+          .returning({ id: corporatePipelineTickets.id });
+        created++;
+        createdTicketIds.push(ticket.id);
+      }
+    }
+
+    return c.json({
+      success: true,
+      data: {
+        period,
+        bundlesProcessed: bundleRows.length,
+        ticketsCreated: created,
+        ticketsSkippedExisting: skipped,
+        createdTicketIds,
+      },
+    });
+  } catch (error) {
+    console.error('Error generating recurring tickets:', error);
+    return c.json(
+      { success: false, error: error instanceof Error ? error.message : 'Failed to generate recurring tickets' },
       500
     );
   }

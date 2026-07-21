@@ -3,7 +3,6 @@
 import { useState } from 'react'
 import { authClient } from '@/lib/auth-client'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 
 export default function SignIn() {
   const [email, setEmail] = useState('')
@@ -40,12 +39,6 @@ export default function SignIn() {
           <h2 className="mt-6 text-center text-3xl font-extrabold text-white">
             Sign in to your account
           </h2>
-          <p className="mt-2 text-center text-sm text-gray-400">
-            Or{' '}
-            <Link href="/auth/signup" className="font-medium text-blue-400 hover:text-blue-300">
-              create a new account
-            </Link>
-          </p>
         </div>
         
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>

@@ -1,0 +1,2 @@
+ALTER TABLE "billing_records" ALTER COLUMN "service_rendered_date" SET DATA TYPE date USING "service_rendered_date"::date;--> statement-breakpoint
+ALTER TABLE "billing_records" ALTER COLUMN "receipt_date" SET DATA TYPE date USING "receipt_date"::date;

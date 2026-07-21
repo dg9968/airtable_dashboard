@@ -6,6 +6,7 @@ import {
   integer,
   numeric,
   boolean,
+  date,
   index,
   uniqueIndex,
 } from 'drizzle-orm/pg-core';
@@ -187,11 +188,16 @@ export const billingRecords = pgTable(
     clientType: text('client_type'), // 'personal' | 'corporate'
     billingStatus: text('billing_status'), // 'Unbilled' | 'Billed - Paid' | 'Billed - Unpaid' | 'Waived' | 'Covered by Bundle'
     serviceType: text('service_type'),
-    serviceRenderedDate: text('service_rendered_date'),
+    // Real date column — verified 100% clean 'YYYY-MM-DD' data before
+    // converting from text (no mixed Airtable formats actually present).
+    // mode: 'string' keeps the wire/JS representation as a plain date
+    // string, unchanged for existing consumers.
+    serviceRenderedDate: date('service_rendered_date', { mode: 'string' }),
     processor: text('processor'),
     amountCharged: numeric('amount_charged'),
     paymentMethod: text('payment_method'),
-    receiptDate: text('receipt_date'),
+    // Real date column — same rationale as service_rendered_date above.
+    receiptDate: date('receipt_date', { mode: 'string' }),
     notes: text('notes'),
     subscriptionPersonalId: text('subscription_personal_id'), // no FK: historical rows may point at now-nonexistent tickets (subscriptions used to be deleted at billing time)
     subscriptionCorporateId: text('subscription_corporate_id'),

@@ -14,6 +14,7 @@ import {
   urgencyToBadgeClass,
   formatDaysLabel,
 } from "@/lib/extensionHelpers";
+import { PIPELINE_IN_PROGRESS_STATUSES, resolvePipelineStatusBadge } from "@/lib/pipelineStatus";
 
 interface PipelineCompany {
   id: string;
@@ -23,6 +24,7 @@ interface PipelineCompany {
   phone: string;
   email?: string;
   processor?: string[];
+  serviceId?: string;
   serviceName?: string;
   addedAt: string;
   status?: string;
@@ -75,6 +77,9 @@ export default function CorporateServicesPipeline() {
   const [selectedCompanyForNotes, setSelectedCompanyForNotes] = useState<PipelineCompany | null>(null);
   const [showExtensionModal, setShowExtensionModal] = useState(false);
   const [selectedCompanyForExtension, setSelectedCompanyForExtension] = useState<PipelineCompany | null>(null);
+  // corporationId:serviceId -> the client's matching active bundle line item,
+  // so a ticket can offer "Link to Bundle" when one exists for its service.
+  const [bundleItemLookup, setBundleItemLookup] = useState<Map<string, { itemId: string; amount: number }>>(new Map());
 
   // Available services - these match the view names in Airtable
   const services = [
@@ -141,6 +146,33 @@ export default function CorporateServicesPipeline() {
     };
 
     fetchServices();
+  }, []);
+
+  // Fetch all clients' billing bundles once, so tickets can be matched
+  // against a bundle line item for the same (corporation, service) pair.
+  useEffect(() => {
+    const fetchBundles = async () => {
+      try {
+        const response = await fetch(`/api/corporate-billing-bundles`);
+        const data = await response.json();
+
+        if (data.success && Array.isArray(data.data)) {
+          const map = new Map<string, { itemId: string; amount: number }>();
+          for (const bundle of data.data) {
+            if (bundle.status !== 'active') continue;
+            for (const item of bundle.items || []) {
+              if (item.status !== 'active') continue;
+              map.set(`${bundle.corporationId}:${item.serviceId}`, { itemId: item.id, amount: item.amount });
+            }
+          }
+          setBundleItemLookup(map);
+        }
+      } catch (error) {
+        console.error("Failed to fetch billing bundles:", error);
+      }
+    };
+
+    fetchBundles();
   }, []);
 
   // Fetch pipeline from Airtable - fetch based on selected service view or corporate filter
@@ -244,6 +276,11 @@ export default function CorporateServicesPipeline() {
                                "";
             const serviceNameStr = Array.isArray(serviceName) ? serviceName[0] : serviceName;
 
+            // Get the raw Service ID from the "Services" link field (needed to
+            // match this ticket against a client's billing bundle line items)
+            const serviceIdRaw = record.fields["Services"];
+            const serviceIdStr = Array.isArray(serviceIdRaw) ? serviceIdRaw[0] : serviceIdRaw;
+
             // Get Processor (multiple select field or link field)
             const processor = record.fields["Processor"] || [];
 
@@ -288,6 +325,7 @@ export default function CorporateServicesPipeline() {
               ein: einStr,
               phone: phoneStr,
               email: emailStr,
+              serviceId: serviceIdStr,
               serviceName: serviceNameStr,
               processor: Array.isArray(processor)
                 ? processor
@@ -493,6 +531,47 @@ export default function CorporateServicesPipeline() {
     }
   };
 
+  // Link/unlink this ticket to the client's matching billing bundle line
+  // item. Once linked, completing the ticket defaults to "Covered by Bundle"
+  // instead of a one-off quote (see handleStatusChange/handleAmountModalSubmit).
+  const setBundleLink = async (companyId: string, bundleItemId: string | null) => {
+    try {
+      setUpdating(companyId);
+
+      const response = await fetch(`/api/subscriptions-corporate/${companyId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fields: { "Bundle Item": bundleItemId ? [bundleItemId] : [] },
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to update bundle link");
+      }
+
+      const billingAmount = data.data?.fields?.["Billing Amount"];
+      setPipelineCompanies((prevCompanies) =>
+        prevCompanies.map((company) =>
+          company.id === companyId
+            ? {
+                ...company,
+                bundleItemId: bundleItemId || undefined,
+                billingAmount: bundleItemId ? billingAmount : undefined,
+              }
+            : company
+        )
+      );
+    } catch (error) {
+      console.error("Error updating bundle link:", error);
+      alert(error instanceof Error ? error.message : "Failed to update bundle link. Please try again.");
+    } finally {
+      setUpdating(null);
+    }
+  };
+
   const getPriorityBadge = (priority: number) => {
     if (priority >= 30) {
       return (
@@ -518,44 +597,18 @@ export default function CorporateServicesPipeline() {
     }
   };
 
+  const CORPORATE_TERMINAL_STATUSES = {
+    "Complete Service": { badgeColor: "success", badgeLabel: "Completed" },
+  };
+
   const getStatusBadge = (status?: string) => {
-    switch (status) {
-      case "Hold for Customer":
-        return (
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-warning"></span>
-            <span className="text-xs whitespace-nowrap">On Hold</span>
-          </div>
-        );
-      case "Ready for Customer Review":
-        return (
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-secondary"></span>
-            <span className="text-xs whitespace-nowrap">Ready for Review</span>
-          </div>
-        );
-      case "Escalate to Manager":
-        return (
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-error"></span>
-            <span className="text-xs whitespace-nowrap">Escalated</span>
-          </div>
-        );
-      case "Complete Service":
-        return (
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-success"></span>
-            <span className="text-xs whitespace-nowrap">Completed</span>
-          </div>
-        );
-      default:
-        return (
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-info"></span>
-            <span className="text-xs whitespace-nowrap">Active</span>
-          </div>
-        );
-    }
+    const { badgeColor, badgeLabel } = resolvePipelineStatusBadge(status, CORPORATE_TERMINAL_STATUSES);
+    return (
+      <div className="flex items-center gap-2">
+        <span className={`w-3 h-3 rounded-full bg-${badgeColor}`}></span>
+        <span className="text-xs whitespace-nowrap">{badgeLabel}</span>
+      </div>
+    );
   };
 
   // Check if a subscription already exists for a company and service
@@ -884,10 +937,9 @@ export default function CorporateServicesPipeline() {
                   onChange={(e) => setStatusFilter(e.target.value)}
                 >
                   <option value="">All Statuses</option>
-                  <option value="Active">Active</option>
-                  <option value="Hold for Customer">Hold for Customer</option>
-                  <option value="Ready for Customer Review">Ready for Customer Review</option>
-                  <option value="Escalate to Manager">Escalate to Manager</option>
+                  {PIPELINE_IN_PROGRESS_STATUSES.map((s) => (
+                    <option key={s.value} value={s.value}>{s.value}</option>
+                  ))}
                   <option value="Complete Service">Complete Service</option>
                 </select>
               </div>
@@ -1108,6 +1160,32 @@ export default function CorporateServicesPipeline() {
                                 📋 Extension
                               </button>
                             )}
+                            {company.bundleItemId ? (
+                              <button
+                                className="btn btn-sm btn-ghost"
+                                title="Unlink from this client's billing bundle"
+                                disabled={updating === company.id}
+                                onClick={() => setBundleLink(company.id, null)}
+                              >
+                                🔗 Bundled{company.billingAmount != null ? ` ($${company.billingAmount.toLocaleString()}/mo)` : ""}
+                              </button>
+                            ) : (
+                              company.corporateId &&
+                              company.serviceId &&
+                              bundleItemLookup.has(`${company.corporateId}:${company.serviceId}`) && (
+                                <button
+                                  className="btn btn-sm btn-outline btn-info"
+                                  title="Link this ticket to the client's billing bundle"
+                                  disabled={updating === company.id}
+                                  onClick={() => {
+                                    const match = bundleItemLookup.get(`${company.corporateId}:${company.serviceId}`)!;
+                                    setBundleLink(company.id, match.itemId);
+                                  }}
+                                >
+                                  🔗 Link to Bundle (${bundleItemLookup.get(`${company.corporateId}:${company.serviceId}`)!.amount.toLocaleString()}/mo)
+                                </button>
+                              )
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -1238,46 +1316,19 @@ export default function CorporateServicesPipeline() {
               Select the new status for this company:
             </p>
             <div className="flex flex-col gap-2">
-              <button
-                className="btn btn-outline btn-block justify-start"
-                onClick={() => {
-                  handleStatusChange(selectedCompanyForStatus, "Active");
-                  setShowStatusModal(false);
-                  setSelectedCompanyForStatus(null);
-                }}
-              >
-                ▶️ Set Active
-              </button>
-              <button
-                className="btn btn-outline btn-block justify-start"
-                onClick={() => {
-                  handleStatusChange(selectedCompanyForStatus, "Hold for Customer");
-                  setShowStatusModal(false);
-                  setSelectedCompanyForStatus(null);
-                }}
-              >
-                ⏸️ Hold for Customer
-              </button>
-              <button
-                className="btn btn-outline btn-block justify-start"
-                onClick={() => {
-                  handleStatusChange(selectedCompanyForStatus, "Ready for Customer Review");
-                  setShowStatusModal(false);
-                  setSelectedCompanyForStatus(null);
-                }}
-              >
-                👀 Ready for Customer Review
-              </button>
-              <button
-                className="btn btn-outline btn-block justify-start"
-                onClick={() => {
-                  handleStatusChange(selectedCompanyForStatus, "Escalate to Manager");
-                  setShowStatusModal(false);
-                  setSelectedCompanyForStatus(null);
-                }}
-              >
-                ⬆️ Escalate to Manager
-              </button>
+              {PIPELINE_IN_PROGRESS_STATUSES.map((s) => (
+                <button
+                  key={s.value}
+                  className="btn btn-outline btn-block justify-start"
+                  onClick={() => {
+                    handleStatusChange(selectedCompanyForStatus, s.value);
+                    setShowStatusModal(false);
+                    setSelectedCompanyForStatus(null);
+                  }}
+                >
+                  {s.actionLabel}
+                </button>
+              ))}
               <button
                 className="btn btn-success btn-block justify-start font-semibold"
                 onClick={() => {

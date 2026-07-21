@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 const PROTECTED_PREFIXES = [
-  '/dashboard',
   '/admin',
   '/airtable-dashboard',
   '/document-management',
@@ -30,7 +29,6 @@ export function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/dashboard/:path*',
     '/admin/:path*',
     '/airtable-dashboard/:path*',
     '/document-management/:path*',

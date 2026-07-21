@@ -71,6 +71,13 @@
       "when": 1784650355418,
       "tag": "0009_phase2_physical_cleanup",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1784652132493,
+      "tag": "0010_date-columns",
+      "breakpoints": true
     }
   ]
 }
