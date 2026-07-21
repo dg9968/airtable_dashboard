@@ -15,15 +15,15 @@ import { personalServices, servicesCorporate } from './catalogs';
 
 // Airtable "Subscriptions Personal" — junction Personal ↔ Personal Services,
 // doubling as the personal work pipeline (Tax Prep, File Extension, ...).
-// TS name renamed to "pipeline tickets" (physical table name unchanged): this
-// row is a unit of work, never money — personal clients are billed per-
-// service via billing_records, they never get a recurring billing bundle.
-// The Airtable link field to Personal was misleadingly named "Last Name".
-// tax_preparer_id references the Better Auth user table (old Airtable Users
-// rec IDs are remapped by email during ETL). The legacy "Processor" text and
-// "Name (from Team Link)" lookups are computed in serializers from that user.
+// This row is a unit of work, never money — personal clients are billed
+// per-service via billing_records, they never get a recurring billing
+// bundle. The Airtable link field to Personal was misleadingly named
+// "Last Name". tax_preparer_id references the Better Auth user table (old
+// Airtable Users rec IDs are remapped by email during ETL). The legacy
+// "Processor" text and "Name (from Team Link)" lookups are computed in
+// serializers from that user.
 export const personalPipelineTickets = pgTable(
-  'subscriptions_personal',
+  'personal_pipeline_tickets',
   {
     id: id(),
     personalId: text('personal_id').references(() => personal.id, { onDelete: 'set null' }),
@@ -39,26 +39,22 @@ export const personalPipelineTickets = pgTable(
     createdAt: createdAt(),
   },
   (t) => [
-    index('subscriptions_personal_personal_idx').on(t.personalId),
-    index('subscriptions_personal_service_idx').on(t.serviceId),
+    index('personal_pipeline_tickets_personal_idx').on(t.personalId),
+    index('personal_pipeline_tickets_service_idx').on(t.serviceId),
   ]
 );
 
 // Airtable "Subscriptions Corporate" — junction Corporations ↔ Services
-// Corporate. TS name renamed to "pipeline tickets" (physical table name
-// unchanged) to separate it conceptually from corporate_billing_bundles:
-// this row is a unit of work (status/processor/notes/due dates), never a
-// place money lives. billing_amount is DEPRECATED — application code no
-// longer reads or writes it; a client's recurring monthly fee now lives
-// entirely on corporate_billing_bundle_items, reached optionally via
-// bundle_item_id when this ticket's service is part of a bundle. The column
-// is dropped in a follow-up migration once historical amounts are carried
-// into bundles (see scripts/migrate-to-billing-bundles.ts).
-// Customer lookups (Company/EIN/etc.) are joins in serializers. processor_id
-// is a remapped Better Auth user id; "Tax Preparer" here was a plain text
-// name in Airtable.
+// Corporate — separate from corporate_billing_bundles: this row is a unit
+// of work (status/processor/notes/due dates), never a place money lives. A
+// client's recurring monthly fee lives entirely on
+// corporate_billing_bundle_items, reached optionally via bundle_item_id
+// when this ticket's service is part of a bundle. Customer lookups
+// (Company/EIN/etc.) are joins in serializers. processor_id is a remapped
+// Better Auth user id; "Tax Preparer" here was a plain text name in
+// Airtable.
 export const corporatePipelineTickets = pgTable(
-  'subscriptions_corporate',
+  'corporate_pipeline_tickets',
   {
     id: id(),
     corporationId: text('corporation_id').references(() => corporations.id, { onDelete: 'set null' }),
@@ -68,8 +64,6 @@ export const corporatePipelineTickets = pgTable(
     processorId: text('processor_id'), // Better Auth user id
     taxPreparer: text('tax_preparer'), // legacy free-text name
     dateAssigned: text('date_assigned'),
-    /** @deprecated superseded by corporate_billing_bundle_items.amount via bundleItemId. Not read/written by app code; dropped in a later migration. */
-    billingAmount: numeric('billing_amount'),
     // Set when this ticket's service is covered by the client's recurring
     // billing bundle — completing it then records a billing_records row at
     // status 'Covered by Bundle' instead of a one-off charge. Nullable: most
@@ -79,9 +73,7 @@ export const corporatePipelineTickets = pgTable(
     }),
     // Which recurring period this ticket represents for its bundle item
     // (e.g. '2026-07'), so a future recurring-ticket generator can avoid
-    // creating a duplicate ticket for the same bundle line/period. Not
-    // populated/consumed yet in phase 1 — laid down so that capability
-    // doesn't need another migration.
+    // creating a duplicate ticket for the same bundle line/period.
     billingPeriod: text('billing_period'),
     filed: boolean('filed'),
     sendToBookkeeper: boolean('send_to_bookkeeper'),
@@ -99,11 +91,11 @@ export const corporatePipelineTickets = pgTable(
     createdAt: createdAt(),
   },
   (t) => [
-    index('subscriptions_corporate_corporation_idx').on(t.corporationId),
-    index('subscriptions_corporate_service_idx').on(t.serviceId),
-    index('subscriptions_corporate_status_idx').on(t.status),
-    index('subscriptions_corporate_bundle_item_idx').on(t.bundleItemId),
-    uniqueIndex('subscriptions_corporate_bundle_period_idx')
+    index('corporate_pipeline_tickets_corporation_idx').on(t.corporationId),
+    index('corporate_pipeline_tickets_service_idx').on(t.serviceId),
+    index('corporate_pipeline_tickets_status_idx').on(t.status),
+    index('corporate_pipeline_tickets_bundle_item_idx').on(t.bundleItemId),
+    uniqueIndex('corporate_pipeline_tickets_bundle_period_idx')
       .on(t.bundleItemId, t.billingPeriod)
       .where(sql`bundle_item_id IS NOT NULL`),
   ]
@@ -180,17 +172,15 @@ export const corporateBillingBundleItems = pgTable(
 );
 
 // Airtable "Services Rendered" — completed work awaiting billing or already
-// billed. TS name renamed to "billing records" (physical table name
-// unchanged): conceptually this is now also "the ledger" — see
-// billing_status. Client/service/processor are stored values (not lookups),
-// by design, so they keep reading correctly even if the originating client
-// or service is later renamed. ledger_entry_id is DEPRECATED (the separate
-// Ledger table is dropped — every Ledger row was always just a copy of the
-// Services Rendered row that produced it, so "billed and paid" is now the
-// single source of truth for revenue actually recorded, right here via
-// billing_status = 'Billed - Paid'). Dropped in a follow-up migration.
+// billed. This is now also "the ledger": the separate Ledger table was
+// dropped since every Ledger row was always just a copy of the Services
+// Rendered row that produced it — "billed and paid" is the single source of
+// truth for revenue actually recorded, via billing_status = 'Billed - Paid'.
+// Client/service/processor are stored values (not lookups), by design, so
+// they keep reading correctly even if the originating client or service is
+// later renamed.
 export const billingRecords = pgTable(
-  'services_rendered',
+  'billing_records',
   {
     id: id(),
     clientName: text('client_name'),
@@ -205,35 +195,12 @@ export const billingRecords = pgTable(
     notes: text('notes'),
     subscriptionPersonalId: text('subscription_personal_id'), // no FK: historical rows may point at now-nonexistent tickets (subscriptions used to be deleted at billing time)
     subscriptionCorporateId: text('subscription_corporate_id'),
-    /** @deprecated the separate ledger table is gone; not read/written by app code. Dropped in a later migration. */
-    ledgerEntryId: text('ledger_entry_id'),
     createdAt: createdAt(),
   },
   (t) => [
-    index('services_rendered_billing_status_idx').on(t.billingStatus),
-    index('services_rendered_date_idx').on(t.serviceRenderedDate),
+    index('billing_records_billing_status_idx').on(t.billingStatus),
+    index('billing_records_date_idx').on(t.serviceRenderedDate),
   ]
-);
-
-// Airtable "Ledger" — DEPRECATED, superseded by billing_records (see above).
-// No longer written to by app code; dropped in a follow-up migration once
-// its historical rows are confirmed carried forward (every ledger insert
-// historically originated from the services-rendered bill flow, so none
-// should be missing from billing_records).
-export const ledger = pgTable(
-  'ledger',
-  {
-    id: id(),
-    serviceRendered: text('service_rendered'),
-    receiptDate: text('receipt_date'),
-    amountCharged: numeric('amount_charged'),
-    nameOfClient: text('name_of_client'),
-    paymentMethod: text('payment_method'),
-    subscriptionPersonalId: text('subscription_personal_id'),
-    subscriptionCorporateId: text('subscription_corporate_id'),
-    createdAt: createdAt(),
-  },
-  (t) => [index('ledger_receipt_date_idx').on(t.receiptDate)]
 );
 
 // Note tables — same shape, different parent.
