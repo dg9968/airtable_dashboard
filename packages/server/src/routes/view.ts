@@ -13,8 +13,8 @@ import { getDb } from '../db/client';
 import {
   personal,
   corporations,
-  subscriptionsPersonal,
-  subscriptionsCorporate,
+  personalPipelineTickets,
+  corporatePipelineTickets,
   salesTaxCertificates,
 } from '../db/schema';
 import {
@@ -94,12 +94,12 @@ async function fetchMigratedRecords(tableName: string): Promise<AirtableShapedRe
     return rows.map((row) => personalToAirtableRecord(row, relMap.get(row.id), lookup));
   }
   if (tableName === 'Subscriptions Personal') {
-    const rows = await db.select().from(subscriptionsPersonal);
+    const rows = await db.select().from(personalPipelineTickets);
     const ctx = await loadSubsPersonalContext(db);
     return rows.map((row) => subsPersonalToAirtableRecord(row, ctx));
   }
   if (tableName === 'Subscriptions Corporate') {
-    const rows = await db.select().from(subscriptionsCorporate);
+    const rows = await db.select().from(corporatePipelineTickets);
     const ctx = await loadSubsCorporateContext(db);
     return rows.map((row) => subsCorporateToAirtableRecord(row, ctx));
   }

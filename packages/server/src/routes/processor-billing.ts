@@ -5,7 +5,7 @@
 import { Hono } from 'hono';
 import { and, eq } from 'drizzle-orm';
 import { getDb } from '../db/client';
-import { subscriptionsCorporate, servicesCorporate } from '../db/schema';
+import { corporatePipelineTickets, servicesCorporate } from '../db/schema';
 import {
   loadSubsCorporateContext,
   subsCorporateToAirtableRecord,
@@ -23,13 +23,13 @@ app.get('/', async (c) => {
     const db = getDb();
 
     const rows = await db
-      .select({ sub: subscriptionsCorporate })
-      .from(subscriptionsCorporate)
-      .innerJoin(servicesCorporate, eq(subscriptionsCorporate.serviceId, servicesCorporate.id))
+      .select({ sub: corporatePipelineTickets })
+      .from(corporatePipelineTickets)
+      .innerJoin(servicesCorporate, eq(corporatePipelineTickets.serviceId, servicesCorporate.id))
       .where(
         and(
           eq(servicesCorporate.name, 'Bookkeeping Clients'),
-          eq(subscriptionsCorporate.status, 'Active')
+          eq(corporatePipelineTickets.status, 'Active')
         )
       )
       .then((rs) => rs.map((r) => r.sub));

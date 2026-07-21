@@ -4,9 +4,9 @@
  */
 
 import { Hono } from 'hono';
-import { count, sql } from 'drizzle-orm';
+import { and, count, eq, sql } from 'drizzle-orm';
 import { getDb } from '../db/client';
-import { corporations, personal, subscriptionsCorporate, ledger } from '../db/schema';
+import { corporations, personal, corporateBillingBundles, corporateBillingBundleItems, billingRecords } from '../db/schema';
 import { authUser } from '../db/auth-readonly';
 
 const app = new Hono();
@@ -24,24 +24,37 @@ app.get('/', async (c) => {
       [{ personalClients }],
       [{ activeProcessors }],
       [{ monthlyRevenue }],
-      monthLedger,
+      paidRecords,
     ] = await Promise.all([
       db.select({ corporateClients: count() }).from(corporations),
       db.select({ personalClients: count() }).from(personal),
       db.select({ activeProcessors: count() }).from(authUser),
-      db.select({ monthlyRevenue: sql<string>`coalesce(sum(${subscriptionsCorporate.billingAmount}), 0)` }).from(subscriptionsCorporate),
-      db.select({ receiptDate: ledger.receiptDate, amountCharged: ledger.amountCharged }).from(ledger),
+      // Recurring monthly revenue = sum of active line items on active
+      // bundles. Unlike the old per-ticket billing_amount, this never
+      // shrinks when a covered piece of work is completed and billed,
+      // since bundles are never deleted.
+      db
+        .select({ monthlyRevenue: sql<string>`coalesce(sum(${corporateBillingBundleItems.amount}), 0)` })
+        .from(corporateBillingBundleItems)
+        .innerJoin(corporateBillingBundles, eq(corporateBillingBundleItems.bundleId, corporateBillingBundles.id))
+        .where(and(eq(corporateBillingBundleItems.status, 'active'), eq(corporateBillingBundles.status, 'active'))),
+      db
+        .select({ receiptDate: billingRecords.receiptDate, amountCharged: billingRecords.amountCharged })
+        .from(billingRecords)
+        .where(eq(billingRecords.billingStatus, 'Billed - Paid')),
     ]);
 
-    // Tasks completed this month = ledger entries with Receipt Date in the
-    // current month. receipt_date holds mixed date / ISO strings, so parse in JS.
+    // Tasks completed this month = paid billing records with Receipt Date in
+    // the current month. receipt_date holds mixed date / ISO strings, so
+    // month-bucketing still happens in JS, but the paid-only filter is now a
+    // SQL predicate instead of scanning every historical record.
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
 
     let tasksCompletedThisMonth = 0;
     let monthlyTaskRevenue = 0;
-    for (const entry of monthLedger) {
+    for (const entry of paidRecords) {
       if (!entry.receiptDate) continue;
       const date = new Date(entry.receiptDate);
       if (date >= startOfMonth && date <= endOfMonth) {
@@ -57,6 +70,7 @@ app.get('/', async (c) => {
         corporateClients,
         personalClients,
         monthlyRevenue: Number(monthlyRevenue),
+        monthlyRevenueRecorded: monthlyTaskRevenue,
         activeProcessors,
         tasksCompletedThisMonth,
         monthlyTaskRevenue,

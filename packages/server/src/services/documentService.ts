@@ -22,7 +22,7 @@ import {
   personalRelationships,
   documents,
   personalServices,
-  subscriptionsPersonal,
+  personalPipelineTickets,
 } from '../db/schema';
 import { personalToAirtableRecord, loadPersonalRelationships } from '../db/serializers';
 
@@ -250,12 +250,12 @@ export async function addClientToPipelineIfNeeded(personalId: string): Promise<b
 
     // 2. Check if client already has this subscription
     const [existing] = await db
-      .select({ id: subscriptionsPersonal.id })
-      .from(subscriptionsPersonal)
+      .select({ id: personalPipelineTickets.id })
+      .from(personalPipelineTickets)
       .where(
         and(
-          eq(subscriptionsPersonal.personalId, personalId),
-          eq(subscriptionsPersonal.serviceId, service.id)
+          eq(personalPipelineTickets.personalId, personalId),
+          eq(personalPipelineTickets.serviceId, service.id)
         )
       )
       .limit(1);
@@ -266,7 +266,7 @@ export async function addClientToPipelineIfNeeded(personalId: string): Promise<b
     }
 
     // 3. Create junction record
-    await db.insert(subscriptionsPersonal).values({ personalId, serviceId: service.id });
+    await db.insert(personalPipelineTickets).values({ personalId, serviceId: service.id });
 
     console.log(`[documentService] Added client ${personalId} to ${SERVICE_NAME}`);
     return true;

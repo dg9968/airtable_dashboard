@@ -57,6 +57,13 @@
       "when": 1783532327910,
       "tag": "0007_skinny_cassandra_nova",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1784593387802,
+      "tag": "0008_even_metal_master",
+      "breakpoints": true
     }
   ]
 }

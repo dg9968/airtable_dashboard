@@ -65,7 +65,8 @@ export default function PersonalServicesPipeline() {
   const [filteredClientName, setFilteredClientName] = useState<string>("");
   const [showNotesModal, setShowNotesModal] = useState(false);
   const [selectedClientForNotes, setSelectedClientForNotes] = useState<PipelineClient | null>(null);
-  const [billingType, setBillingType] = useState<'standard' | 'subscription' | 'waived'>('standard');
+  // Personal clients are always pay-per-service (no billing bundle concept).
+  const [billingType, setBillingType] = useState<'standard' | 'waived'>('standard');
   const [showExtensionModal, setShowExtensionModal] = useState(false);
   const [selectedClientForExtension, setSelectedClientForExtension] = useState<PipelineClient | null>(null);
   const [showExtensionActionModal, setShowExtensionActionModal] = useState(false);
@@ -478,6 +479,13 @@ export default function PersonalServicesPipeline() {
             <span className="text-xs whitespace-nowrap">Filed</span>
           </div>
         );
+      case "Filed Elsewhere":
+        return (
+          <div className="flex items-center gap-2">
+            <span className="w-3 h-3 rounded-full bg-neutral"></span>
+            <span className="text-xs whitespace-nowrap">Filed Elsewhere</span>
+          </div>
+        );
       default:
         return (
           <div className="flex items-center gap-2">
@@ -512,7 +520,7 @@ export default function PersonalServicesPipeline() {
         notes: note || undefined,
       };
 
-      // Add billing status if provided (for Part of Subscription or Waived)
+      // Add billing status if provided (for Waived)
       if (billingStatus) {
         requestBody.billingStatus = billingStatus;
       }
@@ -532,16 +540,20 @@ export default function PersonalServicesPipeline() {
         throw new Error(servicesRenderedData.error || "Failed to create service record");
       }
 
-      // Delete the subscription record from Subscriptions Personal table
+      // Mark the pipeline ticket as filed instead of deleting it — its
+      // notes/tax-preparer history stay intact, and it drops out of the
+      // active pipeline view via the existing status filter.
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-      const deleteResponse = await fetch(`${apiUrl}/api/subscriptions-personal/${clientId}`, {
-        method: "DELETE",
+      const statusResponse = await fetch(`${apiUrl}/api/subscriptions-personal/${clientId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fields: { Status: "File Return" } }),
       });
 
-      const deleteData = await deleteResponse.json();
+      const statusData = await statusResponse.json();
 
-      if (!deleteResponse.ok) {
-        console.error("Warning: Failed to delete subscription record:", deleteData.error);
+      if (!statusResponse.ok) {
+        console.error("Warning: Failed to mark ticket filed:", statusData.error);
       }
 
       // Remove from local state
@@ -579,9 +591,6 @@ export default function PersonalServicesPipeline() {
       if (billingType === 'standard') {
         amount = quotedAmount ? parseFloat(quotedAmount) : undefined;
         billingStatusValue = undefined; // Will default to 'Unbilled' on server
-      } else if (billingType === 'subscription') {
-        amount = 0;
-        billingStatusValue = 'Part of Subscription';
       } else if (billingType === 'waived') {
         amount = 0;
         billingStatusValue = 'Waived';
@@ -601,19 +610,25 @@ export default function PersonalServicesPipeline() {
     try {
       setExtensionActionLoading(true);
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-      const deleteResponse = await fetch(`${apiUrl}/api/subscriptions-personal/${client.id}`, {
-        method: 'DELETE',
+      // Mark the ticket "Filed Elsewhere" instead of deleting it — distinct
+      // from the 4868 "Filed" extension status, so it stays visible in the
+      // Extensions view (which intentionally shows every status) with an
+      // honest record of what happened, rather than silently vanishing.
+      const statusResponse = await fetch(`${apiUrl}/api/subscriptions-personal/${client.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fields: { Status: 'Filed Elsewhere' } }),
       });
-      if (!deleteResponse.ok) {
-        const data = await deleteResponse.json();
-        throw new Error(data.error || 'Failed to remove from extension service');
+      if (!statusResponse.ok) {
+        const data = await statusResponse.json();
+        throw new Error(data.error || 'Failed to update extension ticket');
       }
       setPipelineClients((prev) => prev.filter((c) => c.id !== client.id));
       setShowExtensionActionModal(false);
       setSelectedClientForExtensionAction(null);
     } catch (error) {
-      console.error('Error removing from extension service:', error);
-      alert(error instanceof Error ? error.message : 'Failed to remove from extension service');
+      console.error('Error marking filed elsewhere:', error);
+      alert(error instanceof Error ? error.message : 'Failed to update extension ticket');
     } finally {
       setExtensionActionLoading(false);
     }
@@ -638,17 +653,17 @@ export default function PersonalServicesPipeline() {
       );
       if (!taxPrepService) throw new Error('Tax Prep Pipeline service not found');
 
-      // Create the new Tax Prep Pipeline subscription
-      const createResponse = await fetch(`${apiUrl}/api/subscriptions-personal`, {
-        method: 'POST',
+      // Move this same ticket to the Tax Prep Pipeline service in place —
+      // no delete/recreate, so its notes/tax-preparer history carry over.
+      // It naturally drops out of the File Extension view (which filters by
+      // service) and appears under Tax Prep Pipeline instead.
+      const patchResponse = await fetch(`${apiUrl}/api/subscriptions-personal/${client.id}`, {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ personalId: client.personalId, serviceId: taxPrepService.id }),
+        body: JSON.stringify({ fields: { Service: [taxPrepService.id] } }),
       });
-      const createData = await createResponse.json();
-      if (!createResponse.ok) throw new Error(createData.error || 'Failed to create Tax Prep Pipeline record');
-
-      // Delete the extension subscription
-      await fetch(`${apiUrl}/api/subscriptions-personal/${client.id}`, { method: 'DELETE' });
+      const patchData = await patchResponse.json();
+      if (!patchResponse.ok) throw new Error(patchData.error || 'Failed to move to Tax Prep Pipeline');
 
       setPipelineClients((prev) => prev.filter((c) => c.id !== client.id));
       setShowExtensionActionModal(false);
@@ -1207,16 +1222,6 @@ export default function PersonalServicesPipeline() {
                     onChange={() => setBillingType('standard')}
                   />
                   <span className="label-text">Standard Billing</span>
-                </label>
-                <label className="label cursor-pointer justify-start gap-3 py-1">
-                  <input
-                    type="radio"
-                    name="billingType"
-                    className="radio radio-info radio-sm"
-                    checked={billingType === 'subscription'}
-                    onChange={() => setBillingType('subscription')}
-                  />
-                  <span className="label-text">Part of Subscription</span>
                 </label>
                 <label className="label cursor-pointer justify-start gap-3 py-1">
                   <input

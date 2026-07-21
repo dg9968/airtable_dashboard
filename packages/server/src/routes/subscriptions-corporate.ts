@@ -9,7 +9,7 @@
 import { Hono } from 'hono';
 import { and, eq } from 'drizzle-orm';
 import { getDb } from '../db/client';
-import { subscriptionsCorporate, servicesCorporate } from '../db/schema';
+import { corporatePipelineTickets, servicesCorporate } from '../db/schema';
 import {
   loadSubsCorporateContext,
   subsCorporateToAirtableRecord,
@@ -41,7 +41,7 @@ app.post('/', async (c) => {
 
     const db = getDb();
     const [row] = await db
-      .insert(subscriptionsCorporate)
+      .insert(corporatePipelineTickets)
       .values({ corporationId: corporateId, serviceId })
       .returning();
 
@@ -80,15 +80,15 @@ app.get('/', async (c) => {
     let rows;
     if (filter) {
       const conditions = [eq(servicesCorporate.name, filter.serviceName)];
-      if (filter.activeOnly) conditions.push(eq(subscriptionsCorporate.status, 'Active'));
+      if (filter.activeOnly) conditions.push(eq(corporatePipelineTickets.status, 'Active'));
       rows = await db
-        .select({ sub: subscriptionsCorporate })
-        .from(subscriptionsCorporate)
-        .innerJoin(servicesCorporate, eq(subscriptionsCorporate.serviceId, servicesCorporate.id))
+        .select({ sub: corporatePipelineTickets })
+        .from(corporatePipelineTickets)
+        .innerJoin(servicesCorporate, eq(corporatePipelineTickets.serviceId, servicesCorporate.id))
         .where(and(...conditions))
         .then((rs) => rs.map((r) => r.sub));
     } else {
-      rows = await db.select().from(subscriptionsCorporate);
+      rows = await db.select().from(corporatePipelineTickets);
     }
 
     const ctx = await loadSubsCorporateContext(db);
@@ -121,8 +121,8 @@ app.get('/corporate/:corporateId', async (c) => {
 
     const rows = await db
       .select()
-      .from(subscriptionsCorporate)
-      .where(eq(subscriptionsCorporate.corporationId, corporateId));
+      .from(corporatePipelineTickets)
+      .where(eq(corporatePipelineTickets.corporationId, corporateId));
 
     const ctx = await loadSubsCorporateContext(db);
     const records = rows.map((row) => subsCorporateToAirtableRecord(row, ctx));
@@ -169,9 +169,9 @@ app.patch('/:id', async (c) => {
     const values = subsCorporateFieldsToColumns(fields);
 
     const [row] = await db
-      .update(subscriptionsCorporate)
+      .update(corporatePipelineTickets)
       .set(values)
-      .where(eq(subscriptionsCorporate.id, id))
+      .where(eq(corporatePipelineTickets.id, id))
       .returning();
 
     if (!row) {
@@ -206,7 +206,7 @@ app.delete('/:id', async (c) => {
   try {
     const id = c.req.param('id');
 
-    await getDb().delete(subscriptionsCorporate).where(eq(subscriptionsCorporate.id, id));
+    await getDb().delete(corporatePipelineTickets).where(eq(corporatePipelineTickets.id, id));
 
     return c.json({
       success: true,

@@ -9,7 +9,7 @@
 import { Hono } from 'hono';
 import { and, eq, inArray } from 'drizzle-orm';
 import { getDb } from '../db/client';
-import { subscriptionsPersonal, personalServices } from '../db/schema';
+import { personalPipelineTickets, personalServices } from '../db/schema';
 import {
   loadSubsPersonalContext,
   subsPersonalToAirtableRecord,
@@ -44,11 +44,11 @@ app.post('/', async (c) => {
     // Guard against duplicates (authoritative server-side check)
     const [duplicate] = await db
       .select()
-      .from(subscriptionsPersonal)
+      .from(personalPipelineTickets)
       .where(
         and(
-          eq(subscriptionsPersonal.personalId, personalId),
-          eq(subscriptionsPersonal.serviceId, serviceId)
+          eq(personalPipelineTickets.personalId, personalId),
+          eq(personalPipelineTickets.serviceId, serviceId)
         )
       )
       .limit(1);
@@ -65,7 +65,7 @@ app.post('/', async (c) => {
     }
 
     const [row] = await db
-      .insert(subscriptionsPersonal)
+      .insert(personalPipelineTickets)
       .values({ personalId, serviceId })
       .returning();
 
@@ -107,13 +107,13 @@ app.get('/', async (c) => {
     let rows;
     if (filter) {
       rows = await db
-        .select({ sub: subscriptionsPersonal })
-        .from(subscriptionsPersonal)
-        .innerJoin(personalServices, eq(subscriptionsPersonal.serviceId, personalServices.id))
+        .select({ sub: personalPipelineTickets })
+        .from(personalPipelineTickets)
+        .innerJoin(personalServices, eq(personalPipelineTickets.serviceId, personalServices.id))
         .where(eq(personalServices.name, filter.serviceName))
         .then((rs) => rs.map((r) => r.sub));
     } else {
-      rows = await db.select().from(subscriptionsPersonal);
+      rows = await db.select().from(personalPipelineTickets);
     }
 
     const ctx = await loadSubsPersonalContext(db);
@@ -146,8 +146,8 @@ app.get('/personal/:personalId', async (c) => {
 
     const rows = await db
       .select()
-      .from(subscriptionsPersonal)
-      .where(eq(subscriptionsPersonal.personalId, personalId));
+      .from(personalPipelineTickets)
+      .where(eq(personalPipelineTickets.personalId, personalId));
 
     const ctx = await loadSubsPersonalContext(db);
     const records = rows.map((row) => subsPersonalToAirtableRecord(row, ctx));
@@ -194,9 +194,9 @@ app.patch('/:id', async (c) => {
     const values = subsPersonalFieldsToColumns(fields);
 
     const [row] = await db
-      .update(subscriptionsPersonal)
+      .update(personalPipelineTickets)
       .set(values)
-      .where(eq(subscriptionsPersonal.id, id))
+      .where(eq(personalPipelineTickets.id, id))
       .returning();
 
     if (!row) {
@@ -231,7 +231,7 @@ app.delete('/:id', async (c) => {
   try {
     const id = c.req.param('id');
 
-    await getDb().delete(subscriptionsPersonal).where(eq(subscriptionsPersonal.id, id));
+    await getDb().delete(personalPipelineTickets).where(eq(personalPipelineTickets.id, id));
 
     return c.json({
       success: true,

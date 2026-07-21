@@ -7,7 +7,6 @@
  * endpoints don't N+1.
  */
 
-import { inArray } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import * as schema from './schema';
 import {
@@ -15,21 +14,19 @@ import {
   corporations,
   personalServices,
   servicesCorporate,
-  subscriptionsPersonal,
-  subscriptionsCorporate,
-  servicesRendered,
-  ledger,
+  personalPipelineTickets,
+  corporatePipelineTickets,
+  corporateBillingBundleItems,
+  billingRecords,
   pipelineNotes,
   corporatePipelineNotes,
-  billingNotes,
 } from './schema';
 import { authUser } from './auth-readonly';
 import type { AirtableShapedRecord } from './serializers';
 
-type SubsPersonalRow = typeof subscriptionsPersonal.$inferSelect;
-type SubsCorporateRow = typeof subscriptionsCorporate.$inferSelect;
-type ServicesRenderedRow = typeof servicesRendered.$inferSelect;
-type LedgerRow = typeof ledger.$inferSelect;
+type SubsPersonalRow = typeof personalPipelineTickets.$inferSelect;
+type SubsCorporateRow = typeof corporatePipelineTickets.$inferSelect;
+type BillingRecordRow = typeof billingRecords.$inferSelect;
 
 function put(fields: Record<string, unknown>, name: string, value: unknown) {
   if (value === null || value === undefined || value === '') return;
@@ -48,7 +45,7 @@ async function loadUsers(db: NodePgDatabase<typeof schema>): Promise<Map<string,
 }
 
 // ---------------------------------------------------------------------------
-// Subscriptions Personal
+// Subscriptions Personal (personal pipeline tickets)
 // ---------------------------------------------------------------------------
 
 export interface SubsPersonalContext {
@@ -137,8 +134,8 @@ export function subsPersonalToAirtableRecord(
 /** Legacy field names → subscriptions_personal columns for PATCH bodies. */
 export function subsPersonalFieldsToColumns(
   fields: Record<string, unknown>
-): Partial<typeof subscriptionsPersonal.$inferInsert> {
-  const out: Partial<typeof subscriptionsPersonal.$inferInsert> = {};
+): Partial<typeof personalPipelineTickets.$inferInsert> {
+  const out: Partial<typeof personalPipelineTickets.$inferInsert> = {};
   const first = (v: unknown) => (Array.isArray(v) ? (v[0] as string | undefined) ?? null : (v as string | null));
 
   for (const [key, value] of Object.entries(fields)) {
@@ -159,7 +156,7 @@ export function subsPersonalFieldsToColumns(
 }
 
 // ---------------------------------------------------------------------------
-// Subscriptions Corporate
+// Subscriptions Corporate (corporate pipeline tickets)
 // ---------------------------------------------------------------------------
 
 export interface SubsCorporateContext {
@@ -168,12 +165,15 @@ export interface SubsCorporateContext {
   users: Map<string, UserInfo>;
   noteIds: Map<string, string[]>;
   ledgerIds: Map<string, string[]>;
+  // bundle_item_id -> current amount, so the legacy "Billing Amount" field can
+  // be reconstructed for tickets whose service is covered by the client's bundle.
+  bundleItemAmounts: Map<string, number>;
 }
 
 export async function loadSubsCorporateContext(
   db: NodePgDatabase<typeof schema>
 ): Promise<SubsCorporateContext> {
-  const [corpRows, serviceRows, users, noteRows, ledgerRows] = await Promise.all([
+  const [corpRows, serviceRows, users, noteRows, billingRecordRows, bundleItemRows] = await Promise.all([
     db.select().from(corporations),
     db.select({ id: servicesCorporate.id, name: servicesCorporate.name }).from(servicesCorporate),
     loadUsers(db),
@@ -181,7 +181,11 @@ export async function loadSubsCorporateContext(
       id: corporatePipelineNotes.id,
       subscriptionCorporateId: corporatePipelineNotes.subscriptionCorporateId,
     }).from(corporatePipelineNotes),
-    db.select({ id: ledger.id, subscriptionCorporateId: ledger.subscriptionCorporateId }).from(ledger),
+    db.select({
+      id: billingRecords.id,
+      subscriptionCorporateId: billingRecords.subscriptionCorporateId,
+    }).from(billingRecords),
+    db.select({ id: corporateBillingBundleItems.id, amount: corporateBillingBundleItems.amount }).from(corporateBillingBundleItems),
   ]);
 
   const noteIds = new Map<string, string[]>();
@@ -192,11 +196,11 @@ export async function loadSubsCorporateContext(
     noteIds.set(n.subscriptionCorporateId, list);
   }
   const ledgerIds = new Map<string, string[]>();
-  for (const l of ledgerRows) {
-    if (!l.subscriptionCorporateId) continue;
-    const list = ledgerIds.get(l.subscriptionCorporateId) ?? [];
-    list.push(l.id);
-    ledgerIds.set(l.subscriptionCorporateId, list);
+  for (const b of billingRecordRows) {
+    if (!b.subscriptionCorporateId) continue;
+    const list = ledgerIds.get(b.subscriptionCorporateId) ?? [];
+    list.push(b.id);
+    ledgerIds.set(b.subscriptionCorporateId, list);
   }
 
   return {
@@ -205,6 +209,7 @@ export async function loadSubsCorporateContext(
     users,
     noteIds,
     ledgerIds,
+    bundleItemAmounts: new Map(bundleItemRows.map((b) => [b.id, Number(b.amount)])),
   };
 }
 
@@ -246,7 +251,12 @@ export function subsCorporateToAirtableRecord(
   put(fields, 'Email (from Processor)', processor?.email ? [processor.email] : null);
   put(fields, 'Tax Preparer', row.taxPreparer);
   put(fields, 'Date Assigned', row.dateAssigned);
-  put(fields, 'Billing Amount', row.billingAmount != null ? Number(row.billingAmount) : null);
+  // Recurring billing amount now lives on the client's bundle line item, not
+  // on the ticket itself — reconstruct the legacy "Billing Amount" field by
+  // joining through bundle_item_id for tickets covered by a bundle. (The
+  // billingAmount column itself is deprecated and no longer read.)
+  put(fields, 'Billing Amount', row.bundleItemId ? ctx.bundleItemAmounts.get(row.bundleItemId) ?? null : null);
+  put(fields, 'Bundle Item', row.bundleItemId ? [row.bundleItemId] : null);
   put(fields, 'Filed', row.filed || null);
   put(fields, 'Send to Bookkeeper', row.sendToBookkeeper || null);
   put(fields, 'Duration', row.duration);
@@ -268,8 +278,8 @@ export function subsCorporateToAirtableRecord(
 /** Legacy field names → subscriptions_corporate columns for PATCH bodies. */
 export function subsCorporateFieldsToColumns(
   fields: Record<string, unknown>
-): Partial<typeof subscriptionsCorporate.$inferInsert> {
-  const out: Partial<typeof subscriptionsCorporate.$inferInsert> = {};
+): Partial<typeof corporatePipelineTickets.$inferInsert> {
+  const out: Partial<typeof corporatePipelineTickets.$inferInsert> = {};
   const first = (v: unknown) => (Array.isArray(v) ? (v[0] as string | undefined) ?? null : (v as string | null));
 
   for (const [key, value] of Object.entries(fields)) {
@@ -281,7 +291,7 @@ export function subsCorporateFieldsToColumns(
       case 'Processor': out.processorId = first(value); break;
       case 'Tax Preparer': out.taxPreparer = (value as string) || null; break;
       case 'Date Assigned': out.dateAssigned = (value as string) || null; break;
-      case 'Billing Amount': out.billingAmount = value == null ? null : String(value); break;
+      case 'Bundle Item': out.bundleItemId = first(value); break;
       case 'Filed': out.filed = Boolean(value); break;
       case 'Send to Bookkeeper': out.sendToBookkeeper = Boolean(value); break;
       case 'Duration': out.duration = value == null ? null : Number(value); break;
@@ -298,11 +308,17 @@ export function subsCorporateFieldsToColumns(
 }
 
 // ---------------------------------------------------------------------------
-// Services Rendered / Ledger / Notes
+// Billing Records (Services Rendered — now also "the ledger") / Notes
 // ---------------------------------------------------------------------------
 
-export function servicesRenderedToAirtableRecord(
-  row: ServicesRenderedRow,
+// Legacy Airtable "Billing Status" values are used as-is. 'Part of
+// Subscription' is replaced going forward by 'Covered by Bundle' — the only
+// vocabulary change; existing historical rows using other values are
+// unaffected and keep displaying correctly.
+export const WIRE_BILLING_STATUSES = ['Unbilled', 'Billed - Unpaid', 'Billed - Paid', 'Waived', 'Covered by Bundle'];
+
+export function billingRecordToAirtableRecord(
+  row: BillingRecordRow,
   billingNoteIds?: string[]
 ): AirtableShapedRecord {
   const fields: Record<string, unknown> = {};
@@ -319,28 +335,7 @@ export function servicesRenderedToAirtableRecord(
   put(fields, 'Notes', row.notes);
   put(fields, 'Subscription Personal', row.subscriptionPersonalId ? [row.subscriptionPersonalId] : null);
   put(fields, 'Subscription Corporate', row.subscriptionCorporateId ? [row.subscriptionCorporateId] : null);
-  put(fields, 'Ledger Entry', row.ledgerEntryId ? [row.ledgerEntryId] : null);
   put(fields, 'Billing Notes', billingNoteIds ?? null);
-
-  return { id: row.id, createdTime: row.createdAt.toISOString(), fields };
-}
-
-export function ledgerToAirtableRecord(
-  row: LedgerRow,
-  servicesRenderedIds?: string[],
-  processorName?: string | null
-): AirtableShapedRecord {
-  const fields: Record<string, unknown> = {};
-  put(fields, 'Service Rendered', row.serviceRendered);
-  put(fields, 'Receipt Date', row.receiptDate);
-  put(fields, 'Amount Charged', row.amountCharged != null ? Number(row.amountCharged) : null);
-  put(fields, 'Name of Client', row.nameOfClient);
-  put(fields, 'Payment Method', row.paymentMethod);
-  put(fields, 'Created Time', row.createdAt.toISOString());
-  put(fields, 'Processor', processorName ? [processorName] : null);
-  put(fields, 'Services Rendered', servicesRenderedIds ?? null);
-  put(fields, 'Subscription', row.subscriptionPersonalId ? [row.subscriptionPersonalId] : null);
-  put(fields, 'Related Corporate Subscriptions', row.subscriptionCorporateId ? [row.subscriptionCorporateId] : null);
 
   return { id: row.id, createdTime: row.createdAt.toISOString(), fields };
 }

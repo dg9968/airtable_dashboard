@@ -6,27 +6,27 @@
 import { Hono } from 'hono';
 import { asc, desc, eq } from 'drizzle-orm';
 import { getDb } from '../db/client';
-import { corporatePipelineNotes, subscriptionsCorporate, corporations } from '../db/schema';
+import { corporatePipelineNotes, corporatePipelineTickets, corporations } from '../db/schema';
 import { noteToAirtableRecord } from '../db/serializers-subscriptions';
 
 const app = new Hono();
 
 type NoteRow = typeof corporatePipelineNotes.$inferSelect;
 
-/** Company Name lookup: note → subscription → corporation company. */
+/** Company Name lookup: note → pipeline ticket → corporation company. */
 async function loadCompanyNames(rows: NoteRow[]): Promise<Map<string, string | null>> {
   const map = new Map<string, string | null>();
-  const subIds = [...new Set(rows.map((r) => r.subscriptionCorporateId).filter(Boolean))] as string[];
-  if (subIds.length === 0) return map;
-  const subs = await getDb()
+  const ticketIds = [...new Set(rows.map((r) => r.subscriptionCorporateId).filter(Boolean))] as string[];
+  if (ticketIds.length === 0) return map;
+  const tickets = await getDb()
     .select({
-      id: subscriptionsCorporate.id,
+      id: corporatePipelineTickets.id,
       company: corporations.company,
     })
-    .from(subscriptionsCorporate)
-    .leftJoin(corporations, eq(subscriptionsCorporate.corporationId, corporations.id));
-  for (const s of subs) {
-    map.set(s.id, s.company ?? null);
+    .from(corporatePipelineTickets)
+    .leftJoin(corporations, eq(corporatePipelineTickets.corporationId, corporations.id));
+  for (const t of tickets) {
+    map.set(t.id, t.company ?? null);
   }
   return map;
 }

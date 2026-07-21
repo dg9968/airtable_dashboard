@@ -48,18 +48,15 @@ export default function BillingModule() {
   const [batchPaymentMethod, setBatchPaymentMethod] = useState('Credit Card');
   const [batchReceiptDate, setBatchReceiptDate] = useState(new Date().toISOString().split('T')[0]);
   const [batchNotes, setBatchNotes] = useState('');
-  const [batchCreateLedger, setBatchCreateLedger] = useState(true);
 
   // Individual billing form
   const [individualAmount, setIndividualAmount] = useState<number | null>(null);
   const [individualPaymentMethod, setIndividualPaymentMethod] = useState('Credit Card');
   const [individualReceiptDate, setIndividualReceiptDate] = useState(new Date().toISOString().split('T')[0]);
-  const [individualCreateLedger, setIndividualCreateLedger] = useState(true);
 
   // Mark as paid form
   const [markPaidPaymentMethod, setMarkPaidPaymentMethod] = useState('Credit Card');
   const [markPaidReceiptDate, setMarkPaidReceiptDate] = useState(new Date().toISOString().split('T')[0]);
-  const [markPaidCreateLedger, setMarkPaidCreateLedger] = useState(true);
 
   const paymentMethods = ['Credit Card', 'Cash', 'Zelle', 'Check', 'ACH', 'TPG Bank Product', 'Other', 'Not Paid Yet'];
   const paidPaymentMethods = ['Credit Card', 'Cash', 'Zelle', 'Check', 'ACH', 'TPG Bank Product', 'Other'];
@@ -160,7 +157,6 @@ export default function BillingModule() {
     setIndividualAmount(service.amount || null);
     setIndividualPaymentMethod('Credit Card');
     setIndividualReceiptDate(new Date().toISOString().split('T')[0]);
-    setIndividualCreateLedger(true);
     setShowIndividualModal(true);
   };
 
@@ -168,7 +164,6 @@ export default function BillingModule() {
     setSelectedService(service);
     setMarkPaidPaymentMethod('Credit Card');
     setMarkPaidReceiptDate(new Date().toISOString().split('T')[0]);
-    setMarkPaidCreateLedger(true);
     setShowMarkPaidModal(true);
   };
 
@@ -192,7 +187,6 @@ export default function BillingModule() {
           amountCharged: individualAmount,
           paymentMethod: individualPaymentMethod,
           receiptDate: individualReceiptDate,
-          createLedger: individualCreateLedger,
           billingStatus,
         }),
       });
@@ -224,7 +218,6 @@ export default function BillingModule() {
           amountCharged: selectedService.amount || 0,
           paymentMethod: markPaidPaymentMethod,
           receiptDate: markPaidReceiptDate,
-          createLedger: markPaidCreateLedger,
           billingStatus: 'Billed - Paid',
         }),
       });
@@ -283,7 +276,6 @@ export default function BillingModule() {
           serviceIds: Array.from(selectedServices),
           paymentMethod: batchPaymentMethod,
           receiptDate: batchReceiptDate,
-          createLedger: batchCreateLedger,
           billingStatus,
           notes: batchNotes || undefined,
         }),
@@ -409,7 +401,7 @@ export default function BillingModule() {
                 <option value="Billed - Unpaid">Billed - Unpaid</option>
                 <option value="Billed - Paid">Billed - Paid</option>
                 <option value="Waived">Waived</option>
-                <option value="Part of Subscription">Part of Subscription</option>
+                <option value="Covered by Bundle">Covered by Bundle</option>
               </select>
             </div>
 
@@ -709,17 +701,6 @@ export default function BillingModule() {
               />
             </div>
 
-            <div className="form-control mb-4">
-              <label className="label cursor-pointer">
-                <span className="label-text">Create Ledger Entry</span>
-                <input
-                  type="checkbox"
-                  className="checkbox"
-                  checked={batchCreateLedger}
-                  onChange={(e) => setBatchCreateLedger(e.target.checked)}
-                />
-              </label>
-            </div>
 
             <div className="modal-action">
               <button className="btn btn-ghost" onClick={() => setShowBatchModal(false)}>
@@ -783,17 +764,6 @@ export default function BillingModule() {
               />
             </div>
 
-            <div className="form-control mb-4">
-              <label className="label cursor-pointer">
-                <span className="label-text">Create Ledger Entry</span>
-                <input
-                  type="checkbox"
-                  className="checkbox"
-                  checked={individualCreateLedger}
-                  onChange={(e) => setIndividualCreateLedger(e.target.checked)}
-                />
-              </label>
-            </div>
 
             <div className="modal-action">
               <button className="btn btn-ghost" onClick={() => setShowIndividualModal(false)}>
@@ -845,17 +815,6 @@ export default function BillingModule() {
               />
             </div>
 
-            <div className="form-control mb-4">
-              <label className="label cursor-pointer">
-                <span className="label-text">Create Ledger Entry</span>
-                <input
-                  type="checkbox"
-                  className="checkbox"
-                  checked={markPaidCreateLedger}
-                  onChange={(e) => setMarkPaidCreateLedger(e.target.checked)}
-                />
-              </label>
-            </div>
 
             <div className="modal-action">
               <button className="btn btn-ghost" onClick={() => setShowMarkPaidModal(false)}>

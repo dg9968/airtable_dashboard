@@ -12,7 +12,7 @@ import { Hono } from 'hono';
 import { and, eq, ilike, inArray } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { getDb } from '../db/client';
-import { companyContacts, corporations, personal, servicesCorporate, subscriptionsCorporate } from '../db/schema';
+import { companyContacts, corporations, personal, servicesCorporate, corporatePipelineTickets } from '../db/schema';
 
 const app = new Hono();
 
@@ -540,13 +540,13 @@ app.get('/service/:serviceName/subscribers', async (c) => {
 
     const subscriptionRows = await db
       .select({
-        corporationId: subscriptionsCorporate.corporationId,
+        corporationId: corporatePipelineTickets.corporationId,
       })
-      .from(subscriptionsCorporate)
+      .from(corporatePipelineTickets)
       .where(
         and(
-          inArray(subscriptionsCorporate.serviceId, matchingServiceIds),
-          eq(subscriptionsCorporate.status, 'Active')
+          inArray(corporatePipelineTickets.serviceId, matchingServiceIds),
+          eq(corporatePipelineTickets.status, 'Active')
         )
       );
     for (const row of subscriptionRows) {

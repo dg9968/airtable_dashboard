@@ -29,6 +29,10 @@ interface PipelineCompany {
   priority?: number;
   notes?: string;
   billingAmount?: number;
+  // Set when this ticket's service is covered by the client's recurring
+  // billing bundle — billingAmount above then reflects the bundle line
+  // item's amount, not a standalone quoted price.
+  bundleItemId?: string;
   // Extension-specific fields (populated when service = "Extensions")
   entityType?: string;
   fiscalYearEnd?: string;
@@ -66,7 +70,7 @@ export default function CorporateServicesPipeline() {
   const [filteredCompanyName, setFilteredCompanyName] = useState<string>("");
   const [createFollowUp, setCreateFollowUp] = useState(false);
   const [servicesMap, setServicesMap] = useState<Record<string, string>>({});
-  const [billingType, setBillingType] = useState<'standard' | 'subscription' | 'waived'>('standard');
+  const [billingType, setBillingType] = useState<'standard' | 'bundle' | 'waived'>('standard');
   const [showNotesModal, setShowNotesModal] = useState(false);
   const [selectedCompanyForNotes, setSelectedCompanyForNotes] = useState<PipelineCompany | null>(null);
   const [showExtensionModal, setShowExtensionModal] = useState(false);
@@ -249,8 +253,10 @@ export default function CorporateServicesPipeline() {
             // Get Notes field
             const notes = record.fields["Notes"] || "";
 
-            // Get Billing Amount field
+            // Get Billing Amount field (bundle-sourced when Bundle Item is set)
             const billingAmount = record.fields["Billing Amount"] || null;
+            const bundleItemRaw = record.fields["Bundle Item"];
+            const bundleItemId = Array.isArray(bundleItemRaw) ? bundleItemRaw[0] : bundleItemRaw;
 
             // Extension-specific fields (only populated when service = "Extensions")
             const entityTypeRaw =
@@ -291,6 +297,7 @@ export default function CorporateServicesPipeline() {
               priority: daysInPipeline,
               notes,
               billingAmount: billingAmount ? parseFloat(billingAmount.toString()) : undefined,
+              bundleItemId: bundleItemId || undefined,
               entityType: entityTypeStr,
               fiscalYearEnd: fiscalYearEndStr,
               extensionStatus: extensionStatusRaw,
@@ -616,8 +623,7 @@ export default function CorporateServicesPipeline() {
 
       console.log('[CorporateServicesPipeline] Found company:', company.companyName);
 
-      // Use provided amount, or fall back to billing amount from subscription
-      const billingAmount = amount !== undefined ? amount : (company.billingAmount || null);
+      const billingAmount = amount !== undefined ? amount : null;
       console.log('[CorporateServicesPipeline] Billing amount:', billingAmount);
       console.log('[CorporateServicesPipeline] Billing status:', billingStatus);
 
@@ -636,7 +642,7 @@ export default function CorporateServicesPipeline() {
         notes: note || undefined,
       };
 
-      // Add billing status if provided (for Part of Subscription or Waived)
+      // Add billing status if provided (for Covered by Bundle or Waived)
       if (billingStatus) {
         requestBody.billingStatus = billingStatus;
       }
@@ -666,19 +672,20 @@ export default function CorporateServicesPipeline() {
 
       console.log('[CorporateServicesPipeline] Service record created successfully:', servicesRenderedData.data?.id);
 
-      // Delete the subscription record from Subscriptions Corporate table
+      // The pipeline ticket itself is left untouched — completing a service
+      // no longer deletes it, so its notes/processor/history and (for
+      // bundle-covered work) the client's billing bundle stay intact. Mark
+      // it Complete Service so it drops out of the active pipeline view.
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-      const deleteResponse = await fetch(`${apiUrl}/api/subscriptions-corporate/${companyId}`, {
-        method: "DELETE",
+      const statusResponse = await fetch(`${apiUrl}/api/subscriptions-corporate/${companyId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fields: { Status: "Complete Service" } }),
       });
-
-      const deleteData = await deleteResponse.json();
-
-      if (!deleteResponse.ok) {
-        console.error("[CorporateServicesPipeline] Warning: Failed to delete subscription record:", deleteData.error);
-        // Continue even if delete fails - the service was still rendered
-      } else {
-        console.log('[CorporateServicesPipeline] Subscription deleted successfully');
+      if (!statusResponse.ok) {
+        const statusData = await statusResponse.json();
+        console.error("[CorporateServicesPipeline] Warning: Failed to mark ticket complete:", statusData.error);
+        // Continue even if this fails - the service was still rendered
       }
 
       // Handle follow-up service creation if requested
@@ -734,7 +741,9 @@ export default function CorporateServicesPipeline() {
       // Pre-fill with billing amount if available
       setQuotedAmount(company?.billingAmount?.toString() || "");
       setBillingNote("");
-      setBillingType('standard'); // Reset billing type
+      // Bundle-covered tickets default to "Covered by Bundle"; everything
+      // else defaults to a standard quoted charge.
+      setBillingType(company?.bundleItemId ? 'bundle' : 'standard');
       // Default checkbox to checked if this service has a follow-up mapping
       const hasFollowUp = company?.serviceName && SERVICE_FOLLOW_UP_MAPPINGS[company.serviceName];
       setCreateFollowUp(!!hasFollowUp);
@@ -754,9 +763,9 @@ export default function CorporateServicesPipeline() {
       if (billingType === 'standard') {
         amount = quotedAmount ? parseFloat(quotedAmount) : undefined;
         billingStatusValue = undefined; // Will default to 'Unbilled' on server
-      } else if (billingType === 'subscription') {
-        amount = 0;
-        billingStatusValue = 'Part of Subscription';
+      } else if (billingType === 'bundle') {
+        amount = undefined; // server forces this to null for bundle-covered work
+        billingStatusValue = 'Covered by Bundle';
       } else if (billingType === 'waived') {
         amount = 0;
         billingStatusValue = 'Waived';
@@ -1311,36 +1320,60 @@ export default function CorporateServicesPipeline() {
                 <span className="label-text font-medium">Billing Type</span>
               </label>
               <div className="flex flex-col gap-2">
-                <label className="label cursor-pointer justify-start gap-3 py-1">
-                  <input
-                    type="radio"
-                    name="billingType"
-                    className="radio radio-primary radio-sm"
-                    checked={billingType === 'standard'}
-                    onChange={() => setBillingType('standard')}
-                  />
-                  <span className="label-text">Standard Billing</span>
-                </label>
-                <label className="label cursor-pointer justify-start gap-3 py-1">
-                  <input
-                    type="radio"
-                    name="billingType"
-                    className="radio radio-info radio-sm"
-                    checked={billingType === 'subscription'}
-                    onChange={() => setBillingType('subscription')}
-                  />
-                  <span className="label-text">Part of Subscription</span>
-                </label>
-                <label className="label cursor-pointer justify-start gap-3 py-1">
-                  <input
-                    type="radio"
-                    name="billingType"
-                    className="radio radio-sm"
-                    checked={billingType === 'waived'}
-                    onChange={() => setBillingType('waived')}
-                  />
-                  <span className="label-text">Waive Fee</span>
-                </label>
+                {(() => {
+                  const company = pipelineCompanies.find((c) => c.id === selectedCompanyForCompletion);
+                  const bundleAmount = company?.billingAmount;
+                  return company?.bundleItemId ? (
+                    <>
+                      <label className="label cursor-pointer justify-start gap-3 py-1">
+                        <input
+                          type="radio"
+                          name="billingType"
+                          className="radio radio-info radio-sm"
+                          checked={billingType === 'bundle'}
+                          onChange={() => setBillingType('bundle')}
+                        />
+                        <span className="label-text">
+                          Covered by Monthly Bundle
+                          {bundleAmount != null && ` ($${bundleAmount.toLocaleString()}/mo)`}
+                        </span>
+                      </label>
+                      <label className="label cursor-pointer justify-start gap-3 py-1">
+                        <input
+                          type="radio"
+                          name="billingType"
+                          className="radio radio-sm"
+                          checked={billingType === 'waived'}
+                          onChange={() => setBillingType('waived')}
+                        />
+                        <span className="label-text">Waive Fee</span>
+                      </label>
+                    </>
+                  ) : (
+                    <>
+                      <label className="label cursor-pointer justify-start gap-3 py-1">
+                        <input
+                          type="radio"
+                          name="billingType"
+                          className="radio radio-primary radio-sm"
+                          checked={billingType === 'standard'}
+                          onChange={() => setBillingType('standard')}
+                        />
+                        <span className="label-text">Standard Billing</span>
+                      </label>
+                      <label className="label cursor-pointer justify-start gap-3 py-1">
+                        <input
+                          type="radio"
+                          name="billingType"
+                          className="radio radio-sm"
+                          checked={billingType === 'waived'}
+                          onChange={() => setBillingType('waived')}
+                        />
+                        <span className="label-text">Waive Fee</span>
+                      </label>
+                    </>
+                  );
+                })()}
               </div>
             </div>
 

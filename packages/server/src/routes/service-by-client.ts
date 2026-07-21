@@ -4,7 +4,7 @@
 
 import { Hono } from 'hono';
 import { getDb } from '../db/client';
-import { subscriptionsCorporate } from '../db/schema';
+import { corporatePipelineTickets } from '../db/schema';
 import {
   loadSubsCorporateContext,
   subsCorporateToAirtableRecord,
@@ -19,7 +19,7 @@ const app = new Hono();
 app.get('/', async (c) => {
   try {
     const db = getDb();
-    const rows = await db.select().from(subscriptionsCorporate);
+    const rows = await db.select().from(corporatePipelineTickets);
     const ctx = await loadSubsCorporateContext(db);
     const records = rows.map((row) => subsCorporateToAirtableRecord(row, ctx));
 

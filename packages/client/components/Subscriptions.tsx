@@ -9,12 +9,29 @@ interface Service {
   description?: string
 }
 
-interface Subscription {
+interface BundleItem {
   id: string
-  clientId: string
+  bundleId: string
   serviceId: string
-  status: string
-  price: number
+  serviceName: string | null
+  amount: number
+  status: 'active' | 'removed'
+  effectiveDate: string | null
+  endDate: string | null
+  notes: string | null
+}
+
+interface Bundle {
+  id: string
+  corporationId: string
+  name: string | null
+  status: 'active' | 'paused' | 'cancelled'
+  billingCycle: 'monthly' | 'quarterly' | 'annual'
+  startDate: string | null
+  endDate: string | null
+  notes: string | null
+  totalAmount: number
+  items: BundleItem[]
 }
 
 interface CorporateCustomer {
@@ -24,76 +41,56 @@ interface CorporateCustomer {
 }
 
 export default function Subscriptions() {
-  const [selectedCustomer, setSelectedCustomer] = useState<string>('')
+  const [selectedCustomer, setSelectedCustomer] = useState<CorporateCustomer | null>(null)
   const [customers, setCustomers] = useState<CorporateCustomer[]>([])
   const [services, setServices] = useState<Service[]>([])
-  const [subscriptions, setSubscriptions] = useState<Subscription[]>([])
+  const [bundle, setBundle] = useState<Bundle | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [editingAmounts, setEditingAmounts] = useState<Record<string, number>>({})
 
-  // Load corporate customers on component mount
+  // Add-item form
+  const [newItemServiceId, setNewItemServiceId] = useState('')
+  const [newItemAmount, setNewItemAmount] = useState('')
+  const [addingItem, setAddingItem] = useState(false)
+
   useEffect(() => {
     loadCorporateCustomers()
+    loadServices()
   }, [])
 
-  // Load services and subscriptions when customer is selected
   useEffect(() => {
     if (selectedCustomer) {
-      loadServices()
-      loadSubscriptions(selectedCustomer)
-      setEditingAmounts({}) // Clear any editing amounts when customer changes
+      loadBundle(selectedCustomer.id)
     } else {
-      setServices([])
-      setSubscriptions([])
-      setEditingAmounts({})
+      setBundle(null)
     }
   }, [selectedCustomer])
 
   const loadCorporateCustomers = async () => {
     try {
       setLoading(true)
-      // Load companies from the Corporations table
       const response = await fetch('/api/view?table=Corporations')
       if (!response.ok) throw new Error('Failed to load customers')
 
       const data = await response.json()
-
-      console.log('Raw corporations data:', data)
-
-      // Extract companies from Corporations table
       const companiesList: CorporateCustomer[] = []
 
-      if (data.data && data.data.records && Array.isArray(data.data.records)) {
-        console.log('First record:', data.data.records[0])
-        console.log('First record fields:', data.data.records[0]?.fields)
-        console.log('All field keys:', Object.keys(data.data.records[0]?.fields || {}))
-
-        data.data.records.forEach((record: any, index: number) => {
-          const companyName = record.fields['Company'] // Using 'Company' without trailing space as shown in fieldNames
+      if (data.data?.records && Array.isArray(data.data.records)) {
+        data.data.records.forEach((record: any) => {
+          const companyName = record.fields['Company']
           const companyCode = record.fields['Business Partner Number'] || record.fields['EIN'] || record.fields['Entity Number']
-
-          if (index < 5) { // Log first 5 records
-            console.log(`Record ${index}:`, record.id, 'Company field:', companyName, 'Code:', companyCode)
-          }
-
           if (companyName && companyName.toString().trim()) {
             companiesList.push({
               id: record.id,
               name: companyName.toString().trim(),
-              code: companyCode ? companyCode.toString().trim() : ''
+              code: companyCode ? companyCode.toString().trim() : '',
             })
           }
         })
-      } else {
-        console.log('Records array not found in response')
       }
 
-      // Sort companies alphabetically by name
-      const sortedCompaniesList = companiesList.sort((a, b) => a.name.localeCompare(b.name))
-
-      setCustomers(sortedCompaniesList)
-      console.log('Companies loaded and sorted:', sortedCompaniesList)
+      companiesList.sort((a, b) => a.name.localeCompare(b.name))
+      setCustomers(companiesList)
     } catch (err) {
       setError('Failed to load corporate customers')
       console.error('Error loading customers:', err)
@@ -106,145 +103,152 @@ export default function Subscriptions() {
     try {
       const response = await fetch('/api/services-cached')
       if (!response.ok) throw new Error('Failed to load services')
-
       const data = await response.json()
-
       if (data.success && data.data) {
         setServices(data.data)
-        console.log(`Services loaded: ${data.data.length} services (cached: ${data.cached || false})`)
       }
     } catch (err) {
       console.error('Error loading services:', err)
     }
   }
 
-  const loadSubscriptions = async (customerName: string) => {
+  const loadBundle = async (corporationId: string) => {
     try {
-      const response = await fetch(`/api/customer-subscriptions?customer=${encodeURIComponent(customerName)}`)
-      if (!response.ok) throw new Error('Failed to load subscriptions')
-
+      setLoading(true)
+      setError(null)
+      const response = await fetch(`/api/corporate-billing-bundles?corporationId=${encodeURIComponent(corporationId)}`)
+      if (!response.ok) throw new Error('Failed to load billing bundle')
       const data = await response.json()
-
-      if (data.success && data.data) {
-        setSubscriptions(data.data)
-        console.log(`Customer subscriptions loaded: ${data.data.length} subscriptions for ${customerName}`)
-      } else {
-        setSubscriptions([])
-        console.log(`No subscriptions found for ${customerName}`)
+      if (data.success) {
+        // One active bundle per client — show it if present, else the most
+        // recent (e.g. a cancelled one), else null.
+        const active = data.data.find((b: Bundle) => b.status === 'active')
+        setBundle(active || data.data[0] || null)
       }
     } catch (err) {
-      setError('Failed to load subscriptions')
-      console.error('Error loading subscriptions:', err)
+      setError('Failed to load billing bundle')
+      console.error('Error loading bundle:', err)
+    } finally {
+      setLoading(false)
     }
   }
 
-  const updateSubscriptionStatus = async (serviceName: string, newStatus: string) => {
+  const createBundle = async () => {
+    if (!selectedCustomer) return
     try {
-      // Find existing subscription
-      const existingSubscription = subscriptions.find(sub => sub.serviceId === serviceName)
-
-      if (existingSubscription) {
-        // Update existing subscription status only
-        const response = await fetch('/api/subscriptions', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            subscriptionId: existingSubscription.id,
-            status: newStatus
-          })
-        })
-
-        if (!response.ok) throw new Error('Failed to update subscription')
-
-        // Reload subscriptions to show updated status
-        loadSubscriptions(selectedCustomer)
-      } else {
-        // No existing subscription found - cannot update
-        setError(`No subscription found for ${serviceName}. Cannot update status.`)
-        console.warn(`No subscription found for service: ${serviceName}`)
-      }
+      setLoading(true)
+      const response = await fetch('/api/corporate-billing-bundles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ corporationId: selectedCustomer.id }),
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || 'Failed to create bundle')
+      setBundle(data.data)
     } catch (err) {
-      setError('Failed to update subscription')
-      console.error('Error updating subscription:', err)
+      setError(err instanceof Error ? err.message : 'Failed to create bundle')
+      console.error('Error creating bundle:', err)
+    } finally {
+      setLoading(false)
     }
   }
 
-  const updateBillingAmount = async (serviceName: string, newAmount: number) => {
+  const updateBundleStatus = async (newStatus: Bundle['status']) => {
+    if (!bundle) return
     try {
-      // Find existing subscription
-      const existingSubscription = subscriptions.find(sub => sub.serviceId === serviceName)
-
-      if (existingSubscription) {
-        // Update existing subscription billing amount
-        const response = await fetch('/api/subscriptions', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            subscriptionId: existingSubscription.id,
-            price: newAmount
-          })
-        })
-
-        if (!response.ok) throw new Error('Failed to update billing amount')
-
-        // Reload subscriptions to show updated amount
-        loadSubscriptions(selectedCustomer)
-      } else {
-        // No existing subscription found - cannot update
-        setError(`No subscription found for ${serviceName}. Cannot update billing amount.`)
-        console.warn(`No subscription found for service: ${serviceName}`)
-      }
+      const response = await fetch(`/api/corporate-billing-bundles/${bundle.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || 'Failed to update bundle status')
+      setBundle(data.data)
     } catch (err) {
-      setError('Failed to update billing amount')
-      console.error('Error updating billing amount:', err)
+      setError(err instanceof Error ? err.message : 'Failed to update bundle status')
+      console.error('Error updating bundle status:', err)
     }
   }
 
-  const getSubscriptionStatus = (serviceName: string) => {
-    const subscription = subscriptions.find(sub => sub.serviceId === serviceName)
-    // Status is a multiple select field that returns an array
-    if (subscription?.status && Array.isArray(subscription.status) && subscription.status.length > 0) {
-      return subscription.status[0] // Return first status from the array
+  const addItem = async () => {
+    if (!bundle || !newItemServiceId || !newItemAmount) return
+    try {
+      setAddingItem(true)
+      const response = await fetch(`/api/corporate-billing-bundles/${bundle.id}/items`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ serviceId: newItemServiceId, amount: parseFloat(newItemAmount) }),
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || 'Failed to add service to bundle')
+      setBundle(data.data)
+      setNewItemServiceId('')
+      setNewItemAmount('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to add service to bundle')
+      console.error('Error adding bundle item:', err)
+    } finally {
+      setAddingItem(false)
     }
-    return '' // Return empty string for no status (instead of 'Inactive')
   }
 
-  const getSubscriptionPrice = (serviceName: string) => {
-    const subscription = subscriptions.find(sub => sub.serviceId === serviceName)
-    return subscription?.price || 0
+  const updateItemAmount = async (itemId: string, newAmount: number) => {
+    if (!bundle) return
+    try {
+      const response = await fetch(`/api/corporate-billing-bundles/${bundle.id}/items/${itemId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount: newAmount }),
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || 'Failed to update amount')
+      setBundle(data.data)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update amount')
+      console.error('Error updating bundle item:', err)
+    }
   }
 
-  const calculateTotalBilling = () => {
-    const total = services.reduce((total, service) => {
-      const status = getSubscriptionStatus(service.name)
-      const price = getSubscriptionPrice(service.name) || service.price
-
-      console.log(`Service: ${service.name}, Status: ${status}, Price: ${price}`)
-
-      // Only include services with Active status
-      if (status === 'Active') {
-        return total + (price || 0)
-      }
-      return total
-    }, 0)
-
-    console.log('Total Active Billing:', total)
-    return total
+  const removeItem = async (itemId: string) => {
+    if (!bundle) return
+    if (!confirm('Remove this service from the bundle? It will no longer be billed monthly.')) return
+    try {
+      const response = await fetch(`/api/corporate-billing-bundles/${bundle.id}/items/${itemId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'removed' }),
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || 'Failed to remove service')
+      setBundle(data.data)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to remove service')
+      console.error('Error removing bundle item:', err)
+    }
   }
+
+  const activeItems = bundle?.items.filter((i) => i.status === 'active') || []
+  const bundledServiceIds = new Set(activeItems.map((i) => i.serviceId))
+  const availableServices = services.filter((s) => !bundledServiceIds.has(s.id))
 
   return (
     <div className="space-y-6">
       <div className="card bg-base-100 shadow-xl">
         <div className="card-body">
           <div className="flex justify-between items-start mb-4">
-            <h2 className="card-title text-2xl">Corporate Subscriptions Management</h2>
-            {selectedCustomer && (
+            <div>
+              <h2 className="card-title text-2xl">Corporate Billing Bundles</h2>
+              <p className="text-sm text-base-content/60">
+                A client's durable, recurring monthly bill — covering many services in one place.
+              </p>
+            </div>
+            {bundle && (
               <div className="text-right">
-                <div className="text-sm text-base-content/60">Total Active Billing</div>
+                <div className="text-sm text-base-content/60">Monthly Total</div>
                 <div className="text-2xl font-bold text-success">
-                  ${calculateTotalBilling().toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  ${bundle.totalAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </div>
-                <div className="text-xs text-base-content/50">for {selectedCustomer}</div>
+                <div className="text-xs text-base-content/50">for {selectedCustomer?.name}</div>
               </div>
             )}
           </div>
@@ -256,13 +260,17 @@ export default function Subscriptions() {
             </label>
             <select
               className="select select-bordered w-full max-w-xs"
-              value={selectedCustomer}
-              onChange={(e) => setSelectedCustomer(e.target.value)}
+              value={selectedCustomer?.id || ''}
+              onChange={(e) => {
+                const customer = customers.find((c) => c.id === e.target.value) || null
+                setSelectedCustomer(customer)
+                setError(null)
+              }}
               disabled={loading}
             >
               <option value="">Choose a customer...</option>
               {customers.map((customer) => (
-                <option key={customer.id} value={customer.name}>
+                <option key={customer.id} value={customer.id}>
                   {customer.name} {customer.code && `(${customer.code})`}
                 </option>
               ))}
@@ -278,149 +286,150 @@ export default function Subscriptions() {
             </div>
           )}
 
-          {/* Services and Subscriptions */}
-          {selectedCustomer && (
+          {selectedCustomer && loading && (
+            <div className="flex justify-center py-8">
+              <span className="loading loading-spinner loading-lg"></span>
+            </div>
+          )}
+
+          {selectedCustomer && !loading && !bundle && (
+            <div className="text-center py-8">
+              <p className="text-base-content/70 mb-4">
+                {selectedCustomer.name} has no billing bundle yet.
+              </p>
+              <button className="btn btn-primary" onClick={createBundle}>
+                Create Billing Bundle
+              </button>
+            </div>
+          )}
+
+          {selectedCustomer && !loading && bundle && (
             <div className="space-y-4">
-              <h3 className="text-xl font-semibold">Available Services</h3>
+              <div className="flex items-center justify-between">
+                <h3 className="text-xl font-semibold">Bundle Line Items</h3>
+                <select
+                  className="select select-bordered select-sm"
+                  value={bundle.status}
+                  onChange={(e) => updateBundleStatus(e.target.value as Bundle['status'])}
+                >
+                  <option value="active">Active</option>
+                  <option value="paused">Paused</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+              </div>
 
-              {loading ? (
-                <div className="flex justify-center py-8">
-                  <span className="loading loading-spinner loading-lg"></span>
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="table table-zebra w-full">
-                    <thead>
+              <div className="overflow-x-auto">
+                <table className="table table-zebra w-full">
+                  <thead>
+                    <tr>
+                      <th>Service</th>
+                      <th>Monthly Amount</th>
+                      <th>Status</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {bundle.items.length === 0 && (
                       <tr>
-                        <th>Service Name</th>
-                        <th>Description</th>
-                        <th>Billing Amount</th>
-                        <th>Status</th>
-                        <th>Actions</th>
+                        <td colSpan={4} className="text-center py-6 text-base-content/60">
+                          No services in this bundle yet — add one below.
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {services.map((service) => {
-                        const status = getSubscriptionStatus(service.name)
-                        const price = getSubscriptionPrice(service.name) || service.price
+                    )}
+                    {bundle.items.map((item) => (
+                      <tr key={item.id} className={item.status === 'removed' ? 'opacity-50' : ''}>
+                        <td className="font-medium">{item.serviceName || item.serviceId}</td>
+                        <td>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm">$</span>
+                            <input
+                              type="number"
+                              className="input input-xs input-bordered w-24"
+                              defaultValue={item.amount}
+                              disabled={item.status === 'removed'}
+                              onBlur={(e) => {
+                                const value = parseFloat(e.target.value) || 0
+                                if (value !== item.amount) updateItemAmount(item.id, value)
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') e.currentTarget.blur()
+                              }}
+                              min="0"
+                              step="0.01"
+                            />
+                          </div>
+                        </td>
+                        <td>
+                          <span className={`badge ${item.status === 'active' ? 'badge-success' : 'badge-ghost'}`}>
+                            {item.status === 'active' ? 'Active' : 'Removed'}
+                          </span>
+                        </td>
+                        <td>
+                          {item.status === 'active' && (
+                            <button className="btn btn-xs btn-ghost text-error" onClick={() => removeItem(item.id)}>
+                              Remove
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
 
-                        return (
-                          <tr key={service.id} className={
-                            status === 'Active' ? 'bg-success/10' :
-                            status === 'Paused' ? 'bg-warning/10' :
-                            status === 'Cancelled' ? 'bg-error/10' :
-                            ''
-                          }>
-                            <td className="font-medium">
-                              <div className="flex items-center gap-2">
-                                {status === 'Active' && <span className="text-success">✓</span>}
-                                {status === 'Paused' && <span className="text-warning">⏸</span>}
-                                {status === 'Cancelled' && <span className="text-error">✗</span>}
-                                {service.name}
-                              </div>
-                            </td>
-                            <td>{service.description || 'No description available'}</td>
-                            <td>
-                              <div className="flex items-center gap-2">
-                                <span className="text-sm">$</span>
-                                <input
-                                  type="number"
-                                  className="input input-xs input-bordered w-24"
-                                  value={editingAmounts[service.name] !== undefined ? editingAmounts[service.name] : (price || 0)}
-                                  onChange={(e) => {
-                                    const value = parseFloat(e.target.value) || 0
-                                    setEditingAmounts(prev => ({
-                                      ...prev,
-                                      [service.name]: value
-                                    }))
-                                  }}
-                                  onBlur={() => {
-                                    const currentEditingAmount = editingAmounts[service.name]
-                                    if (currentEditingAmount !== undefined && currentEditingAmount !== price) {
-                                      updateBillingAmount(service.name, currentEditingAmount)
-                                    }
-                                    // Clear editing state
-                                    setEditingAmounts(prev => {
-                                      const newState = { ...prev }
-                                      delete newState[service.name]
-                                      return newState
-                                    })
-                                  }}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') {
-                                      e.currentTarget.blur()
-                                    }
-                                  }}
-                                  min="0"
-                                  step="0.01"
-                                  placeholder="0.00"
-                                />
-                              </div>
-                            </td>
-                            <td>
-                              <div className={`badge ${
-                                status === 'Active' ? 'badge-success' :
-                                status === 'Paused' ? 'badge-warning' :
-                                status === 'Cancelled' ? 'badge-error' :
-                                'badge-ghost'
-                              }`}>
-                                {status || 'No Status'}
-                              </div>
-                            </td>
-                            <td>
-                              <div className="dropdown dropdown-end">
-                                <div tabIndex={0} role="button" className="btn btn-sm btn-outline">
-                                  Update Status
-                                </div>
-                                <ul tabIndex={0} className="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52">
-                                  <li>
-                                    <button
-                                      onClick={() => updateSubscriptionStatus(service.name, 'Active')}
-                                      className={status === 'Active' ? 'active' : ''}
-                                    >
-                                      <span className="text-success">✓</span> Active
-                                    </button>
-                                  </li>
-                                  <li>
-                                    <button
-                                      onClick={() => updateSubscriptionStatus(service.name, 'Paused')}
-                                      className={status === 'Paused' ? 'active' : ''}
-                                    >
-                                      <span className="text-warning">⏸</span> Paused
-                                    </button>
-                                  </li>
-                                  <li>
-                                    <button
-                                      onClick={() => updateSubscriptionStatus(service.name, 'Cancelled')}
-                                      className={status === 'Cancelled' ? 'active' : ''}
-                                    >
-                                      <span className="text-error">✗</span> Cancelled
-                                    </button>
-                                  </li>
-                                  <li>
-                                    <button
-                                      onClick={() => updateSubscriptionStatus(service.name, '')}
-                                      className={!status ? 'active' : ''}
-                                    >
-                                      <span className="text-base-content/50">○</span> Clear Status
-                                    </button>
-                                  </li>
-                                </ul>
-                              </div>
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
+              {/* Add item */}
+              <div className="card bg-base-200">
+                <div className="card-body p-4">
+                  <h4 className="font-semibold text-sm mb-2">Add Service to Bundle</h4>
+                  <div className="flex flex-wrap gap-2 items-end">
+                    <div className="form-control">
+                      <select
+                        className="select select-bordered select-sm w-64"
+                        value={newItemServiceId}
+                        onChange={(e) => {
+                          setNewItemServiceId(e.target.value)
+                          const svc = services.find((s) => s.id === e.target.value)
+                          if (svc?.price != null && !newItemAmount) setNewItemAmount(String(svc.price))
+                        }}
+                      >
+                        <option value="">Choose a service...</option>
+                        {availableServices.map((service) => (
+                          <option key={service.id} value={service.id}>
+                            {service.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="form-control">
+                      <div className="flex items-center gap-1">
+                        <span className="text-sm">$</span>
+                        <input
+                          type="number"
+                          className="input input-bordered input-sm w-28"
+                          placeholder="0.00"
+                          value={newItemAmount}
+                          onChange={(e) => setNewItemAmount(e.target.value)}
+                          min="0"
+                          step="0.01"
+                        />
+                      </div>
+                    </div>
+                    <button
+                      className="btn btn-primary btn-sm"
+                      disabled={!newItemServiceId || !newItemAmount || addingItem}
+                      onClick={addItem}
+                    >
+                      {addingItem ? <span className="loading loading-spinner loading-xs"></span> : 'Add'}
+                    </button>
+                  </div>
                 </div>
-              )}
+              </div>
             </div>
           )}
 
           {!selectedCustomer && !loading && (
             <div className="text-center py-8 text-base-content/60">
-              Please select a corporate customer to view their subscription details.
+              Select a corporate customer to view or set up their billing bundle.
             </div>
           )}
         </div>

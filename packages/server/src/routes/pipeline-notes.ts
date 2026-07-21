@@ -6,29 +6,29 @@
 import { Hono } from 'hono';
 import { asc, desc, eq } from 'drizzle-orm';
 import { getDb } from '../db/client';
-import { pipelineNotes, subscriptionsPersonal, personal } from '../db/schema';
+import { pipelineNotes, personalPipelineTickets, personal } from '../db/schema';
 import { noteToAirtableRecord } from '../db/serializers-subscriptions';
 
 const app = new Hono();
 
 type NoteRow = typeof pipelineNotes.$inferSelect;
 
-/** Client Name lookup: note → subscription → personal full name. */
+/** Client Name lookup: note → pipeline ticket → personal full name. */
 async function loadClientNames(rows: NoteRow[]): Promise<Map<string, string | null>> {
   const map = new Map<string, string | null>();
-  const subIds = [...new Set(rows.map((r) => r.subscriptionPersonalId).filter(Boolean))] as string[];
-  if (subIds.length === 0) return map;
+  const ticketIds = [...new Set(rows.map((r) => r.subscriptionPersonalId).filter(Boolean))] as string[];
+  if (ticketIds.length === 0) return map;
   const db = getDb();
-  const subs = await db
+  const tickets = await db
     .select({
-      id: subscriptionsPersonal.id,
+      id: personalPipelineTickets.id,
       firstName: personal.firstName,
       lastName: personal.lastName,
     })
-    .from(subscriptionsPersonal)
-    .leftJoin(personal, eq(subscriptionsPersonal.personalId, personal.id));
-  for (const s of subs) {
-    map.set(s.id, [s.firstName, s.lastName].filter(Boolean).join(' ') || null);
+    .from(personalPipelineTickets)
+    .leftJoin(personal, eq(personalPipelineTickets.personalId, personal.id));
+  for (const t of tickets) {
+    map.set(t.id, [t.firstName, t.lastName].filter(Boolean).join(' ') || null);
   }
   return map;
 }

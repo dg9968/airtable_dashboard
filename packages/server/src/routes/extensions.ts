@@ -11,7 +11,7 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 import { eq } from 'drizzle-orm';
 import { getDb } from '../db/client';
-import { subscriptionsCorporate, corporations } from '../db/schema';
+import { corporatePipelineTickets, corporations } from '../db/schema';
 import {
   subsCorporateFieldsToColumns,
   subsCorporateToAirtableRecord,
@@ -125,8 +125,8 @@ async function loadSubscriptionWithCompany(subscriptionId: string) {
   const db = getDb();
   const [sub] = await db
     .select()
-    .from(subscriptionsCorporate)
-    .where(eq(subscriptionsCorporate.id, subscriptionId))
+    .from(corporatePipelineTickets)
+    .where(eq(corporatePipelineTickets.id, subscriptionId))
     .limit(1);
   if (!sub) return { sub: null, corp: null };
   const corp = sub.corporationId
@@ -263,9 +263,9 @@ app.patch('/:subscriptionId', async (c) => {
 
     const db = getDb();
     const [row] = await db
-      .update(subscriptionsCorporate)
+      .update(corporatePipelineTickets)
       .set(subsCorporateFieldsToColumns(body.fields))
-      .where(eq(subscriptionsCorporate.id, subscriptionId))
+      .where(eq(corporatePipelineTickets.id, subscriptionId))
       .returning();
 
     if (!row) {

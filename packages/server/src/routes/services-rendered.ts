@@ -1,35 +1,33 @@
 /**
  * Services Rendered API Routes (Postgres-backed)
  *
- * Manages completed services that are awaiting billing or have been billed.
- * Client/service/processor names are stored values (not lookups) so they
- * survive subscription deletion at billing time — same design as before.
+ * Manages completed work awaiting billing or already billed (billing_records
+ * — see db/schema/subscriptions.ts, TS name for the "services_rendered"
+ * table). Completing a pipeline ticket never deletes it — client/service/
+ * processor are still snapshotted onto the record for a stable display, but
+ * the pipeline ticket and (for corporate) its billing bundle stay intact.
+ * "Billing" here IS the ledger now: there's no separate ledger insert.
  */
 
 import { Hono } from 'hono';
 import { and, desc, eq, gt, inArray, lt } from 'drizzle-orm';
 import { getDb } from '../db/client';
 import {
-  servicesRendered,
-  subscriptionsPersonal,
-  subscriptionsCorporate,
-  ledger,
+  billingRecords,
+  personalPipelineTickets,
+  corporatePipelineTickets,
   billingNotes,
 } from '../db/schema';
 import {
   loadSubsPersonalContext,
   loadSubsCorporateContext,
-  subsPersonalToAirtableRecord,
-  subsCorporateToAirtableRecord,
-  servicesRenderedToAirtableRecord,
-  ledgerToAirtableRecord,
+  billingRecordToAirtableRecord,
+  WIRE_BILLING_STATUSES,
 } from '../db/serializers-subscriptions';
 
 const app = new Hono();
 
-type ServiceRow = typeof servicesRendered.$inferSelect;
-
-const VALID_STATUSES = ['Unbilled', 'Billed - Paid', 'Billed - Unpaid', 'Waived', 'Part of Subscription'];
+type BillingRecordRow = typeof billingRecords.$inferSelect;
 
 async function loadBillingNoteIds(ids: string[]): Promise<Map<string, string[]>> {
   const map = new Map<string, string[]>();
@@ -49,77 +47,83 @@ async function loadBillingNoteIds(ids: string[]): Promise<Map<string, string[]>>
 
 /**
  * POST /api/services-rendered
- * Create a new unbilled service record when a service is completed
+ * Create a new billing record when a pipeline ticket's work is completed.
+ * The ticket itself is left untouched (no deletion) — client/service/
+ * processor are snapshotted here purely for stable display.
  */
 app.post('/', async (c) => {
   try {
-    console.log('[Services Rendered API] POST / - Creating new service record');
+    console.log('[Services Rendered API] POST / - Creating new billing record');
 
     const { subscriptionId, subscriptionType, serviceDate, amountCharged, notes, billingStatus } = await c.req.json();
 
     if (!subscriptionId || !subscriptionType || !serviceDate) {
       return c.json(
-        {
-          success: false,
-          error: 'Missing required fields: subscriptionId, subscriptionType, serviceDate',
-        },
+        { success: false, error: 'Missing required fields: subscriptionId, subscriptionType, serviceDate' },
         400
       );
     }
 
     if (subscriptionType !== 'personal' && subscriptionType !== 'corporate') {
-      return c.json(
-        {
-          success: false,
-          error: 'subscriptionType must be "personal" or "corporate"',
-        },
-        400
-      );
+      return c.json({ success: false, error: 'subscriptionType must be "personal" or "corporate"' }, 400);
     }
 
     const db = getDb();
 
-    // Extract stored values from the subscription (client/service/processor)
     let clientName = 'Unknown Client';
     let serviceType = 'Unknown Service';
     let processor = 'Unassigned';
+    let bundleItemId: string | null = null;
 
     if (subscriptionType === 'corporate') {
-      const [sub] = await db
+      const [ticket] = await db
         .select()
-        .from(subscriptionsCorporate)
-        .where(eq(subscriptionsCorporate.id, subscriptionId))
+        .from(corporatePipelineTickets)
+        .where(eq(corporatePipelineTickets.id, subscriptionId))
         .limit(1);
-      if (!sub) {
-        return c.json({ success: false, error: 'Subscription not found in Subscriptions Corporate' }, 404);
+      if (!ticket) {
+        return c.json({ success: false, error: 'Pipeline ticket not found in Subscriptions Corporate' }, 404);
       }
       const ctx = await loadSubsCorporateContext(db);
-      const fields = subsCorporateToAirtableRecord(sub, ctx).fields as Record<string, any>;
-      clientName = fields['Company  (from Customer)']?.[0] || 'Unknown Client';
-      serviceType = fields['Service Name']?.[0] || 'Unknown Service';
-      processor = fields['Name (from Processor)']?.[0] || 'Unassigned';
+      const corp = ticket.corporationId ? ctx.corps.get(ticket.corporationId) : undefined;
+      const serviceName = ticket.serviceId ? ctx.serviceNames.get(ticket.serviceId) : undefined;
+      const processorInfo = ticket.processorId ? ctx.users.get(ticket.processorId) : undefined;
+      clientName = corp?.company || 'Unknown Client';
+      serviceType = serviceName || 'Unknown Service';
+      processor = processorInfo?.name || 'Unassigned';
+      bundleItemId = ticket.bundleItemId;
     } else {
-      const [sub] = await db
+      const [ticket] = await db
         .select()
-        .from(subscriptionsPersonal)
-        .where(eq(subscriptionsPersonal.id, subscriptionId))
+        .from(personalPipelineTickets)
+        .where(eq(personalPipelineTickets.id, subscriptionId))
         .limit(1);
-      if (!sub) {
-        return c.json({ success: false, error: 'Subscription not found in Subscriptions Personal' }, 404);
+      if (!ticket) {
+        return c.json({ success: false, error: 'Pipeline ticket not found in Subscriptions Personal' }, 404);
       }
       const ctx = await loadSubsPersonalContext(db);
-      const fields = subsPersonalToAirtableRecord(sub, ctx).fields as Record<string, any>;
-      clientName = fields['Full Name']?.[0] || 'Unknown Client';
-      serviceType = fields['Service Name (from Service)']?.[0] || 'Unknown Service';
-      processor = fields['Name (from Team Link)']?.[0] || fields['Processor'] || 'Unassigned';
+      const person = ticket.personalId ? ctx.persons.get(ticket.personalId) : undefined;
+      const serviceName = ticket.serviceId ? ctx.serviceNames.get(ticket.serviceId) : undefined;
+      const preparer = ticket.taxPreparerId ? ctx.users.get(ticket.taxPreparerId) : undefined;
+      clientName = person?.fullName || 'Unknown Client';
+      serviceType = serviceName || 'Unknown Service';
+      processor = preparer?.name || 'Unassigned';
     }
 
-    console.log('[Services Rendered API] Extracted values:', { clientName, serviceType, processor });
+    console.log('[Services Rendered API] Extracted values:', { clientName, serviceType, processor, bundleItemId });
 
-    const finalBillingStatus = billingStatus && VALID_STATUSES.includes(billingStatus) ? billingStatus : 'Unbilled';
+    const finalBillingStatus =
+      billingStatus && WIRE_BILLING_STATUSES.includes(billingStatus)
+        ? billingStatus
+        : bundleItemId
+          ? 'Covered by Bundle'
+          : 'Unbilled';
+    // Bundle-covered work is never charged standalone — the bundle's
+    // recurring total already accounts for it.
+    const finalAmount = finalBillingStatus === 'Covered by Bundle' ? null : amountCharged ?? null;
 
     const [row] = await db
-      .insert(servicesRendered)
+      .insert(billingRecords)
       .values({
         serviceRenderedDate: serviceDate.split('T')[0],
         billingStatus: finalBillingStatus,
@@ -129,12 +133,12 @@ app.post('/', async (c) => {
         clientType: subscriptionType,
         subscriptionPersonalId: subscriptionType === 'personal' ? subscriptionId : null,
         subscriptionCorporateId: subscriptionType === 'corporate' ? subscriptionId : null,
-        amountCharged: amountCharged !== undefined && amountCharged !== null ? String(amountCharged) : null,
+        amountCharged: finalAmount != null ? String(finalAmount) : null,
         notes: notes || null,
       })
       .returning();
 
-    const record = servicesRenderedToAirtableRecord(row);
+    const record = billingRecordToAirtableRecord(row);
     return c.json({
       success: true,
       data: {
@@ -144,11 +148,11 @@ app.post('/', async (c) => {
       },
     });
   } catch (error) {
-    console.error('Error creating Services Rendered entry:', error);
+    console.error('Error creating billing record:', error);
     return c.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : 'Failed to create services rendered entry',
+        error: error instanceof Error ? error.message : 'Failed to create billing record',
         details: error instanceof Error ? error.stack : 'Unknown error',
       },
       500
@@ -158,7 +162,7 @@ app.post('/', async (c) => {
 
 /**
  * GET /api/services-rendered
- * Fetch services rendered with filtering and grouping
+ * Fetch billing records with filtering and grouping
  */
 app.get('/', async (c) => {
   try {
@@ -173,23 +177,23 @@ app.get('/', async (c) => {
     const clientType = c.req.query('clientType');
 
     const conditions = [];
-    if (status && status !== 'All') conditions.push(eq(servicesRendered.billingStatus, status));
+    if (status && status !== 'All') conditions.push(eq(billingRecords.billingStatus, status));
     // Legacy IS_AFTER / IS_BEFORE were strict comparisons
-    if (startDate) conditions.push(gt(servicesRendered.serviceRenderedDate, startDate));
-    if (endDate) conditions.push(lt(servicesRendered.serviceRenderedDate, endDate));
+    if (startDate) conditions.push(gt(billingRecords.serviceRenderedDate, startDate));
+    if (endDate) conditions.push(lt(billingRecords.serviceRenderedDate, endDate));
 
     const rows = await db
       .select()
-      .from(servicesRendered)
+      .from(billingRecords)
       .where(conditions.length > 0 ? and(...conditions) : undefined)
-      .orderBy(desc(servicesRendered.serviceRenderedDate));
+      .orderBy(desc(billingRecords.serviceRenderedDate));
 
-    console.log(`Fetched ${rows.length} Services Rendered records`);
+    console.log(`Fetched ${rows.length} billing records`);
 
     const noteIds = await loadBillingNoteIds(rows.map((r) => r.id));
 
     let filteredRecords = rows.map((row) => {
-      const record = servicesRenderedToAirtableRecord(row, noteIds.get(row.id));
+      const record = billingRecordToAirtableRecord(row, noteIds.get(row.id));
       return {
         id: row.id,
         fields: record.fields,
@@ -208,26 +212,22 @@ app.get('/', async (c) => {
 
     if (clientName) {
       const lowerClientName = clientName.toLowerCase();
-      filteredRecords = filteredRecords.filter(r =>
-        r.clientName.toLowerCase().includes(lowerClientName)
-      );
+      filteredRecords = filteredRecords.filter((r) => r.clientName.toLowerCase().includes(lowerClientName));
     }
 
     if (processor) {
       const lowerProcessor = processor.toLowerCase();
-      filteredRecords = filteredRecords.filter(r =>
-        r.processor.toLowerCase().includes(lowerProcessor)
-      );
+      filteredRecords = filteredRecords.filter((r) => r.processor.toLowerCase().includes(lowerProcessor));
     }
 
     if (clientType && clientType !== 'all') {
-      filteredRecords = filteredRecords.filter(r => r.clientType === clientType);
+      filteredRecords = filteredRecords.filter((r) => r.clientType === clientType);
     }
 
     const summary = {
       totalServices: filteredRecords.length,
       totalAmount: filteredRecords.reduce((sum, r) => sum + (r.amount || 0), 0),
-      unbilledCount: filteredRecords.filter(r => r.billingStatus === 'Unbilled').length,
+      unbilledCount: filteredRecords.filter((r) => r.billingStatus === 'Unbilled').length,
     };
 
     const grouped = groupRecords(filteredRecords, groupBy as 'client' | 'processor' | 'date');
@@ -242,12 +242,9 @@ app.get('/', async (c) => {
       },
     });
   } catch (error) {
-    console.error('Error fetching services rendered:', error);
+    console.error('Error fetching billing records:', error);
     return c.json(
-      {
-        success: false,
-        error: error instanceof Error ? error.message : 'Failed to fetch services rendered',
-      },
+      { success: false, error: error instanceof Error ? error.message : 'Failed to fetch billing records' },
       500
     );
   }
@@ -259,7 +256,7 @@ app.get('/', async (c) => {
 function groupRecords(records: any[], groupBy: 'client' | 'processor' | 'date') {
   const grouped: any = {};
 
-  records.forEach(record => {
+  records.forEach((record) => {
     let key = '';
 
     switch (groupBy) {
@@ -288,38 +285,33 @@ function groupRecords(records: any[], groupBy: 'client' | 'processor' | 'date') 
     grouped[key].count++;
   });
 
-  return Object.values(grouped).sort((a: any, b: any) =>
-    a.groupName.localeCompare(b.groupName)
-  );
+  return Object.values(grouped).sort((a: any, b: any) => a.groupName.localeCompare(b.groupName));
 }
 
 /**
  * GET /api/services-rendered/:id
- * Get a single service record by ID
+ * Get a single billing record by ID
  */
 app.get('/:id', async (c) => {
   try {
     const recordId = c.req.param('id');
     const db = getDb();
 
-    const [row] = await db.select().from(servicesRendered).where(eq(servicesRendered.id, recordId)).limit(1);
+    const [row] = await db.select().from(billingRecords).where(eq(billingRecords.id, recordId)).limit(1);
 
     if (!row) {
-      return c.json({ success: false, error: 'Service record not found' }, 404);
+      return c.json({ success: false, error: 'Billing record not found' }, 404);
     }
 
     const noteIds = await loadBillingNoteIds([row.id]);
     return c.json({
       success: true,
-      data: servicesRenderedToAirtableRecord(row, noteIds.get(row.id)),
+      data: billingRecordToAirtableRecord(row, noteIds.get(row.id)),
     });
   } catch (error) {
-    console.error('Error fetching service record:', error);
+    console.error('Error fetching billing record:', error);
     return c.json(
-      {
-        success: false,
-        error: error instanceof Error ? error.message : 'Failed to fetch service record',
-      },
+      { success: false, error: error instanceof Error ? error.message : 'Failed to fetch billing record' },
       500
     );
   }
@@ -335,21 +327,12 @@ app.patch('/:id/status', async (c) => {
     const { billingStatus } = await c.req.json();
 
     if (!billingStatus) {
-      return c.json(
-        {
-          success: false,
-          error: 'Missing required field: billingStatus',
-        },
-        400
-      );
+      return c.json({ success: false, error: 'Missing required field: billingStatus' }, 400);
     }
 
-    if (!VALID_STATUSES.includes(billingStatus)) {
+    if (!WIRE_BILLING_STATUSES.includes(billingStatus)) {
       return c.json(
-        {
-          success: false,
-          error: `Invalid billing status. Must be one of: ${VALID_STATUSES.join(', ')}`,
-        },
+        { success: false, error: `Invalid billing status. Must be one of: ${WIRE_BILLING_STATUSES.join(', ')}` },
         400
       );
     }
@@ -357,35 +340,28 @@ app.patch('/:id/status', async (c) => {
     console.log(`[Services Rendered API] Updating status for ${recordId} to ${billingStatus}`);
 
     const [row] = await getDb()
-      .update(servicesRendered)
+      .update(billingRecords)
       .set({ billingStatus })
-      .where(eq(servicesRendered.id, recordId))
+      .where(eq(billingRecords.id, recordId))
       .returning();
 
     if (!row) {
-      return c.json({ success: false, error: 'Service record not found' }, 404);
+      return c.json({ success: false, error: 'Billing record not found' }, 404);
     }
 
-    return c.json({
-      success: true,
-      data: servicesRenderedToAirtableRecord(row),
-    });
+    return c.json({ success: true, data: billingRecordToAirtableRecord(row) });
   } catch (error) {
     console.error('Error updating billing status:', error);
     return c.json(
-      {
-        success: false,
-        error: error instanceof Error ? error.message : 'Failed to update billing status',
-      },
+      { success: false, error: error instanceof Error ? error.message : 'Failed to update billing status' },
       500
     );
   }
 });
 
-/** Legacy field names → services_rendered columns for PATCH bodies. */
-function serviceFieldsToColumns(fields: Record<string, unknown>): Partial<typeof servicesRendered.$inferInsert> {
-  const out: Partial<typeof servicesRendered.$inferInsert> = {};
-  const first = (v: unknown) => (Array.isArray(v) ? (v[0] as string | undefined) ?? null : (v as string | null));
+/** Legacy field names → billing_records (services_rendered) columns for PATCH bodies. */
+function serviceFieldsToColumns(fields: Record<string, unknown>): Partial<typeof billingRecords.$inferInsert> {
+  const out: Partial<typeof billingRecords.$inferInsert> = {};
   for (const [key, value] of Object.entries(fields)) {
     switch (key) {
       case 'Billing Status': out.billingStatus = (value as string) || null; break;
@@ -397,7 +373,6 @@ function serviceFieldsToColumns(fields: Record<string, unknown>): Partial<typeof
       case 'Service Type': out.serviceType = (value as string) || null; break;
       case 'Processor': out.processor = (value as string) || null; break;
       case 'Service Rendered Date': out.serviceRenderedDate = (value as string) || null; break;
-      case 'Ledger Entry': out.ledgerEntryId = first(value); break;
     }
   }
   return out;
@@ -405,7 +380,7 @@ function serviceFieldsToColumns(fields: Record<string, unknown>): Partial<typeof
 
 /**
  * PATCH /api/services-rendered/:id
- * Update a service record (e.g., add amount, update notes)
+ * Update a billing record (e.g., add amount, update notes)
  */
 app.patch('/:id', async (c) => {
   try {
@@ -413,131 +388,74 @@ app.patch('/:id', async (c) => {
     const { fields } = await c.req.json();
 
     if (!fields) {
-      return c.json(
-        {
-          success: false,
-          error: 'Missing fields object in request body',
-        },
-        400
-      );
+      return c.json({ success: false, error: 'Missing fields object in request body' }, 400);
     }
 
     const [row] = await getDb()
-      .update(servicesRendered)
+      .update(billingRecords)
       .set(serviceFieldsToColumns(fields))
-      .where(eq(servicesRendered.id, recordId))
+      .where(eq(billingRecords.id, recordId))
       .returning();
 
     if (!row) {
-      return c.json({ success: false, error: 'Service record not found' }, 404);
+      return c.json({ success: false, error: 'Billing record not found' }, 404);
     }
 
-    return c.json({
-      success: true,
-      data: servicesRenderedToAirtableRecord(row),
-    });
+    return c.json({ success: true, data: billingRecordToAirtableRecord(row) });
   } catch (error) {
-    console.error('Error updating service record:', error);
+    console.error('Error updating billing record:', error);
     return c.json(
-      {
-        success: false,
-        error: error instanceof Error ? error.message : 'Failed to update service record',
-      },
+      { success: false, error: error instanceof Error ? error.message : 'Failed to update billing record' },
       500
     );
   }
 });
 
-/** Shared: delete a billed subscription (personal or corporate); tolerant of already-deleted. */
-async function deleteSubscription(subscriptionType: 'personal' | 'corporate', subscriptionId: string) {
-  const db = getDb();
-  try {
-    if (subscriptionType === 'corporate') {
-      await db.delete(subscriptionsCorporate).where(eq(subscriptionsCorporate.id, subscriptionId));
-    } else {
-      await db.delete(subscriptionsPersonal).where(eq(subscriptionsPersonal.id, subscriptionId));
-    }
-    console.log('[Services Rendered API] Subscription deleted successfully');
-  } catch (error) {
-    console.error('[Services Rendered API] Failed to delete subscription:', error);
-  }
-}
-
 /**
  * POST /api/services-rendered/:id/bill
- * Mark a service as billed and optionally create a Ledger entry
+ * Mark a billing record as billed/paid. The originating pipeline ticket
+ * (and, for corporate clients, their billing bundle) is left untouched —
+ * billing a one-off item no longer destroys the client's pipeline history.
  */
 app.post('/:id/bill', async (c) => {
   try {
     const recordId = c.req.param('id');
-    const { amountCharged, paymentMethod, receiptDate, createLedger, billingStatus } = await c.req.json();
+    const { amountCharged, paymentMethod, receiptDate, billingStatus } = await c.req.json();
 
     if (!amountCharged || !paymentMethod || !receiptDate || !billingStatus) {
       return c.json(
-        {
-          success: false,
-          error: 'Missing required fields: amountCharged, paymentMethod, receiptDate, billingStatus',
-        },
+        { success: false, error: 'Missing required fields: amountCharged, paymentMethod, receiptDate, billingStatus' },
+        400
+      );
+    }
+
+    if (!WIRE_BILLING_STATUSES.includes(billingStatus)) {
+      return c.json(
+        { success: false, error: `Invalid billing status. Must be one of: ${WIRE_BILLING_STATUSES.join(', ')}` },
         400
       );
     }
 
     const db = getDb();
-    const [serviceRow] = await db.select().from(servicesRendered).where(eq(servicesRendered.id, recordId)).limit(1);
-    if (!serviceRow) {
-      return c.json({ success: false, error: 'Service record not found' }, 404);
-    }
-
-    const updateValues: Partial<typeof servicesRendered.$inferInsert> = {
-      billingStatus,
-      amountCharged: String(amountCharged),
-      paymentMethod,
-      receiptDate: receiptDate.split('T')[0],
-    };
-
-    let ledgerEntry = null;
-
-    if (createLedger && billingStatus === 'Billed - Paid') {
-      console.log('[Services Rendered API] Creating Ledger entry for service:', recordId);
-
-      const subscriptionType = serviceRow.subscriptionCorporateId ? 'corporate' : 'personal';
-      const subscriptionId = serviceRow.subscriptionCorporateId || serviceRow.subscriptionPersonalId;
-
-      const [ledgerRow] = await db
-        .insert(ledger)
-        .values({
-          serviceRendered: serviceRow.serviceType || 'Service',
-          receiptDate: receiptDate.split('T')[0],
-          amountCharged: String(amountCharged),
-          nameOfClient: serviceRow.clientName || 'Unknown Client',
-          paymentMethod,
-          subscriptionPersonalId: subscriptionType === 'personal' ? subscriptionId : null,
-          subscriptionCorporateId: subscriptionType === 'corporate' ? subscriptionId : null,
-        })
-        .returning();
-
-      ledgerEntry = ledgerToAirtableRecord(ledgerRow, [recordId], serviceRow.processor);
-      updateValues.ledgerEntryId = ledgerRow.id;
-
-      // Delete the subscription record now that it's billed and in the ledger
-      if (subscriptionId) {
-        console.log(`[Services Rendered API] Deleting subscription ${subscriptionId}`);
-        await deleteSubscription(subscriptionType, subscriptionId);
-      }
+    const [existing] = await db.select().from(billingRecords).where(eq(billingRecords.id, recordId)).limit(1);
+    if (!existing) {
+      return c.json({ success: false, error: 'Billing record not found' }, 404);
     }
 
     const [updated] = await db
-      .update(servicesRendered)
-      .set(updateValues)
-      .where(eq(servicesRendered.id, recordId))
+      .update(billingRecords)
+      .set({
+        billingStatus,
+        amountCharged: String(amountCharged),
+        paymentMethod,
+        receiptDate: receiptDate.split('T')[0],
+      })
+      .where(eq(billingRecords.id, recordId))
       .returning();
 
     return c.json({
       success: true,
-      data: {
-        serviceRendered: servicesRenderedToAirtableRecord(updated),
-        ledgerEntry,
-      },
+      data: { serviceRendered: billingRecordToAirtableRecord(updated) },
     });
   } catch (error) {
     console.error('Error billing service:', error);
@@ -554,86 +472,44 @@ app.post('/:id/bill', async (c) => {
 
 /**
  * POST /api/services-rendered/batch-bill
- * Bill multiple services at once
+ * Bill multiple billing records at once. Pipeline tickets/bundles for the
+ * billed records are left untouched.
  */
 app.post('/batch-bill', async (c) => {
   try {
-    const { serviceIds, paymentMethod, receiptDate, totalAmount, createLedger, billingStatus, notes } = await c.req.json();
+    const { serviceIds, paymentMethod, receiptDate, totalAmount, billingStatus, notes } = await c.req.json();
 
     if (!serviceIds || !Array.isArray(serviceIds) || serviceIds.length === 0) {
-      return c.json(
-        {
-          success: false,
-          error: 'serviceIds must be a non-empty array',
-        },
-        400
-      );
+      return c.json({ success: false, error: 'serviceIds must be a non-empty array' }, 400);
     }
 
     if (!paymentMethod || !receiptDate || !billingStatus) {
       return c.json(
-        {
-          success: false,
-          error: 'Missing required fields: paymentMethod, receiptDate, billingStatus',
-        },
+        { success: false, error: 'Missing required fields: paymentMethod, receiptDate, billingStatus' },
         400
       );
     }
 
-    console.log(`Batch billing ${serviceIds.length} services`);
+    if (!WIRE_BILLING_STATUSES.includes(billingStatus)) {
+      return c.json(
+        { success: false, error: `Invalid billing status. Must be one of: ${WIRE_BILLING_STATUSES.join(', ')}` },
+        400
+      );
+    }
+
+    console.log(`Batch billing ${serviceIds.length} billing records`);
 
     const db = getDb();
-    const serviceRows = await db.select().from(servicesRendered).where(inArray(servicesRendered.id, serviceIds));
+    const rows = await db.select().from(billingRecords).where(inArray(billingRecords.id, serviceIds));
 
     let calculatedTotal = totalAmount;
     if (!calculatedTotal) {
-      calculatedTotal = serviceRows.reduce((sum, row) => sum + (row.amountCharged != null ? Number(row.amountCharged) : 0), 0);
+      calculatedTotal = rows.reduce((sum, row) => sum + (row.amountCharged != null ? Number(row.amountCharged) : 0), 0);
     }
 
-    let ledgerEntry = null;
-
-    if (createLedger && billingStatus === 'Billed - Paid') {
-      const firstService = serviceRows[0];
-      const subscriptionType = firstService.subscriptionCorporateId ? 'corporate' : 'personal';
-      const subscriptionId = firstService.subscriptionCorporateId || firstService.subscriptionPersonalId;
-
-      const serviceDescriptions = serviceRows.map((r) => r.serviceType).filter(Boolean);
-      const serviceDescription = serviceDescriptions.length > 0
-        ? `Batch: ${serviceDescriptions.join(', ')}`
-        : 'Batch Billing';
-
-      const [ledgerRow] = await db
-        .insert(ledger)
-        .values({
-          serviceRendered: serviceDescription,
-          receiptDate: receiptDate.split('T')[0],
-          amountCharged: String(calculatedTotal),
-          nameOfClient: firstService.clientName || 'Unknown Client',
-          paymentMethod,
-          subscriptionPersonalId: subscriptionType === 'personal' ? subscriptionId : null,
-          subscriptionCorporateId: subscriptionType === 'corporate' ? subscriptionId : null,
-        })
-        .returning();
-
-      ledgerEntry = ledgerToAirtableRecord(ledgerRow, serviceIds, firstService.processor);
-
-      // Delete all linked subscriptions for the billed services
-      const personalIds = [...new Set(serviceRows.map((r) => r.subscriptionPersonalId).filter(Boolean))] as string[];
-      const corporateIds = [...new Set(serviceRows.map((r) => r.subscriptionCorporateId).filter(Boolean))] as string[];
-      if (personalIds.length > 0) {
-        console.log(`[Services Rendered API] Deleting ${personalIds.length} personal subscriptions`);
-        await db.delete(subscriptionsPersonal).where(inArray(subscriptionsPersonal.id, personalIds));
-      }
-      if (corporateIds.length > 0) {
-        console.log(`[Services Rendered API] Deleting ${corporateIds.length} corporate subscriptions`);
-        await db.delete(subscriptionsCorporate).where(inArray(subscriptionsCorporate.id, corporateIds));
-      }
-    }
-
-    // Update all service records
     const updatedRecords = [];
-    for (const row of serviceRows) {
-      const updateValues: Partial<typeof servicesRendered.$inferInsert> = {
+    for (const row of rows) {
+      const updateValues: Partial<typeof billingRecords.$inferInsert> = {
         billingStatus,
         paymentMethod,
         receiptDate: receiptDate.split('T')[0],
@@ -643,29 +519,22 @@ app.post('/batch-bill', async (c) => {
         updateValues.amountCharged = String(calculatedTotal / serviceIds.length);
       }
 
-      if (ledgerEntry) {
-        updateValues.ledgerEntryId = ledgerEntry.id;
-      }
-
       if (notes) {
-        updateValues.notes = row.notes
-          ? `${row.notes}\n\nBatch billing: ${notes}`
-          : `Batch billing: ${notes}`;
+        updateValues.notes = row.notes ? `${row.notes}\n\nBatch billing: ${notes}` : `Batch billing: ${notes}`;
       }
 
       const [updated] = await db
-        .update(servicesRendered)
+        .update(billingRecords)
         .set(updateValues)
-        .where(eq(servicesRendered.id, row.id))
+        .where(eq(billingRecords.id, row.id))
         .returning();
-      updatedRecords.push(servicesRenderedToAirtableRecord(updated));
+      updatedRecords.push(billingRecordToAirtableRecord(updated));
     }
 
     return c.json({
       success: true,
       data: {
         updatedServices: updatedRecords,
-        ledgerEntry,
         summary: {
           totalBilled: serviceIds.length,
           totalAmount: calculatedTotal,

@@ -1,94 +1,25 @@
 /**
  * Ledger API Routes (Postgres-backed)
  *
- * Manages ledger entries for tracking service revenue
+ * Read-only compat view over billing_records ("Services Rendered"): the
+ * ledger is simply every billing record that's actually been paid. There's
+ * no separate Ledger table anymore — a ledger entry and the billing record
+ * that produced it were always the same fact, so they're the same row now
+ * (see db/schema/subscriptions.ts). Response shape is unchanged so
+ * app/ledger's page needs no client-side changes.
  */
 
 import { Hono } from 'hono';
-import { and, desc, eq, gt, inArray, lt } from 'drizzle-orm';
+import { and, desc, eq, gt, lt } from 'drizzle-orm';
 import { getDb } from '../db/client';
-import { ledger, servicesRendered, subscriptionsPersonal, subscriptionsCorporate } from '../db/schema';
-import { ledgerToAirtableRecord } from '../db/serializers-subscriptions';
+import { billingRecords } from '../db/schema';
+import { billingRecordToAirtableRecord } from '../db/serializers-subscriptions';
 
 const app = new Hono();
 
 /**
- * POST /api/ledger
- * Create a new ledger entry
- */
-app.post('/', async (c) => {
-  try {
-    const { subscriptionId, subscriptionType, clientName, serviceType, amountCharged, receiptDate, paymentMethod } = await c.req.json();
-
-    if (!subscriptionId || !clientName || !amountCharged || !receiptDate || !paymentMethod) {
-      return c.json(
-        {
-          success: false,
-          error: 'Missing required fields: subscriptionId, clientName, amountCharged, receiptDate, paymentMethod',
-        },
-        400
-      );
-    }
-
-    const type = subscriptionType || 'personal';
-    const service = serviceType || 'Personal Tax Return';
-
-    console.log('Creating Ledger entry:', { subscriptionId, subscriptionType: type, clientName, serviceType: service, amountCharged, receiptDate, paymentMethod });
-
-    const db = getDb();
-
-    // Verify the subscription exists
-    const table = type === 'corporate' ? subscriptionsCorporate : subscriptionsPersonal;
-    const [subscription] = await db
-      .select({ id: table.id })
-      .from(table as any)
-      .where(eq(table.id, subscriptionId))
-      .limit(1);
-
-    if (!subscription) {
-      return c.json(
-        {
-          success: false,
-          error: `Subscription not found in ${type === 'corporate' ? 'Subscriptions Corporate' : 'Subscriptions Personal'}`,
-        },
-        404
-      );
-    }
-
-    const [row] = await db
-      .insert(ledger)
-      .values({
-        serviceRendered: service,
-        receiptDate,
-        amountCharged: String(amountCharged),
-        nameOfClient: clientName,
-        paymentMethod,
-        subscriptionPersonalId: type === 'personal' ? subscriptionId : null,
-        subscriptionCorporateId: type === 'corporate' ? subscriptionId : null,
-      })
-      .returning();
-
-    const record = ledgerToAirtableRecord(row);
-    return c.json({
-      success: true,
-      data: { id: record.id, fields: record.fields },
-    });
-  } catch (error) {
-    console.error('Error creating Ledger entry:', error);
-    return c.json(
-      {
-        success: false,
-        error: error instanceof Error ? error.message : 'Failed to create ledger entry',
-        details: error instanceof Error ? error.stack : 'Unknown error',
-      },
-      500
-    );
-  }
-});
-
-/**
  * GET /api/ledger
- * Fetch ledger entries with filtering and grouping
+ * Fetch paid billing records ("ledger entries") with filtering and grouping
  */
 app.get('/', async (c) => {
   try {
@@ -100,66 +31,43 @@ app.get('/', async (c) => {
     const paymentMethod = c.req.query('paymentMethod');
     const groupBy = c.req.query('groupBy') || 'client';
 
-    const conditions = [];
-    if (startDate) conditions.push(gt(ledger.receiptDate, startDate));
-    if (endDate) conditions.push(lt(ledger.receiptDate, endDate));
-    if (paymentMethod) conditions.push(eq(ledger.paymentMethod, paymentMethod));
+    const conditions = [eq(billingRecords.billingStatus, 'Billed - Paid')];
+    if (startDate) conditions.push(gt(billingRecords.receiptDate, startDate));
+    if (endDate) conditions.push(lt(billingRecords.receiptDate, endDate));
+    if (paymentMethod) conditions.push(eq(billingRecords.paymentMethod, paymentMethod));
 
     const rows = await db
       .select()
-      .from(ledger)
-      .where(conditions.length > 0 ? and(...conditions) : undefined)
-      .orderBy(desc(ledger.receiptDate));
+      .from(billingRecords)
+      .where(and(...conditions))
+      .orderBy(desc(billingRecords.receiptDate));
 
-    console.log(`Fetched ${rows.length} Ledger records`);
-
-    // Reverse links + processor lookup from services_rendered
-    const linkedServices = rows.length > 0
-      ? await db
-          .select({
-            id: servicesRendered.id,
-            ledgerEntryId: servicesRendered.ledgerEntryId,
-            processor: servicesRendered.processor,
-          })
-          .from(servicesRendered)
-          .where(inArray(servicesRendered.ledgerEntryId, rows.map((r) => r.id)))
-      : [];
-    const serviceIdsByLedger = new Map<string, string[]>();
-    const processorByLedger = new Map<string, string | null>();
-    for (const s of linkedServices) {
-      if (!s.ledgerEntryId) continue;
-      const list = serviceIdsByLedger.get(s.ledgerEntryId) ?? [];
-      list.push(s.id);
-      serviceIdsByLedger.set(s.ledgerEntryId, list);
-      if (!processorByLedger.has(s.ledgerEntryId)) processorByLedger.set(s.ledgerEntryId, s.processor);
-    }
+    console.log(`Fetched ${rows.length} ledger (paid billing) records`);
 
     let processedEntries = rows.map((row) => {
-      const record = ledgerToAirtableRecord(row, serviceIdsByLedger.get(row.id), processorByLedger.get(row.id));
+      const record = billingRecordToAirtableRecord(row);
       return {
         id: row.id,
         fields: record.fields,
-        clientName: row.nameOfClient || 'Unknown Client',
-        serviceRendered: row.serviceRendered || 'Service',
+        clientName: row.clientName || 'Unknown Client',
+        serviceRendered: row.serviceType || 'Service',
         receiptDate: row.receiptDate || '',
         amountCharged: row.amountCharged != null ? Number(row.amountCharged) : 0,
         paymentMethod: row.paymentMethod || 'Unknown',
-        processor: processorByLedger.get(row.id) || '',
+        processor: row.processor || '',
         createdTime: row.createdAt.toISOString(),
       };
     });
 
     if (clientName) {
       const lowerClientName = clientName.toLowerCase();
-      processedEntries = processedEntries.filter(e =>
-        e.clientName.toLowerCase().includes(lowerClientName)
-      );
+      processedEntries = processedEntries.filter((e) => e.clientName.toLowerCase().includes(lowerClientName));
     }
 
     const summary = {
       totalRevenue: processedEntries.reduce((sum, e) => sum + (e.amountCharged || 0), 0),
       totalEntries: processedEntries.length,
-      uniqueClients: new Set(processedEntries.map(e => e.clientName)).size,
+      uniqueClients: new Set(processedEntries.map((e) => e.clientName)).size,
     };
 
     const grouped = groupRecords(processedEntries, groupBy as 'client' | 'date' | 'payment');
@@ -176,10 +84,7 @@ app.get('/', async (c) => {
   } catch (error) {
     console.error('Error fetching ledger:', error);
     return c.json(
-      {
-        success: false,
-        error: error instanceof Error ? error.message : 'Failed to fetch ledger',
-      },
+      { success: false, error: error instanceof Error ? error.message : 'Failed to fetch ledger' },
       500
     );
   }
