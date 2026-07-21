@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
 interface Service {
   id: string
@@ -48,6 +48,15 @@ export default function Subscriptions() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Corporation ids with an active billing bundle, so the customer picker
+  // can highlight who already has one.
+  const [bundledCorporationIds, setBundledCorporationIds] = useState<Set<string>>(new Set())
+
+  // Customer search combobox
+  const [customerSearchTerm, setCustomerSearchTerm] = useState('')
+  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false)
+  const customerPickerRef = useRef<HTMLDivElement>(null)
+
   // Add-item form
   const [newItemServiceId, setNewItemServiceId] = useState('')
   const [newItemAmount, setNewItemAmount] = useState('')
@@ -57,6 +66,18 @@ export default function Subscriptions() {
   useEffect(() => {
     loadCorporateCustomers()
     loadServices()
+    loadBundledCorporationIds()
+  }, [])
+
+  // Close the customer dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (customerPickerRef.current && !customerPickerRef.current.contains(e.target as Node)) {
+        setShowCustomerDropdown(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
   useEffect(() => {
@@ -113,6 +134,22 @@ export default function Subscriptions() {
     }
   }
 
+  const loadBundledCorporationIds = async () => {
+    try {
+      const response = await fetch('/api/corporate-billing-bundles')
+      if (!response.ok) throw new Error('Failed to load bundles')
+      const data = await response.json()
+      if (data.success && Array.isArray(data.data)) {
+        const ids = new Set<string>(
+          data.data.filter((b: Bundle) => b.status === 'active').map((b: Bundle) => b.corporationId)
+        )
+        setBundledCorporationIds(ids)
+      }
+    } catch (err) {
+      console.error('Error loading bundled corporation ids:', err)
+    }
+  }
+
   const loadBundle = async (corporationId: string) => {
     try {
       setLoading(true)
@@ -146,6 +183,7 @@ export default function Subscriptions() {
       const data = await response.json()
       if (!response.ok) throw new Error(data.error || 'Failed to create bundle')
       setBundle(data.data)
+      setBundledCorporationIds((prev) => new Set(prev).add(selectedCustomer.id))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create bundle')
       console.error('Error creating bundle:', err)
@@ -165,6 +203,12 @@ export default function Subscriptions() {
       const data = await response.json()
       if (!response.ok) throw new Error(data.error || 'Failed to update bundle status')
       setBundle(data.data)
+      setBundledCorporationIds((prev) => {
+        const next = new Set(prev)
+        if (newStatus === 'active') next.add(bundle.corporationId)
+        else next.delete(bundle.corporationId)
+        return next
+      })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update bundle status')
       console.error('Error updating bundle status:', err)
@@ -257,6 +301,33 @@ export default function Subscriptions() {
   const bundledServiceIds = new Set(activeItems.map((i) => i.serviceId))
   const availableServices = services.filter((s) => !bundledServiceIds.has(s.id))
 
+  const filteredCustomers = (() => {
+    const term = customerSearchTerm.trim().toLowerCase()
+    const list = term
+      ? customers.filter((c) => c.name.toLowerCase().includes(term) || c.code.toLowerCase().includes(term))
+      : customers
+    // Clients with an existing bundle float to the top, alphabetical within each group.
+    return [...list].sort((a, b) => {
+      const aHas = bundledCorporationIds.has(a.id)
+      const bHas = bundledCorporationIds.has(b.id)
+      if (aHas !== bHas) return aHas ? -1 : 1
+      return a.name.localeCompare(b.name)
+    })
+  })()
+
+  const selectCustomer = (customer: CorporateCustomer) => {
+    setSelectedCustomer(customer)
+    setCustomerSearchTerm(customer.name)
+    setShowCustomerDropdown(false)
+    setError(null)
+  }
+
+  const clearCustomer = () => {
+    setSelectedCustomer(null)
+    setCustomerSearchTerm('')
+    setShowCustomerDropdown(false)
+  }
+
   return (
     <div className="space-y-6">
       <div className="card bg-base-100 shadow-xl">
@@ -279,28 +350,74 @@ export default function Subscriptions() {
             )}
           </div>
 
-          {/* Customer Selection */}
-          <div className="form-control w-full max-w-xs mb-6">
+          {/* Customer Selection — searchable, with existing-bundle clients highlighted */}
+          <div className="form-control w-full max-w-xs mb-6 relative" ref={customerPickerRef}>
             <label className="label">
               <span className="label-text font-medium">Select Corporate Customer</span>
             </label>
-            <select
-              className="select select-bordered w-full max-w-xs"
-              value={selectedCustomer?.id || ''}
-              onChange={(e) => {
-                const customer = customers.find((c) => c.id === e.target.value) || null
-                setSelectedCustomer(customer)
-                setError(null)
-              }}
-              disabled={loading}
-            >
-              <option value="">Choose a customer...</option>
-              {customers.map((customer) => (
-                <option key={customer.id} value={customer.id}>
-                  {customer.name} {customer.code && `(${customer.code})`}
-                </option>
-              ))}
-            </select>
+            <div className="relative">
+              <input
+                type="text"
+                className="input input-bordered w-full pr-8"
+                placeholder="Type to search customers..."
+                value={customerSearchTerm}
+                disabled={loading}
+                onFocus={() => setShowCustomerDropdown(true)}
+                onChange={(e) => {
+                  setCustomerSearchTerm(e.target.value)
+                  setShowCustomerDropdown(true)
+                  if (selectedCustomer) setSelectedCustomer(null)
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') setShowCustomerDropdown(false)
+                }}
+              />
+              {(customerSearchTerm || selectedCustomer) && (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-xs btn-circle absolute right-1 top-1/2 -translate-y-1/2"
+                  onClick={clearCustomer}
+                  title="Clear"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            {showCustomerDropdown && (
+              <div className="absolute z-10 top-full mt-1 w-full max-h-80 overflow-y-auto bg-base-100 border border-base-300 rounded-lg shadow-xl">
+                {filteredCustomers.length === 0 && (
+                  <div className="px-4 py-3 text-sm text-base-content/60">No customers match "{customerSearchTerm}"</div>
+                )}
+                {filteredCustomers.slice(0, 100).map((customer) => {
+                  const hasBundle = bundledCorporationIds.has(customer.id)
+                  return (
+                    <button
+                      key={customer.id}
+                      type="button"
+                      className={`w-full text-left px-4 py-2 text-sm hover:bg-base-200 flex items-center justify-between gap-2 ${
+                        selectedCustomer?.id === customer.id ? 'bg-base-200' : ''
+                      }`}
+                      onClick={() => selectCustomer(customer)}
+                    >
+                      <span className="truncate">
+                        {customer.name} {customer.code && <span className="text-base-content/50">({customer.code})</span>}
+                      </span>
+                      {hasBundle && (
+                        <span className="badge badge-success badge-sm shrink-0" title="Has an active billing bundle">
+                          💰 Bundle
+                        </span>
+                      )}
+                    </button>
+                  )
+                })}
+                {filteredCustomers.length > 100 && (
+                  <div className="px-4 py-2 text-xs text-base-content/50 border-t border-base-300">
+                    {filteredCustomers.length - 100} more — keep typing to narrow it down
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {error && (
