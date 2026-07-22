@@ -52,7 +52,9 @@ export default function PersonalServicesPipeline() {
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [updating, setUpdating] = useState<string | null>(null);
   const [taxPreparerFilter, setTaxPreparerFilter] = useState<string>("");
-  const [serviceFilter, setServiceFilter] = useState<string>("");
+  // Deep-link support: /personal-services-pipeline?service=<view> (e.g. from
+  // the Open Tickets Dashboard) preselects the service filter dropdown.
+  const [serviceFilter, setServiceFilter] = useState<string>(() => searchParams.get('service') || "");
   const [taxPreparers, setTaxPreparers] = useState<TaxPreparer[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [showStatusModal, setShowStatusModal] = useState(false);

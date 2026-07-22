@@ -48,6 +48,16 @@ interface Processor {
   email: string;
 }
 
+interface MissingTicketItem {
+  bundleId: string;
+  bundleItemId: string;
+  corporationId: string;
+  companyName: string;
+  serviceId: string;
+  serviceName: string | null;
+  amount: number;
+}
+
 export default function CorporateServicesPipeline() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -58,7 +68,9 @@ export default function CorporateServicesPipeline() {
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [updating, setUpdating] = useState<string | null>(null);
   const [processorFilter, setProcessorFilter] = useState<string>("");
-  const [serviceFilter, setServiceFilter] = useState<string>("");
+  // Deep-link support: /corporate-services-pipeline?service=<view> (e.g. from
+  // the Open Tickets Dashboard) preselects the service filter dropdown.
+  const [serviceFilter, setServiceFilter] = useState<string>(() => searchParams.get('service') || "");
   const [processors, setProcessors] = useState<Processor[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [showStatusModal, setShowStatusModal] = useState(false);
@@ -80,6 +92,18 @@ export default function CorporateServicesPipeline() {
   // corporationId:serviceId -> the client's matching active bundle line item,
   // so a ticket can offer "Link to Bundle" when one exists for its service.
   const [bundleItemLookup, setBundleItemLookup] = useState<Map<string, { itemId: string; amount: number }>>(new Map());
+
+  // Clients subscribed (via an active bundle) to the currently-filtered
+  // service but with no ticket yet this period — a bundle subscription
+  // doesn't disappear when its last ticket is completed, so this makes that
+  // visible instead of the client silently looking like they dropped off.
+  const [missingBundleClients, setMissingBundleClients] = useState<MissingTicketItem[]>([]);
+  const [loadingMissingBundleClients, setLoadingMissingBundleClients] = useState(false);
+  const [generatingMissingBundleId, setGeneratingMissingBundleId] = useState<string | null>(null);
+  const [showMissingBundleClients, setShowMissingBundleClients] = useState(true);
+  // Bumped to force the main pipeline list to re-fetch after generating a
+  // ticket from the "missing" panel below, without changing serviceFilter.
+  const [pipelineRefreshTrigger, setPipelineRefreshTrigger] = useState(0);
 
   // Available services - these match the view names in Airtable
   const services = [
@@ -174,6 +198,56 @@ export default function CorporateServicesPipeline() {
 
     fetchBundles();
   }, []);
+
+  // Fetch clients subscribed to the currently-filtered service via their
+  // bundle, but with no ticket for the current period — only meaningful
+  // once a specific service view is selected (not "All Services").
+  useEffect(() => {
+    if (!serviceFilter) {
+      setMissingBundleClients([]);
+      return;
+    }
+    let isCancelled = false;
+    const fetchMissing = async () => {
+      try {
+        setLoadingMissingBundleClients(true);
+        const response = await fetch(`/api/corporate-billing-bundles/generation-status?view=${encodeURIComponent(serviceFilter)}`);
+        const data = await response.json();
+        if (!isCancelled && data.success) {
+          setMissingBundleClients(data.data.missing || []);
+        }
+      } catch (error) {
+        console.error("Failed to fetch bundle generation status:", error);
+      } finally {
+        if (!isCancelled) setLoadingMissingBundleClients(false);
+      }
+    };
+    fetchMissing();
+    return () => {
+      isCancelled = true;
+    };
+  }, [serviceFilter]);
+
+  const generateMissingBundleTicket = async (bundleId: string) => {
+    try {
+      setGeneratingMissingBundleId(bundleId);
+      const response = await fetch(`/api/corporate-billing-bundles/generate-tickets`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bundleId }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Failed to generate ticket");
+      setMissingBundleClients((prev) => prev.filter((m) => m.bundleId !== bundleId));
+      // The new ticket belongs in the active pipeline list too — re-fetch.
+      setPipelineRefreshTrigger((n) => n + 1);
+    } catch (error) {
+      console.error("Error generating ticket:", error);
+      alert(error instanceof Error ? error.message : "Failed to generate ticket");
+    } finally {
+      setGeneratingMissingBundleId(null);
+    }
+  };
 
   // Fetch pipeline from Airtable - fetch based on selected service view or corporate filter
   useEffect(() => {
@@ -376,7 +450,7 @@ export default function CorporateServicesPipeline() {
       isCancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [serviceFilter, searchParams]);
+  }, [serviceFilter, searchParams, pipelineRefreshTrigger]);
 
   // Filter companies by search term, processor, and status (service filter is handled by view in fetch)
   const filteredCompanies = pipelineCompanies.filter((company) => {
@@ -1029,6 +1103,55 @@ export default function CorporateServicesPipeline() {
             >
               Clear Filter
             </button>
+          </div>
+        )}
+
+        {/* Missing bundle clients — a client's bundle subscription to this
+            service stays active even after its ticket for the period is
+            completed, so nothing else re-lists them here automatically.
+            Surface that gap instead of the client silently looking dropped. */}
+        {serviceFilter && !loadingMissingBundleClients && missingBundleClients.length > 0 && (
+          <div className="card bg-warning/10 border border-warning shadow-xl mb-6">
+            <div className="card-body p-4">
+              <button
+                className="flex items-center gap-2 text-left"
+                onClick={() => setShowMissingBundleClients((v) => !v)}
+              >
+                <span className="text-xl">⚠️</span>
+                <span className="font-semibold">
+                  {missingBundleClients.length} bundle client{missingBundleClients.length !== 1 ? 's' : ''} subscribed to this service{' '}
+                  {missingBundleClients.length !== 1 ? "haven't" : "hasn't"} had a ticket generated for this period yet
+                </span>
+                <span className="text-xs opacity-60">{showMissingBundleClients ? '▲ hide' : '▼ show'}</span>
+              </button>
+
+              {showMissingBundleClients && (
+                <div className="mt-3 divide-y divide-base-300 max-h-80 overflow-y-auto">
+                  {missingBundleClients.map((m) => (
+                    <div key={m.bundleItemId} className="flex items-center justify-between gap-3 py-2">
+                      <div className="min-w-0">
+                        <div className="font-medium truncate">{m.companyName}</div>
+                        <div className="text-xs text-base-content/60 truncate">
+                          {m.serviceName || m.serviceId}
+                          {m.amount ? ` • $${m.amount.toFixed(2)}/mo` : ''}
+                        </div>
+                      </div>
+                      <button
+                        className="btn btn-outline btn-xs shrink-0"
+                        disabled={generatingMissingBundleId === m.bundleId}
+                        onClick={() => generateMissingBundleTicket(m.bundleId)}
+                      >
+                        {generatingMissingBundleId === m.bundleId ? (
+                          <span className="loading loading-spinner loading-xs"></span>
+                        ) : (
+                          'Generate Ticket'
+                        )}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
 

@@ -40,6 +40,16 @@ interface CorporateCustomer {
   code: string
 }
 
+interface MissingTicketItem {
+  bundleId: string
+  bundleItemId: string
+  corporationId: string
+  companyName: string
+  serviceId: string
+  serviceName: string | null
+  amount: number
+}
+
 export default function Subscriptions() {
   const [selectedCustomer, setSelectedCustomer] = useState<CorporateCustomer | null>(null)
   const [customers, setCustomers] = useState<CorporateCustomer[]>([])
@@ -63,10 +73,22 @@ export default function Subscriptions() {
   const [addingItem, setAddingItem] = useState(false)
   const [generatingTickets, setGeneratingTickets] = useState(false)
 
+  // Cross-client "needs this month's tickets generated" summary. A bundle
+  // subscription doesn't disappear when its ticket is completed — but
+  // nothing else creates next month's ticket automatically, so this makes
+  // that gap visible instead of clients silently going un-ticketed.
+  const [missingTickets, setMissingTickets] = useState<MissingTicketItem[]>([])
+  const [missingTicketsPeriod, setMissingTicketsPeriod] = useState<string>('')
+  const [loadingMissing, setLoadingMissing] = useState(false)
+  const [showMissingPanel, setShowMissingPanel] = useState(false)
+  const [generatingAll, setGeneratingAll] = useState(false)
+  const [generatingBundleId, setGeneratingBundleId] = useState<string | null>(null)
+
   useEffect(() => {
     loadCorporateCustomers()
     loadServices()
     loadBundledCorporationIds()
+    loadMissingTickets()
   }, [])
 
   // Close the customer dropdown on outside click
@@ -147,6 +169,68 @@ export default function Subscriptions() {
       }
     } catch (err) {
       console.error('Error loading bundled corporation ids:', err)
+    }
+  }
+
+  const loadMissingTickets = async () => {
+    try {
+      setLoadingMissing(true)
+      const response = await fetch('/api/corporate-billing-bundles/generation-status')
+      if (!response.ok) throw new Error('Failed to load generation status')
+      const data = await response.json()
+      if (data.success) {
+        setMissingTickets(data.data.missing || [])
+        setMissingTicketsPeriod(data.data.period || '')
+      }
+    } catch (err) {
+      console.error('Error loading generation status:', err)
+    } finally {
+      setLoadingMissing(false)
+    }
+  }
+
+  const generateForBundle = async (bundleId: string) => {
+    try {
+      setGeneratingBundleId(bundleId)
+      const response = await fetch('/api/corporate-billing-bundles/generate-tickets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bundleId }),
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || 'Failed to generate tickets')
+      await loadMissingTickets()
+      if (selectedCustomer?.id && bundle?.id === bundleId) {
+        // Refresh the currently-open bundle view too, if it's the one we just generated for.
+        loadBundle(selectedCustomer.id)
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to generate tickets')
+      console.error('Error generating tickets for bundle:', err)
+    } finally {
+      setGeneratingBundleId(null)
+    }
+  }
+
+  const generateAllMissing = async () => {
+    const bundleIds = [...new Set(missingTickets.map((m) => m.bundleId))]
+    if (bundleIds.length === 0) return
+    if (!confirm(`Generate this month's tickets for all ${bundleIds.length} client(s) with missing services?`)) return
+    try {
+      setGeneratingAll(true)
+      for (const bundleId of bundleIds) {
+        await fetch('/api/corporate-billing-bundles/generate-tickets', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ bundleId }),
+        })
+      }
+      await loadMissingTickets()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to generate tickets')
+      console.error('Error generating all missing tickets:', err)
+    } finally {
+      setGeneratingAll(false)
     }
   }
 
@@ -328,8 +412,81 @@ export default function Subscriptions() {
     setShowCustomerDropdown(false)
   }
 
+  const missingByClient = (() => {
+    const map = new Map<string, { bundleId: string; companyName: string; items: MissingTicketItem[] }>()
+    for (const m of missingTickets) {
+      const existing = map.get(m.corporationId)
+      if (existing) {
+        existing.items.push(m)
+      } else {
+        map.set(m.corporationId, { bundleId: m.bundleId, companyName: m.companyName, items: [m] })
+      }
+    }
+    return [...map.entries()]
+      .map(([corporationId, v]) => ({ corporationId, ...v }))
+      .sort((a, b) => a.companyName.localeCompare(b.companyName))
+  })()
+
   return (
     <div className="space-y-6">
+      {/* Needs-generating summary — a bundle subscription never disappears
+          when its ticket is completed, but nothing else creates next
+          month's ticket automatically, so this surfaces that gap instead
+          of it being silently missed. */}
+      {!loadingMissing && missingTickets.length > 0 && (
+        <div className="card bg-warning/10 border border-warning shadow-xl">
+          <div className="card-body p-4">
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <button
+                className="flex items-center gap-2 text-left"
+                onClick={() => setShowMissingPanel((v) => !v)}
+              >
+                <span className="text-xl">⚠️</span>
+                <span className="font-semibold">
+                  {missingTickets.length} bundle service{missingTickets.length !== 1 ? 's' : ''} across{' '}
+                  {missingByClient.length} client{missingByClient.length !== 1 ? 's' : ''} haven't had a{' '}
+                  {missingTicketsPeriod} ticket generated yet
+                </span>
+                <span className="text-xs opacity-60">{showMissingPanel ? '▲ hide' : '▼ show'}</span>
+              </button>
+              <button
+                className="btn btn-warning btn-sm"
+                disabled={generatingAll}
+                onClick={generateAllMissing}
+              >
+                {generatingAll ? <span className="loading loading-spinner loading-xs"></span> : `Generate All (${missingByClient.length})`}
+              </button>
+            </div>
+
+            {showMissingPanel && (
+              <div className="mt-3 divide-y divide-base-300 max-h-80 overflow-y-auto">
+                {missingByClient.map((c) => (
+                  <div key={c.corporationId} className="flex items-center justify-between gap-3 py-2">
+                    <div className="min-w-0">
+                      <div className="font-medium truncate">{c.companyName}</div>
+                      <div className="text-xs text-base-content/60 truncate">
+                        {c.items.map((i) => i.serviceName || i.serviceId).join(', ')}
+                      </div>
+                    </div>
+                    <button
+                      className="btn btn-outline btn-xs shrink-0"
+                      disabled={generatingBundleId === c.bundleId}
+                      onClick={() => generateForBundle(c.bundleId)}
+                    >
+                      {generatingBundleId === c.bundleId ? (
+                        <span className="loading loading-spinner loading-xs"></span>
+                      ) : (
+                        'Generate'
+                      )}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="card bg-base-100 shadow-xl">
         <div className="card-body">
           <div className="flex justify-between items-start mb-4">

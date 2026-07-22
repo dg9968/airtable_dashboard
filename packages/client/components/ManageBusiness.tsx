@@ -133,6 +133,14 @@ export default function ManageBusiness() {
       icon: '🏦',
       color: 'text-teal-600',
       bgColor: 'bg-teal-50 hover:bg-teal-100 border-teal-200'
+    },
+    {
+      title: 'Open Tickets Dashboard',
+      description: 'See every service\'s open pipeline tickets and how long they\'ve been waiting',
+      href: '/open-tickets-dashboard',
+      icon: '📥',
+      color: 'text-rose-600',
+      bgColor: 'bg-rose-50 hover:bg-rose-100 border-rose-200'
     }
   ];
 

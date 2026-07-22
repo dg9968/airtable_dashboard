@@ -10,7 +10,7 @@
  */
 
 import { Hono } from 'hono';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, isNotNull } from 'drizzle-orm';
 import { getDb } from '../db/client';
 import {
   corporateBillingBundles,
@@ -19,6 +19,7 @@ import {
   servicesCorporate,
   corporations,
 } from '../db/schema';
+import { CORPORATE_VIEW_FILTERS } from '../db/serializers-subscriptions';
 
 const app = new Hono();
 
@@ -93,6 +94,97 @@ app.get('/', async (c) => {
     console.error('Error fetching corporate billing bundles:', error);
     return c.json(
       { success: false, error: error instanceof Error ? error.message : 'Failed to fetch bundles' },
+      500
+    );
+  }
+});
+
+/**
+ * GET /api/corporate-billing-bundles/generation-status?period=YYYY-MM&view=
+ * Read-only: which active bundle line items don't yet have a pipeline
+ * ticket for the given period (defaults to the current month). Pairs with
+ * POST .../generate-tickets, which actually creates them — this endpoint
+ * never writes anything. `view` is an optional legacy Airtable view name
+ * (same vocabulary as `?view=` on /api/subscriptions-corporate); when
+ * given, results are narrowed to that view's service.
+ *
+ * Registered before GET /:id so "generation-status" is never swallowed as
+ * an :id value.
+ */
+app.get('/generation-status', async (c) => {
+  try {
+    const period = c.req.query('period') || new Date().toISOString().slice(0, 7);
+    const view = c.req.query('view');
+    const db = getDb();
+
+    let serviceId: string | undefined;
+    if (view) {
+      const filter = CORPORATE_VIEW_FILTERS[view];
+      if (filter?.serviceName) {
+        const [svc] = await db
+          .select({ id: servicesCorporate.id })
+          .from(servicesCorporate)
+          .where(eq(servicesCorporate.name, filter.serviceName))
+          .limit(1);
+        serviceId = svc?.id;
+      }
+    }
+
+    const activeItems = await db
+      .select({
+        itemId: corporateBillingBundleItems.id,
+        bundleId: corporateBillingBundleItems.bundleId,
+        serviceId: corporateBillingBundleItems.serviceId,
+        serviceName: servicesCorporate.name,
+        amount: corporateBillingBundleItems.amount,
+        corporationId: corporateBillingBundles.corporationId,
+        companyName: corporations.company,
+      })
+      .from(corporateBillingBundleItems)
+      .innerJoin(corporateBillingBundles, eq(corporateBillingBundleItems.bundleId, corporateBillingBundles.id))
+      .innerJoin(corporations, eq(corporateBillingBundles.corporationId, corporations.id))
+      .leftJoin(servicesCorporate, eq(corporateBillingBundleItems.serviceId, servicesCorporate.id))
+      .where(
+        and(
+          eq(corporateBillingBundleItems.status, 'active'),
+          eq(corporateBillingBundles.status, 'active'),
+          serviceId ? eq(corporateBillingBundleItems.serviceId, serviceId) : undefined
+        )
+      );
+
+    const ticketedRows = await db
+      .select({ bundleItemId: corporatePipelineTickets.bundleItemId })
+      .from(corporatePipelineTickets)
+      .where(
+        and(eq(corporatePipelineTickets.billingPeriod, period), isNotNull(corporatePipelineTickets.bundleItemId))
+      );
+    const ticketedSet = new Set(ticketedRows.map((t) => t.bundleItemId));
+
+    const missing = activeItems
+      .filter((item) => !ticketedSet.has(item.itemId))
+      .map((item) => ({
+        bundleId: item.bundleId,
+        bundleItemId: item.itemId,
+        corporationId: item.corporationId,
+        companyName: item.companyName,
+        serviceId: item.serviceId,
+        serviceName: item.serviceName,
+        amount: item.amount != null ? Number(item.amount) : 0,
+      }));
+
+    return c.json({
+      success: true,
+      data: {
+        period,
+        totalActiveItems: activeItems.length,
+        missingCount: missing.length,
+        missing,
+      },
+    });
+  } catch (error) {
+    console.error('Error computing bundle generation status:', error);
+    return c.json(
+      { success: false, error: error instanceof Error ? error.message : 'Failed to compute generation status' },
       500
     );
   }
