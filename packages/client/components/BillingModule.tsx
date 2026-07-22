@@ -109,15 +109,21 @@ export default function BillingModule() {
     }
   };
 
-  // Filter services by client search and status
-  // "Need Review" (default) shows only actionable items: Unbilled and Billed - Unpaid
+  // Filter services by client search and status.
+  // "Need Review" (default, no client search) shows only actionable items:
+  // Unbilled and Billed - Unpaid. But once staff are looking at one specific
+  // client (typed a name, or arrived via a "View Billing" deep link), show
+  // every status for them — including "Covered by Bundle" and "Waived" —
+  // so the full picture of what's being invoiced is visible in one place,
+  // not just the items still needing action.
   const filteredServices = services.filter((s) => {
     // Client search filter
     if (clientSearch && !s.clientName.toLowerCase().includes(clientSearch.toLowerCase())) {
       return false;
     }
-    // "Need Review" mode - only show actionable items
-    if (statusFilter === 'All') {
+    // "Need Review" mode - only show actionable items, but only when
+    // browsing the general cross-client worklist (no client search active).
+    if (statusFilter === 'All' && !clientSearch) {
       const actionableStatuses = ['Unbilled', 'Billed - Unpaid'];
       if (!actionableStatuses.includes(s.billingStatus)) {
         return false;
@@ -396,7 +402,7 @@ export default function BillingModule() {
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
               >
-                <option value="All">Need Review</option>
+                <option value="All">{clientSearch ? 'All (this client)' : 'Need Review'}</option>
                 <option value="Unbilled">Unbilled</option>
                 <option value="Billed - Unpaid">Billed - Unpaid</option>
                 <option value="Billed - Paid">Billed - Paid</option>
@@ -432,6 +438,7 @@ export default function BillingModule() {
                 className="input input-bordered input-sm w-40"
                 value={clientSearch}
                 onChange={(e) => setClientSearch(e.target.value)}
+                title="Searching a client shows every status for them, including Covered by Bundle and Waived"
               />
             </div>
 

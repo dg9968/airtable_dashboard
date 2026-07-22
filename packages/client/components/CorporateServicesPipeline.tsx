@@ -663,7 +663,15 @@ export default function CorporateServicesPipeline() {
     console.log("[Follow-up] Created new subscription:", data.data?.id);
   };
 
-  const handleCompleteService = async (companyId: string, amount?: number, note?: string, shouldCreateFollowUp?: boolean, billingStatus?: string) => {
+  const handleCompleteService = async (companyId: string, amount?: number, note?: string, shouldCreateFollowUp?: boolean, billingStatus?: string): Promise<boolean> => {
+    // Guard against double-submission: if a completion for this exact ticket
+    // is already in flight (e.g. the user clicked again after an apparent
+    // "Failed to fetch" that actually succeeded server-side), don't fire a
+    // second one — that would create a duplicate billing record.
+    if (updating === companyId) {
+      console.warn('[CorporateServicesPipeline] Completion already in progress for', companyId, '- ignoring duplicate submit');
+      return false;
+    }
     try {
       setUpdating(companyId);
       console.log('[CorporateServicesPipeline] Starting handleCompleteService for:', companyId);
@@ -778,9 +786,11 @@ export default function CorporateServicesPipeline() {
         ? "✅ Service completed and Tax Returns subscription created!"
         : "✅ Service completed and removed from pipeline!";
       alert(successMessage);
+      return true;
     } catch (error) {
       console.error("[CorporateServicesPipeline] Error completing service:", error);
       alert(error instanceof Error ? error.message : "Failed to complete service");
+      return false;
     } finally {
       setUpdating(null);
     }
@@ -807,25 +817,43 @@ export default function CorporateServicesPipeline() {
     }
   };
 
-  const handleAmountModalSubmit = () => {
-    if (selectedCompanyForCompletion) {
-      // Determine amount and billing status based on billing type
-      let amount: number | undefined;
-      let billingStatusValue: string | undefined;
+  const handleAmountModalSubmit = async () => {
+    if (!selectedCompanyForCompletion) return;
+    // Already submitting this exact ticket (e.g. a stray double-click) — the
+    // button is disabled while in flight, but guard here too since this can
+    // also be triggered via the Ctrl+Enter textarea shortcut.
+    if (updating === selectedCompanyForCompletion) return;
 
-      if (billingType === 'standard') {
-        amount = quotedAmount ? parseFloat(quotedAmount) : undefined;
-        billingStatusValue = undefined; // Will default to 'Unbilled' on server
-      } else if (billingType === 'bundle') {
-        amount = undefined; // server forces this to null for bundle-covered work
-        billingStatusValue = 'Covered by Bundle';
-      } else if (billingType === 'waived') {
-        amount = 0;
-        billingStatusValue = 'Waived';
-      }
+    // Determine amount and billing status based on billing type
+    let amount: number | undefined;
+    let billingStatusValue: string | undefined;
 
-      const note = billingNote.trim() || undefined;
-      handleCompleteService(selectedCompanyForCompletion, amount, note, createFollowUp, billingStatusValue);
+    if (billingType === 'standard') {
+      amount = quotedAmount ? parseFloat(quotedAmount) : undefined;
+      billingStatusValue = undefined; // Will default to 'Unbilled' on server
+    } else if (billingType === 'bundle') {
+      amount = undefined; // server forces this to null for bundle-covered work
+      billingStatusValue = 'Covered by Bundle';
+    } else if (billingType === 'waived') {
+      amount = 0;
+      billingStatusValue = 'Waived';
+    }
+
+    const note = billingNote.trim() || undefined;
+    // Wait for the request to actually finish (success or failure) before
+    // closing the modal — previously this fired-and-forgot, closing the
+    // modal instantly regardless of outcome, so a slow/flaky request that
+    // looked like it failed client-side (but actually succeeded on the
+    // server) could be retried by the user, creating a duplicate billing
+    // record for the same ticket.
+    const succeeded = await handleCompleteService(
+      selectedCompanyForCompletion,
+      amount,
+      note,
+      createFollowUp,
+      billingStatusValue
+    );
+    if (succeeded) {
       setShowAmountModal(false);
       setSelectedCompanyForCompletion(null);
       setQuotedAmount("");
@@ -833,6 +861,9 @@ export default function CorporateServicesPipeline() {
       setCreateFollowUp(false);
       setBillingType('standard');
     }
+    // On failure, leave the modal open (error already alerted inside
+    // handleCompleteService) so the user can see what happened and decide
+    // whether to retry, instead of silently vanishing.
   };
 
   return (
@@ -1501,6 +1532,7 @@ export default function CorporateServicesPipeline() {
             <div className="modal-action">
               <button
                 className="btn btn-ghost"
+                disabled={updating === selectedCompanyForCompletion}
                 onClick={() => {
                   setShowAmountModal(false);
                   setSelectedCompanyForCompletion(null);
@@ -1514,9 +1546,14 @@ export default function CorporateServicesPipeline() {
               </button>
               <button
                 className="btn btn-primary"
+                disabled={updating === selectedCompanyForCompletion}
                 onClick={handleAmountModalSubmit}
               >
-                Complete Service
+                {updating === selectedCompanyForCompletion ? (
+                  <span className="loading loading-spinner loading-sm"></span>
+                ) : (
+                  'Complete Service'
+                )}
               </button>
             </div>
           </div>

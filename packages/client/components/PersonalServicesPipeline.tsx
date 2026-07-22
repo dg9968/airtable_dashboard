@@ -465,7 +465,15 @@ export default function PersonalServicesPipeline() {
     );
   };
 
-  const handleFileReturn = async (clientId: string, amount?: number, note?: string, billingStatus?: string) => {
+  const handleFileReturn = async (clientId: string, amount?: number, note?: string, billingStatus?: string): Promise<boolean> => {
+    // Guard against double-submission: if a completion for this exact ticket
+    // is already in flight (e.g. a retry after an apparent "Failed to fetch"
+    // that actually succeeded server-side), don't fire a second one — that
+    // would create a duplicate billing record.
+    if (updating === clientId) {
+      console.warn('Completion already in progress for', clientId, '- ignoring duplicate submit');
+      return false;
+    }
     try {
       setUpdating(clientId);
 
@@ -531,9 +539,11 @@ export default function PersonalServicesPipeline() {
       );
 
       alert("Service completed and removed from pipeline!");
+      return true;
     } catch (error) {
       console.error("Error handling file return:", error);
       alert(error instanceof Error ? error.message : "Failed to process completion");
+      return false;
     } finally {
       setUpdating(null);
     }
@@ -551,22 +561,28 @@ export default function PersonalServicesPipeline() {
     }
   };
 
-  const handleAmountModalSubmit = () => {
-    if (selectedClientForFiling) {
-      // Determine amount and billing status based on billing type
-      let amount: number | undefined;
-      let billingStatusValue: string | undefined;
+  const handleAmountModalSubmit = async () => {
+    if (!selectedClientForFiling) return;
+    if (updating === selectedClientForFiling) return;
 
-      if (billingType === 'standard') {
-        amount = quotedAmount ? parseFloat(quotedAmount) : undefined;
-        billingStatusValue = undefined; // Will default to 'Unbilled' on server
-      } else if (billingType === 'waived') {
-        amount = 0;
-        billingStatusValue = 'Waived';
-      }
+    // Determine amount and billing status based on billing type
+    let amount: number | undefined;
+    let billingStatusValue: string | undefined;
 
-      const note = billingNote.trim() || undefined;
-      handleFileReturn(selectedClientForFiling, amount, note, billingStatusValue);
+    if (billingType === 'standard') {
+      amount = quotedAmount ? parseFloat(quotedAmount) : undefined;
+      billingStatusValue = undefined; // Will default to 'Unbilled' on server
+    } else if (billingType === 'waived') {
+      amount = 0;
+      billingStatusValue = 'Waived';
+    }
+
+    const note = billingNote.trim() || undefined;
+    // Wait for the request to finish before closing the modal — see the
+    // matching comment in CorporateServicesPipeline.tsx for why this
+    // used to allow duplicate submissions.
+    const succeeded = await handleFileReturn(selectedClientForFiling, amount, note, billingStatusValue);
+    if (succeeded) {
       setShowAmountModal(false);
       setSelectedClientForFiling(null);
       setQuotedAmount("");
@@ -1220,6 +1236,7 @@ export default function PersonalServicesPipeline() {
             <div className="modal-action">
               <button
                 className="btn btn-ghost"
+                disabled={updating === selectedClientForFiling}
                 onClick={() => {
                   setShowAmountModal(false);
                   setSelectedClientForFiling(null);
@@ -1232,9 +1249,14 @@ export default function PersonalServicesPipeline() {
               </button>
               <button
                 className="btn btn-primary"
+                disabled={updating === selectedClientForFiling}
                 onClick={handleAmountModalSubmit}
               >
-                Complete Service
+                {updating === selectedClientForFiling ? (
+                  <span className="loading loading-spinner loading-sm"></span>
+                ) : (
+                  'Complete Service'
+                )}
               </button>
             </div>
           </div>
