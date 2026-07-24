@@ -25,7 +25,7 @@ const app = new Hono();
  */
 app.post('/', async (c) => {
   try {
-    const { corporateId, serviceId } = await c.req.json();
+    const { corporateId, serviceId, certificateId } = await c.req.json();
 
     if (!corporateId || !serviceId) {
       return c.json(
@@ -37,12 +37,12 @@ app.post('/', async (c) => {
       );
     }
 
-    console.log('Creating Subscriptions Corporate record:', { corporateId, serviceId });
+    console.log('Creating Subscriptions Corporate record:', { corporateId, serviceId, certificateId });
 
     const db = getDb();
     const [row] = await db
       .insert(corporatePipelineTickets)
-      .values({ corporationId: corporateId, serviceId })
+      .values({ corporationId: corporateId, serviceId, certificateId: certificateId ?? null })
       .returning();
 
     const ctx = await loadSubsCorporateContext(db);

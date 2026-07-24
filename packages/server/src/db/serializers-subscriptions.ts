@@ -243,6 +243,7 @@ export function subsCorporateToAirtableRecord(
   );
   put(fields, 'ST Certificate (from Customer)', corp?.stCertificateValues ?? null);
   put(fields, 'Services', row.serviceId ? [row.serviceId] : null);
+  put(fields, 'Ticket Certificate', row.certificateId ? [row.certificateId] : null);
   put(fields, 'Service Name', serviceName ? [serviceName] : null);
   put(fields, 'Status', row.status);
   put(fields, 'Notes', row.notes);
@@ -286,6 +287,7 @@ export function subsCorporateFieldsToColumns(
     switch (key) {
       case 'Customer': out.corporationId = first(value); break;
       case 'Services': out.serviceId = first(value); break;
+      case 'Ticket Certificate': out.certificateId = first(value); break;
       case 'Status': out.status = value === null || (Array.isArray(value) && value.length === 0) ? null : first(value); break;
       case 'Notes': out.notes = (value as string) || null; break;
       case 'Processor': out.processorId = first(value); break;

@@ -17,6 +17,13 @@ export const salesTaxCertificates = pgTable(
     companyName: text('company_name'), // own stored text field, not a lookup
     businessPartner: integer('business_partner'),
     frequency: text('frequency'),
+    // Location this certificate covers — a corporation with multiple
+    // locations has one certificate row per location, each with its own
+    // address, rather than duplicating the whole corporations row.
+    address: text('address'),
+    city: text('city'),
+    state: text('state'),
+    zip: text('zip'),
     corporationId: text('corporation_id').references(() => corporations.id, { onDelete: 'set null' }),
     createdAt: createdAt(),
   },

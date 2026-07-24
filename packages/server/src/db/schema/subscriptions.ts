@@ -13,6 +13,7 @@ import {
 import { id, createdAt } from './helpers';
 import { personal, corporations } from './people';
 import { personalServices, servicesCorporate } from './catalogs';
+import { salesTaxCertificates } from './sales-tax-certificates';
 
 // Airtable "Subscriptions Personal" — junction Personal ↔ Personal Services,
 // doubling as the personal work pipeline (Tax Prep, File Extension, ...).
@@ -60,6 +61,10 @@ export const corporatePipelineTickets = pgTable(
     id: id(),
     corporationId: text('corporation_id').references(() => corporations.id, { onDelete: 'set null' }),
     serviceId: text('service_id').references(() => servicesCorporate.id, { onDelete: 'set null' }),
+    // Which location/certificate this ticket is for — lets a corporation with
+    // multiple locations have one Sales Tax ticket per certificate instead of
+    // a duplicated corporations row. Null for services with no location concept.
+    certificateId: text('certificate_id').references(() => salesTaxCertificates.id, { onDelete: 'set null' }),
     status: text('status'),
     notes: text('notes'),
     processorId: text('processor_id'), // Better Auth user id
@@ -94,6 +99,7 @@ export const corporatePipelineTickets = pgTable(
   (t) => [
     index('corporate_pipeline_tickets_corporation_idx').on(t.corporationId),
     index('corporate_pipeline_tickets_service_idx').on(t.serviceId),
+    index('corporate_pipeline_tickets_certificate_idx').on(t.certificateId),
     index('corporate_pipeline_tickets_status_idx').on(t.status),
     index('corporate_pipeline_tickets_bundle_item_idx').on(t.bundleItemId),
     uniqueIndex('corporate_pipeline_tickets_bundle_period_idx')

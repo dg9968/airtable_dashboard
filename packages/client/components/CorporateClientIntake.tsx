@@ -83,11 +83,30 @@ export default function CorporateClientIntake() {
   const [stCertSearchTerm, setStCertSearchTerm] = useState("");
   const [stCertSearchResults, setStCertSearchResults] = useState<any[]>([]);
   const [searchingStCert, setSearchingStCert] = useState(false);
+  // Display labels for certs added/created this session, so the "Selected"
+  // list shows real values immediately instead of waiting on a full save +
+  // reload of selectedCompany's snapshot fields.
+  const [certLabelsById, setCertLabelsById] = useState<Record<string, { stCert: string; bp: string }>>({});
+  const [showNewCertForm, setShowNewCertForm] = useState(false);
+  const [newCertForm, setNewCertForm] = useState({
+    stCertificate: "",
+    businessPartner: "",
+    frequency: "",
+    address: "",
+    city: "",
+    state: "",
+    zip: "",
+  });
+  const [savingNewCert, setSavingNewCert] = useState(false);
 
   // Pipeline management
   const [pipelineCompanies, setPipelineCompanies] = useState<any[]>([]);
   const [addingToPipeline, setAddingToPipeline] = useState(false);
   const [selectedService, setSelectedService] = useState<string>("Reconciling Banks for Tax Prep");
+  // Which of the company's sales-tax certificates (locations) this ticket is
+  // for. Only relevant for the two Sales Tax services when the company has
+  // more than one certificate attached.
+  const [selectedCertificateId, setSelectedCertificateId] = useState<string>("");
 
   // Available services
   const services = [
@@ -103,6 +122,8 @@ export default function CorporateClientIntake() {
     "Tax Returns",
     "Extensions"
   ];
+
+  const SALES_TAX_SERVICES = ["Sales Tax Monthly", "Sales Tax Quarterly"];
 
   // Form data
   const [formData, setFormData] = useState({
@@ -344,12 +365,105 @@ export default function CorporateClientIntake() {
   const handleSelectStCert = (record: any) => {
     if (formData.stCertificateNumbers.includes(record.id)) return;
     setFormData({ ...formData, stCertificateNumbers: [...formData.stCertificateNumbers, record.id] });
+    setCertLabelsById({
+      ...certLabelsById,
+      [record.id]: { stCert: record.fields["ST Certificate"] || "", bp: record.fields["Business Partner"] || "" },
+    });
     setStCertSearchResults([]);
     setStCertSearchTerm("");
   };
 
   const handleRemoveStCert = (recordId: string) => {
     setFormData({ ...formData, stCertificateNumbers: formData.stCertificateNumbers.filter(id => id !== recordId) });
+  };
+
+  // Persists the company's linked certificate list immediately, so a create
+  // or delete below doesn't leave a dangling/orphaned link if the user
+  // navigates away without clicking the main Save button.
+  const persistLinkedCertificates = async (stCertificateNumbers: string[]) => {
+    if (!selectedCompany || isNewCompany) return;
+    await fetch(`/api/view/${encodeURIComponent("Corporations")}/${selectedCompany.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fields: { "ST Certificate Number": stCertificateNumbers } }),
+    });
+  };
+
+  const handleCreateStCert = async () => {
+    if (!newCertForm.stCertificate.trim()) {
+      setError("ST Certificate number is required");
+      setTimeout(() => setError(null), 3000);
+      return;
+    }
+
+    try {
+      setSavingNewCert(true);
+      const response = await fetch(`/api/view/${encodeURIComponent("Sales Tax Certificate Info")}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fields: {
+            "ST Certificate": newCertForm.stCertificate.trim(),
+            "Business Partner": newCertForm.businessPartner.trim() || undefined,
+            "Frequency": newCertForm.frequency.trim() || undefined,
+            "Address": newCertForm.address.trim() || undefined,
+            "City": newCertForm.city.trim() || undefined,
+            "State": newCertForm.state.trim() || undefined,
+            "Zip": newCertForm.zip.trim() || undefined,
+            "Company Name": formData.companyName || undefined,
+            "Corporation": selectedCompany?.id,
+          },
+        }),
+      });
+      const result = await response.json();
+      if (!result.success) {
+        throw new Error(result.error || "Failed to create certificate");
+      }
+
+      const created = result.data;
+      const updatedNumbers = [...formData.stCertificateNumbers, created.id];
+      setFormData({ ...formData, stCertificateNumbers: updatedNumbers });
+      setCertLabelsById({
+        ...certLabelsById,
+        [created.id]: { stCert: newCertForm.stCertificate.trim(), bp: newCertForm.businessPartner.trim() },
+      });
+      setNewCertForm({ stCertificate: "", businessPartner: "", frequency: "", address: "", city: "", state: "", zip: "" });
+      setShowNewCertForm(false);
+      await persistLinkedCertificates(updatedNumbers);
+    } catch (err) {
+      console.error("Error creating ST Certificate:", err);
+      setError(err instanceof Error ? err.message : "Failed to create certificate");
+      setTimeout(() => setError(null), 5000);
+    } finally {
+      setSavingNewCert(false);
+    }
+  };
+
+  const handleDeleteStCert = async (recordId: string) => {
+    if (!confirm("Delete this ST Certificate permanently? This removes it from the database entirely (not just this company) and can't be undone.")) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/view/${encodeURIComponent("Sales Tax Certificate Info")}/${recordId}`, {
+        method: "DELETE",
+      });
+      const result = await response.json();
+      if (!result.success) {
+        throw new Error(result.error || "Failed to delete certificate");
+      }
+
+      const updatedNumbers = formData.stCertificateNumbers.filter(id => id !== recordId);
+      setFormData({ ...formData, stCertificateNumbers: updatedNumbers });
+      const nextLabels = { ...certLabelsById };
+      delete nextLabels[recordId];
+      setCertLabelsById(nextLabels);
+      await persistLinkedCertificates(updatedNumbers);
+    } catch (err) {
+      console.error("Error deleting ST Certificate:", err);
+      setError(err instanceof Error ? err.message : "Failed to delete certificate");
+      setTimeout(() => setError(null), 5000);
+    }
   };
 
   const handleAddContact = (contact: ContactRecord, isPrimary: boolean = false) => {
@@ -570,6 +684,19 @@ export default function CorporateClientIntake() {
       return;
     }
 
+    const isSalesTaxService = SALES_TAX_SERVICES.includes(selectedService);
+    const certificateId = isSalesTaxService
+      ? (formData.stCertificateNumbers.length > 1
+          ? selectedCertificateId || null
+          : formData.stCertificateNumbers[0] || null)
+      : null;
+
+    if (isSalesTaxService && formData.stCertificateNumbers.length > 1 && !certificateId) {
+      setError("This company has multiple ST Certificates — please select which one this ticket is for");
+      setTimeout(() => setError(null), 5000);
+      return;
+    }
+
     try {
       setAddingToPipeline(true);
 
@@ -607,22 +734,29 @@ export default function CorporateClientIntake() {
         totalSubscriptions: currentSubscriptions.length
       });
 
-      // Check if company is already subscribed to THIS specific service
+      // Check if company is already subscribed to THIS specific service for
+      // THIS specific certificate/location — two locations sharing a
+      // corporation are allowed to each have their own Sales Tax ticket.
       const existingSubscription = currentSubscriptions.find((subscription: any) => {
         const companyIds = subscription.fields["Customer"];
         const companyIdArray = Array.isArray(companyIds) ? companyIds : [companyIds];
         const serviceIds = subscription.fields["Services"];
         const serviceIdArray = Array.isArray(serviceIds) ? serviceIds : [serviceIds];
+        const certificateIds = subscription.fields["Ticket Certificate"];
+        const existingCertificateId = Array.isArray(certificateIds) ? certificateIds[0] ?? null : certificateIds ?? null;
 
         const matches = companyIdArray.includes(selectedCompany.id) &&
-               serviceIdArray.includes(selectedServiceRecord.id);
+               serviceIdArray.includes(selectedServiceRecord.id) &&
+               existingCertificateId === certificateId;
 
         if (companyIdArray.includes(selectedCompany.id)) {
           console.log('Found subscription for this company:', {
             subscriptionId: subscription.id,
             companyIds,
             serviceIds,
-            matchesService: serviceIdArray.includes(selectedServiceRecord.id)
+            matchesService: serviceIdArray.includes(selectedServiceRecord.id),
+            existingCertificateId,
+            certificateId,
           });
         }
 
@@ -640,8 +774,9 @@ export default function CorporateClientIntake() {
             })
           : "Unknown date";
 
+        const certNote = certificateId ? " for this certificate/location" : "";
         setError(
-          `⚠️ Company "${formData.companyName}" is already subscribed to ${selectedService}. Originally added on: ${addedDate}`
+          `⚠️ Company "${formData.companyName}" is already subscribed to ${selectedService}${certNote}. Originally added on: ${addedDate}`
         );
         setTimeout(() => setError(null), 6000);
         setAddingToPipeline(false);
@@ -657,6 +792,7 @@ export default function CorporateClientIntake() {
         body: JSON.stringify({
           corporateId: selectedCompany.id,
           serviceId: selectedServiceRecord.id,
+          certificateId,
         }),
       });
 
@@ -680,6 +816,7 @@ export default function CorporateClientIntake() {
         `✅ Company "${formData.companyName}" has been successfully added to ${selectedService}!`
       );
       setTimeout(() => setSuccessMessage(null), 5000);
+      setSelectedCertificateId("");
 
     } catch (err) {
       console.error("Error adding to pipeline:", err);
@@ -1076,15 +1213,30 @@ export default function CorporateClientIntake() {
                         {formData.stCertificateNumbers.length > 0 && (
                           <div className="space-y-1 mb-2">
                             {formData.stCertificateNumbers.map((id, index) => {
-                              const stCert = selectedCompany?.fields["ST Certificate"]?.[index];
-                              const bp = selectedCompany?.fields["Business Partner (from ST Certificate Number)"]?.[index];
+                              const stCert = certLabelsById[id]?.stCert || selectedCompany?.fields["ST Certificate"]?.[index];
+                              const bp = certLabelsById[id]?.bp || selectedCompany?.fields["Business Partner (from ST Certificate Number)"]?.[index];
                               return (
                                 <div key={id} className="flex items-center justify-between p-2 bg-base-200 rounded-lg">
                                   <div className="flex gap-4">
                                     <span className="text-sm"><span className="text-base-content/50 text-xs">ST Cert:</span> {stCert || "—"}</span>
                                     <span className="text-sm"><span className="text-base-content/50 text-xs">BP:</span> {bp || "—"}</span>
                                   </div>
-                                  <button onClick={() => handleRemoveStCert(id)} className="btn btn-ghost btn-xs btn-error">✕</button>
+                                  <div className="flex gap-1">
+                                    <button
+                                      onClick={() => handleRemoveStCert(id)}
+                                      title="Unlink from this company (certificate itself is kept)"
+                                      className="btn btn-ghost btn-xs"
+                                    >
+                                      Unlink
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteStCert(id)}
+                                      title="Permanently delete this certificate"
+                                      className="btn btn-ghost btn-xs btn-error"
+                                    >
+                                      🗑
+                                    </button>
+                                  </div>
                                 </div>
                               );
                             })}
@@ -1134,6 +1286,78 @@ export default function CorporateClientIntake() {
                             })}
                           </div>
                         )}
+
+                        {/* Create a brand new certificate (e.g. a new location) instead of linking an existing one */}
+                        <div className="mt-2">
+                          <button
+                            type="button"
+                            onClick={() => setShowNewCertForm(!showNewCertForm)}
+                            className="btn btn-ghost btn-xs"
+                          >
+                            {showNewCertForm ? "− Cancel new certificate" : "+ New certificate (new location)"}
+                          </button>
+                          {showNewCertForm && (
+                            <div className="mt-2 p-3 bg-base-200 rounded-lg grid grid-cols-1 md:grid-cols-2 gap-2">
+                              <input
+                                type="text"
+                                placeholder="ST Certificate Number *"
+                                className="input input-bordered input-sm"
+                                value={newCertForm.stCertificate}
+                                onChange={(e) => setNewCertForm({ ...newCertForm, stCertificate: e.target.value })}
+                              />
+                              <input
+                                type="text"
+                                placeholder="Business Partner"
+                                className="input input-bordered input-sm"
+                                value={newCertForm.businessPartner}
+                                onChange={(e) => setNewCertForm({ ...newCertForm, businessPartner: e.target.value })}
+                              />
+                              <input
+                                type="text"
+                                placeholder="Frequency (e.g. Monthly)"
+                                className="input input-bordered input-sm"
+                                value={newCertForm.frequency}
+                                onChange={(e) => setNewCertForm({ ...newCertForm, frequency: e.target.value })}
+                              />
+                              <input
+                                type="text"
+                                placeholder="Address"
+                                className="input input-bordered input-sm"
+                                value={newCertForm.address}
+                                onChange={(e) => setNewCertForm({ ...newCertForm, address: e.target.value })}
+                              />
+                              <input
+                                type="text"
+                                placeholder="City"
+                                className="input input-bordered input-sm"
+                                value={newCertForm.city}
+                                onChange={(e) => setNewCertForm({ ...newCertForm, city: e.target.value })}
+                              />
+                              <input
+                                type="text"
+                                placeholder="State"
+                                className="input input-bordered input-sm"
+                                value={newCertForm.state}
+                                onChange={(e) => setNewCertForm({ ...newCertForm, state: e.target.value })}
+                              />
+                              <input
+                                type="text"
+                                placeholder="Zip"
+                                className="input input-bordered input-sm"
+                                value={newCertForm.zip}
+                                onChange={(e) => setNewCertForm({ ...newCertForm, zip: e.target.value })}
+                              />
+                              <button
+                                type="button"
+                                onClick={handleCreateStCert}
+                                disabled={savingNewCert}
+                                className="btn btn-primary btn-sm md:col-span-2"
+                              >
+                                {savingNewCert ? <span className="loading loading-spinner loading-sm"></span> : "Create & Attach"}
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
 
                       <div className="form-control md:col-span-2">
@@ -1340,7 +1564,10 @@ export default function CorporateClientIntake() {
                       <div className="flex gap-2 items-center">
                         <select
                           value={selectedService}
-                          onChange={(e) => setSelectedService(e.target.value)}
+                          onChange={(e) => {
+                            setSelectedService(e.target.value);
+                            setSelectedCertificateId("");
+                          }}
                           className="select select-bordered"
                           disabled={addingToPipeline}
                         >
@@ -1350,6 +1577,24 @@ export default function CorporateClientIntake() {
                             </option>
                           ))}
                         </select>
+                        {SALES_TAX_SERVICES.includes(selectedService) && formData.stCertificateNumbers.length > 1 && (
+                          <select
+                            value={selectedCertificateId}
+                            onChange={(e) => setSelectedCertificateId(e.target.value)}
+                            className="select select-bordered"
+                            disabled={addingToPipeline}
+                          >
+                            <option value="">Which location/certificate?</option>
+                            {formData.stCertificateNumbers.map((certId, index) => {
+                              const stCert = selectedCompany?.fields["ST Certificate"]?.[index];
+                              return (
+                                <option key={certId} value={certId}>
+                                  {stCert || certId}
+                                </option>
+                              );
+                            })}
+                          </select>
+                        )}
                         <button
                           onClick={handleAddToPipeline}
                           disabled={addingToPipeline}

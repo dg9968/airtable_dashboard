@@ -26,6 +26,9 @@ interface PipelineCompany {
   processor?: string[];
   serviceId?: string;
   serviceName?: string;
+  // Which certificate/location this ticket is for (Sales Tax services with
+  // more than one location) — null/undefined for tickets with no location concept.
+  certificateId?: string;
   addedAt: string;
   status?: string;
   priority?: number;
@@ -355,6 +358,10 @@ export default function CorporateServicesPipeline() {
             const serviceIdRaw = record.fields["Services"];
             const serviceIdStr = Array.isArray(serviceIdRaw) ? serviceIdRaw[0] : serviceIdRaw;
 
+            // Which certificate/location (if any) this ticket is for
+            const certificateIdRaw = record.fields["Ticket Certificate"];
+            const certificateIdStr = Array.isArray(certificateIdRaw) ? certificateIdRaw[0] : certificateIdRaw;
+
             // Get Processor (multiple select field or link field)
             const processor = record.fields["Processor"] || [];
 
@@ -401,6 +408,7 @@ export default function CorporateServicesPipeline() {
               email: emailStr,
               serviceId: serviceIdStr,
               serviceName: serviceNameStr,
+              certificateId: certificateIdStr || undefined,
               processor: Array.isArray(processor)
                 ? processor
                 : [processor],
@@ -685,10 +693,13 @@ export default function CorporateServicesPipeline() {
     );
   };
 
-  // Check if a subscription already exists for a company and service
+  // Check if a subscription already exists for a company, service, and
+  // certificate/location — a company with multiple locations can have one
+  // follow-up ticket per certificate for the same service.
   const checkExistingSubscription = async (
     corporateId: string,
-    serviceId: string
+    serviceId: string,
+    certificateId?: string
   ): Promise<{ exists: boolean }> => {
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
@@ -698,9 +709,10 @@ export default function CorporateServicesPipeline() {
       const data = await response.json();
 
       if (data.success && data.data) {
-        const exists = data.data.some((sub: { fields: { Services?: string[] } }) => {
+        const exists = data.data.some((sub: { fields: { Services?: string[]; 'Ticket Certificate'?: string[] } }) => {
           const services = sub.fields['Services'] || [];
-          return services.includes(serviceId);
+          const existingCertificateId = sub.fields['Ticket Certificate']?.[0];
+          return services.includes(serviceId) && (existingCertificateId || undefined) === (certificateId || undefined);
         });
         return { exists };
       }
@@ -714,7 +726,8 @@ export default function CorporateServicesPipeline() {
   // Create a follow-up subscription
   const createFollowUpSubscription = async (
     corporateId: string,
-    serviceId: string
+    serviceId: string,
+    certificateId?: string
   ): Promise<void> => {
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
     const response = await fetch(`${apiUrl}/api/subscriptions-corporate`, {
@@ -725,6 +738,7 @@ export default function CorporateServicesPipeline() {
       body: JSON.stringify({
         corporateId,
         serviceId,
+        certificateId: certificateId || null,
       }),
     });
 
@@ -832,9 +846,9 @@ export default function CorporateServicesPipeline() {
           if (followUpServiceId) {
             try {
               // Check if subscription already exists
-              const existingCheck = await checkExistingSubscription(company.corporateId, followUpServiceId);
+              const existingCheck = await checkExistingSubscription(company.corporateId, followUpServiceId, company.certificateId);
               if (!existingCheck.exists) {
-                await createFollowUpSubscription(company.corporateId, followUpServiceId);
+                await createFollowUpSubscription(company.corporateId, followUpServiceId, company.certificateId);
                 followUpCreated = true;
                 console.log(`[Follow-up] Created ${mapping.followUpServiceName} subscription for ${company.companyName}`);
               } else {

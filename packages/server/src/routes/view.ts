@@ -45,7 +45,7 @@ const MIGRATED_TABLES = new Set([
 ]);
 // Single-record GET/POST/PATCH by table name only support the entity tables
 // (the only ones the client uses that way).
-const MIGRATED_ENTITY_TABLES = new Set(['Personal', 'Corporations']);
+const MIGRATED_ENTITY_TABLES = new Set(['Personal', 'Corporations', 'Sales Tax Certificate Info']);
 
 function salesTaxCertToAirtableRecord(
   row: typeof salesTaxCertificates.$inferSelect
@@ -60,7 +60,31 @@ function salesTaxCertToAirtableRecord(
   if (row.businessPartner != null) fields['Business Partner'] = row.businessPartner;
   if (row.frequency) fields['Frequency'] = row.frequency;
   if (row.corporationId) fields['Company Name (from Company Name (from Status))'] = [row.corporationId];
+  if (row.address) fields['Address'] = row.address;
+  if (row.city) fields['City'] = row.city;
+  if (row.state) fields['State'] = row.state;
+  if (row.zip) fields['Zip'] = row.zip;
   return { id: row.id, createdTime: row.createdAt.toISOString(), fields };
+}
+
+function salesTaxCertFieldsToColumns(
+  fields: Record<string, unknown>
+): Partial<typeof salesTaxCertificates.$inferInsert> {
+  const out: Partial<typeof salesTaxCertificates.$inferInsert> = {};
+  for (const [key, value] of Object.entries(fields)) {
+    switch (key) {
+      case 'ST Certificate': out.stCertificate = (value as string) || null; break;
+      case 'Company Name': out.companyName = (value as string) || null; break;
+      case 'Business Partner': out.businessPartner = value != null && value !== '' ? Number(value) : null; break;
+      case 'Frequency': out.frequency = (value as string) || null; break;
+      case 'Address': out.address = (value as string) || null; break;
+      case 'City': out.city = (value as string) || null; break;
+      case 'State': out.state = (value as string) || null; break;
+      case 'Zip': out.zip = (value as string) || null; break;
+      case 'Corporation': out.corporationId = (value as string) || null; break;
+    }
+  }
+  return out;
 }
 
 /**
@@ -194,6 +218,13 @@ app.get('/:tableName/:recordId', async (c) => {
       const { relMap, lookup } = await loadPersonalRelationships(db, [recordId]);
       return c.json({ success: true, data: personalToAirtableRecord(row, relMap.get(recordId), lookup) });
     }
+    if (tableName === 'Sales Tax Certificate Info') {
+      const [row] = await db.select().from(salesTaxCertificates).where(eq(salesTaxCertificates.id, recordId)).limit(1);
+      if (!row) {
+        return c.json({ success: false, error: 'Record not found', table: tableName, recordId }, 404);
+      }
+      return c.json({ success: true, data: salesTaxCertToAirtableRecord(row) });
+    }
     const [row] = await db.select().from(corporations).where(eq(corporations.id, recordId)).limit(1);
     if (!row) {
       return c.json({ success: false, error: 'Record not found', table: tableName, recordId }, 404);
@@ -240,6 +271,11 @@ app.post('/:tableName', async (c) => {
       const [row] = await db.insert(personal).values(values).returning();
       const { relMap, lookup } = await loadPersonalRelationships(db, [row.id]);
       return c.json({ success: true, data: personalToAirtableRecord(row, relMap.get(row.id), lookup) }, 201);
+    }
+    if (tableName === 'Sales Tax Certificate Info') {
+      const values = salesTaxCertFieldsToColumns(fields);
+      const [row] = await db.insert(salesTaxCertificates).values(values).returning();
+      return c.json({ success: true, data: salesTaxCertToAirtableRecord(row) }, 201);
     }
     const values = corporationFieldsToColumns(fields);
     values.clientCode = computeClientCode(values.clientCodeOverride ?? null, values.ein ?? null);
@@ -290,6 +326,18 @@ app.patch('/:tableName/:recordId', async (c) => {
       const { relMap, lookup } = await loadPersonalRelationships(db, [recordId]);
       return c.json({ success: true, data: personalToAirtableRecord(row, relMap.get(recordId), lookup) });
     }
+    if (tableName === 'Sales Tax Certificate Info') {
+      const values = salesTaxCertFieldsToColumns(fields);
+      const [row] = await db
+        .update(salesTaxCertificates)
+        .set(values)
+        .where(eq(salesTaxCertificates.id, recordId))
+        .returning();
+      if (!row) {
+        return c.json({ success: false, error: 'Record not found' }, 404);
+      }
+      return c.json({ success: true, data: salesTaxCertToAirtableRecord(row) });
+    }
     const values = corporationFieldsToColumns(fields);
     const [existing] = await db.select().from(corporations).where(eq(corporations.id, recordId)).limit(1);
     if (!existing) {
@@ -306,6 +354,41 @@ app.patch('/:tableName/:recordId', async (c) => {
     console.error('Error updating record:', error);
     return c.json(
       { success: false, error: error instanceof Error ? error.message : 'Failed to update record' },
+      500
+    );
+  }
+});
+
+/**
+ * DELETE /api/view/:tableName/:recordId
+ * Only supports Sales Tax Certificate Info for now — Personal/Corporations
+ * have no delete flow anywhere in the app and shouldn't gain one implicitly
+ * via this generic route. corporate_pipeline_tickets.certificate_id
+ * references this table with ON DELETE SET NULL, so deleting a certificate
+ * still in use just clears it from any tickets, never errors.
+ */
+app.delete('/:tableName/:recordId', async (c) => {
+  try {
+    const tableName = c.req.param('tableName');
+    const recordId = c.req.param('recordId');
+
+    if (tableName !== 'Sales Tax Certificate Info') {
+      return c.json({ success: false, error: `Delete not supported for table "${tableName}"` }, 400);
+    }
+
+    const db = getDb();
+    const [row] = await db
+      .delete(salesTaxCertificates)
+      .where(eq(salesTaxCertificates.id, recordId))
+      .returning();
+    if (!row) {
+      return c.json({ success: false, error: 'Record not found' }, 404);
+    }
+    return c.json({ success: true, data: { id: row.id } });
+  } catch (error) {
+    console.error('Error deleting record:', error);
+    return c.json(
+      { success: false, error: error instanceof Error ? error.message : 'Failed to delete record' },
       500
     );
   }
