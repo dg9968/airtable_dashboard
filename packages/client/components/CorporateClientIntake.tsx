@@ -86,7 +86,7 @@ export default function CorporateClientIntake() {
   // Display labels for certs added/created this session, so the "Selected"
   // list shows real values immediately instead of waiting on a full save +
   // reload of selectedCompany's snapshot fields.
-  const [certLabelsById, setCertLabelsById] = useState<Record<string, { stCert: string; bp: string }>>({});
+  const [certLabelsById, setCertLabelsById] = useState<Record<string, { stCert: string; bp: string; address?: string }>>({});
   const [showNewCertForm, setShowNewCertForm] = useState(false);
   const [newCertForm, setNewCertForm] = useState({
     stCertificate: "",
@@ -98,6 +98,17 @@ export default function CorporateClientIntake() {
     zip: "",
   });
   const [savingNewCert, setSavingNewCert] = useState(false);
+  const [editingCertId, setEditingCertId] = useState<string | null>(null);
+  const [editCertForm, setEditCertForm] = useState({
+    stCertificate: "",
+    businessPartner: "",
+    frequency: "",
+    address: "",
+    city: "",
+    state: "",
+    zip: "",
+  });
+  const [savingCertEdit, setSavingCertEdit] = useState(false);
 
   // Pipeline management
   const [pipelineCompanies, setPipelineCompanies] = useState<any[]>([]);
@@ -196,6 +207,48 @@ export default function CorporateClientIntake() {
 
     fetchPipeline();
   }, []);
+
+  // Fetch display details (ST Cert / BP / Address) for certificates already
+  // linked to this company (loaded from a saved record) that aren't in
+  // certLabelsById yet — that map is otherwise only populated when a
+  // certificate is created or selected fresh this session.
+  useEffect(() => {
+    const missingIds = formData.stCertificateNumbers.filter((id) => !certLabelsById[id]);
+    if (missingIds.length === 0) return;
+
+    let cancelled = false;
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+    (async () => {
+      const fetched: Record<string, { stCert: string; bp: string; address: string }> = {};
+      await Promise.all(
+        missingIds.map(async (id) => {
+          try {
+            const response = await fetch(`${apiUrl}/api/view/${encodeURIComponent("Sales Tax Certificate Info")}/${id}`);
+            const result = await response.json();
+            if (result.success && result.data) {
+              const f = result.data.fields;
+              const addressParts = [f["Address"], f["City"], f["State"], f["Zip"]].filter(Boolean);
+              fetched[id] = {
+                stCert: f["ST Certificate"] || "",
+                bp: f["Business Partner"] != null ? String(f["Business Partner"]) : "",
+                address: addressParts.join(", "),
+              };
+            }
+          } catch (err) {
+            console.error(`Error loading ST Certificate ${id}:`, err);
+          }
+        })
+      );
+      if (!cancelled && Object.keys(fetched).length > 0) {
+        setCertLabelsById((prev) => ({ ...prev, ...fetched }));
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData.stCertificateNumbers]);
 
   const loadCompanyById = async (id: string) => {
     setLoading(true);
@@ -365,9 +418,14 @@ export default function CorporateClientIntake() {
   const handleSelectStCert = (record: any) => {
     if (formData.stCertificateNumbers.includes(record.id)) return;
     setFormData({ ...formData, stCertificateNumbers: [...formData.stCertificateNumbers, record.id] });
+    const addressParts = [record.fields["Address"], record.fields["City"], record.fields["State"], record.fields["Zip"]].filter(Boolean);
     setCertLabelsById({
       ...certLabelsById,
-      [record.id]: { stCert: record.fields["ST Certificate"] || "", bp: record.fields["Business Partner"] || "" },
+      [record.id]: {
+        stCert: record.fields["ST Certificate"] || "",
+        bp: record.fields["Business Partner"] || "",
+        address: addressParts.join(", "),
+      },
     });
     setStCertSearchResults([]);
     setStCertSearchTerm("");
@@ -382,7 +440,8 @@ export default function CorporateClientIntake() {
   // navigates away without clicking the main Save button.
   const persistLinkedCertificates = async (stCertificateNumbers: string[]) => {
     if (!selectedCompany || isNewCompany) return;
-    await fetch(`/api/view/${encodeURIComponent("Corporations")}/${selectedCompany.id}`, {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+    await fetch(`${apiUrl}/api/view/${encodeURIComponent("Corporations")}/${selectedCompany.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ fields: { "ST Certificate Number": stCertificateNumbers } }),
@@ -398,7 +457,8 @@ export default function CorporateClientIntake() {
 
     try {
       setSavingNewCert(true);
-      const response = await fetch(`/api/view/${encodeURIComponent("Sales Tax Certificate Info")}`, {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+      const response = await fetch(`${apiUrl}/api/view/${encodeURIComponent("Sales Tax Certificate Info")}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -423,9 +483,16 @@ export default function CorporateClientIntake() {
       const created = result.data;
       const updatedNumbers = [...formData.stCertificateNumbers, created.id];
       setFormData({ ...formData, stCertificateNumbers: updatedNumbers });
+      const newCertAddressParts = [newCertForm.address, newCertForm.city, newCertForm.state, newCertForm.zip]
+        .map((s) => s.trim())
+        .filter(Boolean);
       setCertLabelsById({
         ...certLabelsById,
-        [created.id]: { stCert: newCertForm.stCertificate.trim(), bp: newCertForm.businessPartner.trim() },
+        [created.id]: {
+          stCert: newCertForm.stCertificate.trim(),
+          bp: newCertForm.businessPartner.trim(),
+          address: newCertAddressParts.join(", "),
+        },
       });
       setNewCertForm({ stCertificate: "", businessPartner: "", frequency: "", address: "", city: "", state: "", zip: "" });
       setShowNewCertForm(false);
@@ -445,7 +512,8 @@ export default function CorporateClientIntake() {
     }
 
     try {
-      const response = await fetch(`/api/view/${encodeURIComponent("Sales Tax Certificate Info")}/${recordId}`, {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+      const response = await fetch(`${apiUrl}/api/view/${encodeURIComponent("Sales Tax Certificate Info")}/${recordId}`, {
         method: "DELETE",
       });
       const result = await response.json();
@@ -463,6 +531,84 @@ export default function CorporateClientIntake() {
       console.error("Error deleting ST Certificate:", err);
       setError(err instanceof Error ? err.message : "Failed to delete certificate");
       setTimeout(() => setError(null), 5000);
+    }
+  };
+
+  const handleStartEditCert = async (recordId: string) => {
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+      const response = await fetch(`${apiUrl}/api/view/${encodeURIComponent("Sales Tax Certificate Info")}/${recordId}`);
+      const result = await response.json();
+      if (!result.success) {
+        throw new Error(result.error || "Failed to load certificate");
+      }
+      const f = result.data.fields;
+      setEditCertForm({
+        stCertificate: f["ST Certificate"] || "",
+        businessPartner: f["Business Partner"] != null ? String(f["Business Partner"]) : "",
+        frequency: f["Frequency"] || "",
+        address: f["Address"] || "",
+        city: f["City"] || "",
+        state: f["State"] || "",
+        zip: f["Zip"] || "",
+      });
+      setEditingCertId(recordId);
+    } catch (err) {
+      console.error("Error loading ST Certificate for edit:", err);
+      setError(err instanceof Error ? err.message : "Failed to load certificate");
+      setTimeout(() => setError(null), 5000);
+    }
+  };
+
+  const handleSaveCertEdit = async () => {
+    if (!editingCertId) return;
+    if (!editCertForm.stCertificate.trim()) {
+      setError("ST Certificate number is required");
+      setTimeout(() => setError(null), 3000);
+      return;
+    }
+
+    try {
+      setSavingCertEdit(true);
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+      const response = await fetch(`${apiUrl}/api/view/${encodeURIComponent("Sales Tax Certificate Info")}/${editingCertId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fields: {
+            "ST Certificate": editCertForm.stCertificate.trim(),
+            "Business Partner": editCertForm.businessPartner.trim(),
+            "Frequency": editCertForm.frequency.trim(),
+            "Address": editCertForm.address.trim(),
+            "City": editCertForm.city.trim(),
+            "State": editCertForm.state.trim(),
+            "Zip": editCertForm.zip.trim(),
+          },
+        }),
+      });
+      const result = await response.json();
+      if (!result.success) {
+        throw new Error(result.error || "Failed to update certificate");
+      }
+
+      const addressParts = [editCertForm.address, editCertForm.city, editCertForm.state, editCertForm.zip]
+        .map((s) => s.trim())
+        .filter(Boolean);
+      setCertLabelsById({
+        ...certLabelsById,
+        [editingCertId]: {
+          stCert: editCertForm.stCertificate.trim(),
+          bp: editCertForm.businessPartner.trim(),
+          address: addressParts.join(", "),
+        },
+      });
+      setEditingCertId(null);
+    } catch (err) {
+      console.error("Error updating ST Certificate:", err);
+      setError(err instanceof Error ? err.message : "Failed to update certificate");
+      setTimeout(() => setError(null), 5000);
+    } finally {
+      setSavingCertEdit(false);
     }
   };
 
@@ -1215,13 +1361,22 @@ export default function CorporateClientIntake() {
                             {formData.stCertificateNumbers.map((id, index) => {
                               const stCert = certLabelsById[id]?.stCert || selectedCompany?.fields["ST Certificate"]?.[index];
                               const bp = certLabelsById[id]?.bp || selectedCompany?.fields["Business Partner (from ST Certificate Number)"]?.[index];
+                              const address = certLabelsById[id]?.address;
                               return (
                                 <div key={id} className="flex items-center justify-between p-2 bg-base-200 rounded-lg">
                                   <div className="flex gap-4">
                                     <span className="text-sm"><span className="text-base-content/50 text-xs">ST Cert:</span> {stCert || "—"}</span>
                                     <span className="text-sm"><span className="text-base-content/50 text-xs">BP:</span> {bp || "—"}</span>
+                                    <span className="text-sm"><span className="text-base-content/50 text-xs">Address:</span> {address || "—"}</span>
                                   </div>
                                   <div className="flex gap-1">
+                                    <button
+                                      onClick={() => (editingCertId === id ? setEditingCertId(null) : handleStartEditCert(id))}
+                                      title="Edit this certificate's details"
+                                      className="btn btn-ghost btn-xs"
+                                    >
+                                      {editingCertId === id ? "− Cancel" : "✎ Edit"}
+                                    </button>
                                     <button
                                       onClick={() => handleRemoveStCert(id)}
                                       title="Unlink from this company (certificate itself is kept)"
@@ -1240,6 +1395,67 @@ export default function CorporateClientIntake() {
                                 </div>
                               );
                             })}
+                            {editingCertId && formData.stCertificateNumbers.includes(editingCertId) && (
+                              <div className="p-3 bg-base-300 rounded-lg grid grid-cols-1 md:grid-cols-2 gap-2">
+                                <input
+                                  type="text"
+                                  placeholder="ST Certificate Number *"
+                                  className="input input-bordered input-sm"
+                                  value={editCertForm.stCertificate}
+                                  onChange={(e) => setEditCertForm({ ...editCertForm, stCertificate: e.target.value })}
+                                />
+                                <input
+                                  type="text"
+                                  placeholder="Business Partner"
+                                  className="input input-bordered input-sm"
+                                  value={editCertForm.businessPartner}
+                                  onChange={(e) => setEditCertForm({ ...editCertForm, businessPartner: e.target.value })}
+                                />
+                                <input
+                                  type="text"
+                                  placeholder="Frequency (e.g. Monthly)"
+                                  className="input input-bordered input-sm"
+                                  value={editCertForm.frequency}
+                                  onChange={(e) => setEditCertForm({ ...editCertForm, frequency: e.target.value })}
+                                />
+                                <input
+                                  type="text"
+                                  placeholder="Address"
+                                  className="input input-bordered input-sm"
+                                  value={editCertForm.address}
+                                  onChange={(e) => setEditCertForm({ ...editCertForm, address: e.target.value })}
+                                />
+                                <input
+                                  type="text"
+                                  placeholder="City"
+                                  className="input input-bordered input-sm"
+                                  value={editCertForm.city}
+                                  onChange={(e) => setEditCertForm({ ...editCertForm, city: e.target.value })}
+                                />
+                                <input
+                                  type="text"
+                                  placeholder="State"
+                                  className="input input-bordered input-sm"
+                                  value={editCertForm.state}
+                                  onChange={(e) => setEditCertForm({ ...editCertForm, state: e.target.value })}
+                                />
+                                <input
+                                  type="text"
+                                  placeholder="Zip"
+                                  className="input input-bordered input-sm"
+                                  value={editCertForm.zip}
+                                  onChange={(e) => setEditCertForm({ ...editCertForm, zip: e.target.value })}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={handleSaveCertEdit}
+                                  disabled={savingCertEdit}
+                                  className="btn btn-primary btn-sm md:col-span-2"
+                                >
+                                  {savingCertEdit ? <span className="loading loading-spinner loading-sm"></span> : "Save Changes"}
+                                </button>
+                              </div>
+                            )}
                           </div>
                         )}
 
@@ -1277,6 +1493,11 @@ export default function CorporateClientIntake() {
                                     <p className="text-xs text-base-content/50">
                                       BP: {record.fields["Business Partner"]} · {record.fields["Company Name (from Status)"]}
                                     </p>
+                                    {(record.fields["Address"] || record.fields["City"]) && (
+                                      <p className="text-xs text-base-content/50">
+                                        Address: {[record.fields["Address"], record.fields["City"], record.fields["State"], record.fields["Zip"]].filter(Boolean).join(", ")}
+                                      </p>
+                                    )}
                                   </div>
                                   <span className={`btn btn-xs ${alreadySelected ? "btn-success btn-disabled" : "btn-ghost"}`}>
                                     {alreadySelected ? "Added" : "Select"}
