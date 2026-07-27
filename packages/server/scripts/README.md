@@ -94,6 +94,37 @@ bun run packages/server/scripts/cleanup-stale-tickets.ts --apply
 bun run packages/server/scripts/cleanup-stale-tickets.ts --service="Payroll" --days=10 --apply
 ```
 
+### `reassign-tickets.ts`
+Reassigns the Processor on specific `corporate_pipeline_tickets` rows — e.g.
+filling in a freshly-recreated batch of tickets after a
+`cleanup-stale-tickets.ts` run, or moving a handful of one processor's open
+tickets to someone else. Writes `processor_id` directly via Drizzle,
+**bypassing `PATCH /api/subscriptions-corporate/:id` entirely** — that route
+is the only place the "you've been assigned" email
+([notify-processor-assigned.ts](../src/lib/notify-processor-assigned.ts)) is
+wired in, so this never emails anyone, no matter how many tickets.
+
+Pick exactly one way to select which tickets to touch:
+- `--ids=id1,id2,...` — reassign exactly these rows, no service needed.
+- `--service="X" --all` — every open ticket for service X (explicit opt-in;
+  there's no bare default that reassigns a whole service, since blanket
+  "reassign everything to one processor" is rarely what you actually want).
+- `--service="X"` alone — lists that service's open tickets numbered and
+  prompts which ones to touch (comma list and/or ranges, e.g. `1,3-5`, or
+  `all`).
+- neither flag — prompts for a service first, then the picker above.
+
+If `--processor` isn't passed, prompts interactively (list matches
+`GET /api/teams`). Tickets already on the target processor are reported but
+skipped as no-ops. Each row updates in its own transaction; `--apply`
+requires typing `yes`.
+
+```
+bun run packages/server/scripts/reassign-tickets.ts --ids=rec1,rec2 --processor="Jane Doe" --apply
+bun run packages/server/scripts/reassign-tickets.ts --service="Payroll"                       # pick tickets + processor, report only
+bun run packages/server/scripts/reassign-tickets.ts --service="Payroll" --all --processor="Jane Doe" --apply
+```
+
 ### `migrate-to-billing-bundles.ts`
 ⚠️ **Default is live-write, not dry-run** — pass `--dry-run` to preview instead.
 

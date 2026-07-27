@@ -16,7 +16,14 @@
       "mcp__context7__query-docs",
       "Bash(node -e ' *)",
       "Bash(ls -la /c/tmp/live-workflow.json; cp /c/tmp/live-workflow.json \"/c/Users/danie/AppData/Local/Temp/claude/c--Users-danie-Documents-airtable-dashboard/92674ab1-a389-4ec7-9c5b-7e64baed6727/scratchpad/live-workflow.json\")",
-      "Bash(node build-put-payload.js)"
+      "Bash(node build-put-payload.js)",
+      "Bash(tee /c/tmp/reassign-test.log)",
+      "Bash(tasklist //FI \"IMAGENAME eq bun.exe\")",
+      "Bash(wmic process *)",
+      "Bash(timeout 15 bash -c \"printf '7\\\\n1\\\\n' | bun run scripts/reassign-tickets.ts\")",
+      "Bash(timeout 15 bash -c \"printf '1\\\\n' | bun run scripts/reassign-tickets.ts --service=\\\\\"Payroll\\\\\"\")",
+      "Bash(timeout 15 bash -c \"printf '1,3-4\\\\n1\\\\n' | bun run scripts/reassign-tickets.ts --service=\\\\\"Payroll\\\\\"\")",
+      "Bash(timeout 15 bash -c \"printf '1,3-4\\\\n' | bun run scripts/reassign-tickets.ts --service=\\\\\"Payroll\\\\\" --processor=\\\\\"Daniel Galindo\\\\\"\")"
     ],
     "additionalDirectories": [
       "c:\\Users\\danie\\Documents\\airtable-dashboard\\packages\\client\\app\\api\\auth\\[...nextauth]",
