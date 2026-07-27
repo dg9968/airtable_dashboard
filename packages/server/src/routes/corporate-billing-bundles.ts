@@ -20,6 +20,7 @@ import {
   corporations,
 } from '../db/schema';
 import { CORPORATE_VIEW_FILTERS } from '../db/serializers-subscriptions';
+import { isFilingMonth, describeCoveredPeriod } from '../lib/billing-cadence';
 
 const app = new Hono();
 
@@ -136,6 +137,7 @@ app.get('/generation-status', async (c) => {
         bundleId: corporateBillingBundleItems.bundleId,
         serviceId: corporateBillingBundleItems.serviceId,
         serviceName: servicesCorporate.name,
+        serviceBillingCycle: servicesCorporate.billingCycle,
         amount: corporateBillingBundleItems.amount,
         corporationId: corporateBillingBundles.corporationId,
         companyName: corporations.company,
@@ -161,7 +163,7 @@ app.get('/generation-status', async (c) => {
     const ticketedSet = new Set(ticketedRows.map((t) => t.bundleItemId));
 
     const missing = activeItems
-      .filter((item) => !ticketedSet.has(item.itemId))
+      .filter((item) => isFilingMonth(item.serviceBillingCycle, period) && !ticketedSet.has(item.itemId))
       .map((item) => ({
         bundleId: item.bundleId,
         bundleItemId: item.itemId,
@@ -397,12 +399,15 @@ app.patch('/:id/items/:itemId', async (c) => {
 /**
  * POST /api/corporate-billing-bundles/generate-tickets
  * Generate this period's pipeline ticket for each active bundle line item
- * (optionally scoped to one bundle via { bundleId }; defaults to the
- * current YYYY-MM). Idempotent per (bundle item, period) — the DB unique
- * index on (bundle_item_id, billing_period) guarantees no duplicate ticket
- * is ever created for the same line item in the same period, so this is
- * safe to run more than once. Manual trigger for now (called from the
- * bundle screen) rather than a scheduled job.
+ * whose service's billing_cycle is due to file this period (see
+ * lib/billing-cadence: Monthly files every period, Quarterly only in
+ * Jan/Apr/Jul/Oct covering the prior 3 months, Annual only in January,
+ * One-time never). Optionally scoped to one bundle via { bundleId };
+ * defaults to the current YYYY-MM. Idempotent per (bundle item, period) —
+ * the DB unique index on (bundle_item_id, billing_period) guarantees no
+ * duplicate ticket is ever created for the same line item in the same
+ * period, so this is safe to run more than once. Manual trigger for now
+ * (called from the bundle screen) rather than a scheduled job.
  */
 app.post('/generate-tickets', async (c) => {
   try {
@@ -427,17 +432,24 @@ app.post('/generate-tickets', async (c) => {
 
     let created = 0;
     let skipped = 0;
+    let skippedCadence = 0;
     const createdTicketIds: string[] = [];
 
     for (const bundle of bundleRows) {
       const items = await db
-        .select()
+        .select({ item: corporateBillingBundleItems, serviceBillingCycle: servicesCorporate.billingCycle })
         .from(corporateBillingBundleItems)
+        .leftJoin(servicesCorporate, eq(corporateBillingBundleItems.serviceId, servicesCorporate.id))
         .where(
           and(eq(corporateBillingBundleItems.bundleId, bundle.id), eq(corporateBillingBundleItems.status, 'active'))
         );
 
-      for (const item of items) {
+      for (const { item, serviceBillingCycle } of items) {
+        if (!isFilingMonth(serviceBillingCycle, period)) {
+          skippedCadence++;
+          continue;
+        }
+
         const [existing] = await db
           .select({ id: corporatePipelineTickets.id })
           .from(corporatePipelineTickets)
@@ -462,6 +474,7 @@ app.post('/generate-tickets', async (c) => {
             status: 'Active',
             bundleItemId: item.id,
             billingPeriod: period,
+            notes: describeCoveredPeriod(serviceBillingCycle, period),
             dateAssigned: new Date().toISOString().split('T')[0],
           })
           .returning({ id: corporatePipelineTickets.id });
@@ -477,6 +490,7 @@ app.post('/generate-tickets', async (c) => {
         bundlesProcessed: bundleRows.length,
         ticketsCreated: created,
         ticketsSkippedExisting: skipped,
+        ticketsSkippedCadence: skippedCadence,
         createdTicketIds,
       },
     });
