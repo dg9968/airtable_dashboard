@@ -27,8 +27,15 @@
  * - Each group's repoint + delete runs in a single transaction.
  *
  * Usage:
- *   bun run packages/server/scripts/dedupe-corporations.ts           # report only
- *   bun run packages/server/scripts/dedupe-corporations.ts --apply   # write changes
+ *   bun run packages/server/scripts/dedupe-corporations.ts                     # report only
+ *   bun run packages/server/scripts/dedupe-corporations.ts --apply             # ask y/n per group, write confirmed ones
+ *   bun run packages/server/scripts/dedupe-corporations.ts --apply --only=EIN1,EIN2,recABC123
+ *
+ * --only restricts which groups are eligible to merge, matched against the
+ * normalized EIN or any row's corporation id in the group. Groups not in the
+ * list are reported but skipped. Combine with --apply to get a y/n prompt
+ * only for the groups you've chosen; every other eligible group is still
+ * printed in the report but left untouched.
  */
 
 import { config } from 'dotenv';
@@ -36,12 +43,31 @@ import { resolve } from 'path';
 import { Pool } from 'pg';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { eq } from 'drizzle-orm';
+import * as readline from 'node:readline/promises';
 import * as schema from '../src/db/schema';
 import { relatedRowCount, hasActiveBundle, repointForeignKeys, repointDocuments } from './lib/corporation-merge-helpers';
 
 config({ path: resolve(__dirname, '../.env') });
 
 const isApply = process.argv.includes('--apply');
+const onlyArg = process.argv.find((a) => a.startsWith('--only='));
+const onlySet = onlyArg
+  ? new Set(
+      onlyArg
+        .slice('--only='.length)
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+    )
+  : null;
+
+const rl = isApply ? readline.createInterface({ input: process.stdin, output: process.stdout }) : null;
+
+async function confirmMerge(): Promise<boolean> {
+  if (!rl) return false;
+  const answer = (await rl.question('  Merge this group? [y/N] ')).trim().toLowerCase();
+  return answer === 'y' || answer === 'yes';
+}
 
 const DATABASE_URL = process.env.DATABASE_URL;
 if (!DATABASE_URL) {
@@ -102,6 +128,8 @@ async function main() {
   let merged = 0;
   let skippedReview = 0;
   let skippedBundleConflict = 0;
+  let skippedFilter = 0;
+  let skippedByUser = 0;
 
   for (const group of groups) {
     const namesMatch = new Set(group.rows.map((r) => normalizeCompanyName(r.company))).size === 1;
@@ -110,6 +138,12 @@ async function main() {
     console.log(`EIN (normalized): ${group.normalizedEin}`);
     for (const row of group.rows) {
       console.log(`  ${row.id}  "${row.company}"  client_code=${row.clientCode}  ein=${row.ein}  created=${row.createdAt}`);
+    }
+
+    if (onlySet && !onlySet.has(group.normalizedEin) && !group.rows.some((r) => onlySet.has(r.id))) {
+      console.log('  -> SKIPPED: not in --only selection.');
+      skippedFilter++;
+      continue;
     }
 
     if (!namesMatch) {
@@ -163,6 +197,12 @@ async function main() {
       continue;
     }
 
+    if (!(await confirmMerge())) {
+      console.log('  -> SKIPPED by user.');
+      skippedByUser++;
+      continue;
+    }
+
     await db.transaction(async (tx) => {
       for (const loser of losers) {
         await repointForeignKeys(tx, keeper.id, loser.id);
@@ -179,8 +219,11 @@ async function main() {
   console.log(`merged${isApply ? '' : ' (dry-run)'}                   : ${merged}`);
   console.log(`skipped - needs review    : ${skippedReview}`);
   console.log(`skipped - bundle conflict : ${skippedBundleConflict}`);
+  console.log(`skipped - not in --only   : ${skippedFilter}`);
+  console.log(`skipped - user declined   : ${skippedByUser}`);
   console.log('====================================\n');
 
+  rl?.close();
   await pool.end();
 }
 

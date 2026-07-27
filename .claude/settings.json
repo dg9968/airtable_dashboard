@@ -7,10 +7,20 @@
       "Bash(bun add *)",
       "Bash(bun remove *)",
       "Bash(Remove-Item -Recurse -Force \"c:\\\\Users\\\\danie\\\\Documents\\\\airtable-dashboard\\\\packages\\\\client\\\\app\\\\api\\\\auth\\\\[...nextauth]\")",
-      "Bash(npx shadcn@latest init --defaults --yes)"
+      "Bash(npx shadcn@latest init --defaults --yes)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:3001/health --max-time 2)",
+      "Bash(git -C /c/Users/danie/Documents/airtable-dashboard mv packages/server/scripts/cleanup-stale-payroll-tickets.ts packages/server/scripts/cleanup-stale-tickets.ts)",
+      "Bash(curl -s http://localhost:3001/api/teams)",
+      "Bash(node -e \"const j = require\\('./documents/Batch Email with Status Update \\(Fixed\\).json'\\); console.log\\('nodes:', j.nodes.length\\); console.log\\('node names:', j.nodes.map\\(n=>n.name\\)\\); console.log\\('connections keys:', Object.keys\\(j.connections\\)\\);\")",
+      "mcp__context7__resolve-library-id",
+      "mcp__context7__query-docs",
+      "Bash(node -e ' *)",
+      "Bash(ls -la /c/tmp/live-workflow.json; cp /c/tmp/live-workflow.json \"/c/Users/danie/AppData/Local/Temp/claude/c--Users-danie-Documents-airtable-dashboard/92674ab1-a389-4ec7-9c5b-7e64baed6727/scratchpad/live-workflow.json\")",
+      "Bash(node build-put-payload.js)"
     ],
     "additionalDirectories": [
-      "c:\\Users\\danie\\Documents\\airtable-dashboard\\packages\\client\\app\\api\\auth\\[...nextauth]"
+      "c:\\Users\\danie\\Documents\\airtable-dashboard\\packages\\client\\app\\api\\auth\\[...nextauth]",
+      "C:\\Users\\danie\\AppData\\Local\\Temp\\claude\\c--Users-danie-Documents-airtable-dashboard\\92674ab1-a389-4ec7-9c5b-7e64baed6727\\scratchpad"
     ]
   }
 }

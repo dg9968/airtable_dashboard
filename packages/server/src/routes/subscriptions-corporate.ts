@@ -16,6 +16,7 @@ import {
   subsCorporateFieldsToColumns,
   CORPORATE_VIEW_FILTERS,
 } from '../db/serializers-subscriptions';
+import { notifyProcessorAssigned } from '../lib/notify-processor-assigned';
 
 const app = new Hono();
 
@@ -168,6 +169,11 @@ app.patch('/:id', async (c) => {
     const db = getDb();
     const values = subsCorporateFieldsToColumns(fields);
 
+    const [existing] = await db
+      .select({ processorId: corporatePipelineTickets.processorId })
+      .from(corporatePipelineTickets)
+      .where(eq(corporatePipelineTickets.id, id));
+
     const [row] = await db
       .update(corporatePipelineTickets)
       .set(values)
@@ -180,6 +186,20 @@ app.patch('/:id', async (c) => {
 
     const ctx = await loadSubsCorporateContext(db);
     const record = subsCorporateToAirtableRecord(row, ctx);
+
+    // Email the newly-assigned processor — skip on unassignment (processorId
+    // cleared) or a no-op reassignment (same processor as before).
+    if ('processorId' in values && row.processorId && row.processorId !== existing?.processorId) {
+      const processor = ctx.users.get(row.processorId);
+      if (processor?.email) {
+        await notifyProcessorAssigned({
+          ticketId: row.id,
+          processor,
+          company: (row.corporationId && ctx.corps.get(row.corporationId)?.company) || 'Unknown company',
+          serviceName: (row.serviceId && ctx.serviceNames.get(row.serviceId)) || 'Unknown service',
+        });
+      }
+    }
 
     return c.json({
       success: true,
