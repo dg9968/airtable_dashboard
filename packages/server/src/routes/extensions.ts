@@ -17,6 +17,7 @@ import {
   subsCorporateToAirtableRecord,
   loadSubsCorporateContext,
 } from '../db/serializers-subscriptions';
+import { ensureCorporateExtensionFollowUp } from '../lib/extension-followup';
 
 // ---------------------------------------------------------------------------
 // Form 7004 field mapping (AcroForm fields after XFA strip by pdf-lib)
@@ -270,6 +271,10 @@ app.patch('/:subscriptionId', async (c) => {
 
     if (!row) {
       return c.json({ success: false, error: 'Subscription not found' }, 404);
+    }
+
+    if (row.extensionStatus === 'Filed') {
+      await ensureCorporateExtensionFollowUp(db, row.id);
     }
 
     const ctx = await loadSubsCorporateContext(db);

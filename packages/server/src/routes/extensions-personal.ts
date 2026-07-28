@@ -17,6 +17,7 @@ import {
   subsPersonalToAirtableRecord,
   loadSubsPersonalContext,
 } from '../db/serializers-subscriptions';
+import { ensurePersonalExtensionFollowUp } from '../lib/extension-followup';
 
 const app = new Hono();
 
@@ -246,6 +247,10 @@ app.patch('/:subscriptionId', async (c) => {
 
     if (!row) {
       return c.json({ success: false, error: 'Subscription not found' }, 404);
+    }
+
+    if (row.extensionStatus === 'Filed') {
+      await ensurePersonalExtensionFollowUp(db, row.id);
     }
 
     const ctx = await loadSubsPersonalContext(db);

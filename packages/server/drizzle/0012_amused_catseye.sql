@@ -1,0 +1,6 @@
+ALTER TABLE "corporate_pipeline_tickets" ADD COLUMN "extension_follow_up_ticket_id" text;--> statement-breakpoint
+ALTER TABLE "personal_pipeline_tickets" ADD COLUMN "extension_follow_up_ticket_id" text;--> statement-breakpoint
+ALTER TABLE "corporate_pipeline_tickets" ADD CONSTRAINT "corporate_pipeline_tickets_extension_follow_up_ticket_id_corporate_pipeline_tickets_id_fk" FOREIGN KEY ("extension_follow_up_ticket_id") REFERENCES "public"."corporate_pipeline_tickets"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "personal_pipeline_tickets" ADD CONSTRAINT "personal_pipeline_tickets_extension_follow_up_ticket_id_personal_pipeline_tickets_id_fk" FOREIGN KEY ("extension_follow_up_ticket_id") REFERENCES "public"."personal_pipeline_tickets"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "corporate_pipeline_tickets_extension_followup_idx" ON "corporate_pipeline_tickets" USING btree ("extension_follow_up_ticket_id");--> statement-breakpoint
+CREATE INDEX "personal_pipeline_tickets_extension_followup_idx" ON "personal_pipeline_tickets" USING btree ("extension_follow_up_ticket_id");

@@ -9,6 +9,7 @@ import {
   date,
   index,
   uniqueIndex,
+  type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 import { id, createdAt } from './helpers';
 import { personal, corporations } from './people';
@@ -38,11 +39,19 @@ export const personalPipelineTickets = pgTable(
     extensionFiledDate: text('extension_filed_date'),
     extensionEstimatedTax: numeric('extension_estimated_tax'),
     extensionPaymentsCredits: numeric('extension_payments_credits'),
+    // Set when marking this ticket's extension as Filed auto-creates (or
+    // re-links to) the "Tax Prep Pipeline" ticket that tracks the actual
+    // return, due by the extended deadline. Self-referencing FK.
+    extensionFollowUpTicketId: text('extension_follow_up_ticket_id').references(
+      (): AnyPgColumn => personalPipelineTickets.id,
+      { onDelete: 'set null' }
+    ),
     createdAt: createdAt(),
   },
   (t) => [
     index('personal_pipeline_tickets_personal_idx').on(t.personalId),
     index('personal_pipeline_tickets_service_idx').on(t.serviceId),
+    index('personal_pipeline_tickets_extension_followup_idx').on(t.extensionFollowUpTicketId),
   ]
 );
 
@@ -94,6 +103,13 @@ export const corporatePipelineTickets = pgTable(
     extensionFiledDate: text('extension_filed_date'),
     extensionEstimatedTax: numeric('extension_estimated_tax'),
     extensionPaymentsCredits: numeric('extension_payments_credits'),
+    // Set when marking this ticket's extension as Filed auto-creates (or
+    // re-links to) the "Tax Returns" ticket that tracks the actual return,
+    // due by the extended deadline. Self-referencing FK.
+    extensionFollowUpTicketId: text('extension_follow_up_ticket_id').references(
+      (): AnyPgColumn => corporatePipelineTickets.id,
+      { onDelete: 'set null' }
+    ),
     createdAt: createdAt(),
   },
   (t) => [
@@ -102,6 +118,7 @@ export const corporatePipelineTickets = pgTable(
     index('corporate_pipeline_tickets_certificate_idx').on(t.certificateId),
     index('corporate_pipeline_tickets_status_idx').on(t.status),
     index('corporate_pipeline_tickets_bundle_item_idx').on(t.bundleItemId),
+    index('corporate_pipeline_tickets_extension_followup_idx').on(t.extensionFollowUpTicketId),
     uniqueIndex('corporate_pipeline_tickets_bundle_period_idx')
       .on(t.bundleItemId, t.billingPeriod)
       .where(sql`bundle_item_id IS NOT NULL`),

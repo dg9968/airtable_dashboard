@@ -94,6 +94,23 @@ bun run packages/server/scripts/cleanup-stale-tickets.ts --apply
 bun run packages/server/scripts/cleanup-stale-tickets.ts --service="Payroll" --days=10 --apply
 ```
 
+### `backfill-extension-followups.ts`
+Finds every `corporate_pipeline_tickets` / `personal_pipeline_tickets` row
+with `extension_status = 'Filed'` and no linked follow-up ticket yet, and
+creates one via `ensureCorporateExtensionFollowUp` /
+`ensurePersonalExtensionFollowUp` (`../src/lib/extension-followup.ts`) — the
+same logic the live `PATCH /api/extensions[-personal]` routes run when an
+extension is marked Filed, so results are identical either way. Needed
+because that auto-linking only fires on a fresh PATCH; extensions already
+marked Filed before the feature shipped never got one. Each ticket's
+follow-up creation runs in its own transaction; `--apply` requires typing
+`yes` at a single confirmation prompt.
+
+```
+bun run packages/server/scripts/backfill-extension-followups.ts             # dry run
+bun run packages/server/scripts/backfill-extension-followups.ts --apply
+```
+
 ### `reassign-tickets.ts`
 Reassigns the Processor on specific `corporate_pipeline_tickets` rows — e.g.
 filling in a freshly-recreated batch of tickets after a

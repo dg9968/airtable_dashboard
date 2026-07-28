@@ -23,7 +23,17 @@
       "Bash(timeout 15 bash -c \"printf '7\\\\n1\\\\n' | bun run scripts/reassign-tickets.ts\")",
       "Bash(timeout 15 bash -c \"printf '1\\\\n' | bun run scripts/reassign-tickets.ts --service=\\\\\"Payroll\\\\\"\")",
       "Bash(timeout 15 bash -c \"printf '1,3-4\\\\n1\\\\n' | bun run scripts/reassign-tickets.ts --service=\\\\\"Payroll\\\\\"\")",
-      "Bash(timeout 15 bash -c \"printf '1,3-4\\\\n' | bun run scripts/reassign-tickets.ts --service=\\\\\"Payroll\\\\\" --processor=\\\\\"Daniel Galindo\\\\\"\")"
+      "Bash(timeout 15 bash -c \"printf '1,3-4\\\\n' | bun run scripts/reassign-tickets.ts --service=\\\\\"Payroll\\\\\" --processor=\\\\\"Daniel Galindo\\\\\"\")",
+      "Bash(bunx tsc *)",
+      "Bash(echo \"exit:$?\")",
+      "Read(//tmp/**)",
+      "Read(//c/tmp/**)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:3001/health)",
+      "Bash(curl -s -X PATCH http://localhost:3001/api/extensions/7207df94-52b7-48bb-a4c3-528fb99acff9 -H 'Content-Type: application/json' -d '{\"fields\":{\"Extension Status\":\"Filed\",\"Extension Filed Date\":\"2026-03-15\"}}')",
+      "Bash(curl -s -X PATCH http://localhost:3001/api/extensions/7207df94-52b7-48bb-a4c3-528fb99acff9 -H 'Content-Type: application/json' -d '{\"fields\":{\"Extension Status\":\"Filed\"}}')",
+      "Bash(curl -s -X PATCH http://localhost:3001/api/extensions-personal/d252c561-00cc-4030-b463-f090f2ef48e5 -H 'Content-Type: application/json' -d '{\"fields\":{\"Extension Status\":\"Filed\",\"Extension Filed Date\":\"2026-03-15\"}}')",
+      "Bash(curl -s \"http://localhost:3001/api/extension-followups\")",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\)['data']; print\\('corporate:', len\\(d['corporate']\\)\\); print\\('personal:', len\\(d['personal']\\)\\); print\\('sample corp:', d['corporate'][0]\\); print\\('sample personal:', d['personal'][0]\\)\")"
     ],
     "additionalDirectories": [
       "c:\\Users\\danie\\Documents\\airtable-dashboard\\packages\\client\\app\\api\\auth\\[...nextauth]",

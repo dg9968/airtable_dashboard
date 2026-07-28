@@ -141,6 +141,14 @@ export default function ManageBusiness() {
       icon: '📥',
       color: 'text-rose-600',
       bgColor: 'bg-rose-50 hover:bg-rose-100 border-rose-200'
+    },
+    {
+      title: 'Extension Follow-Ups',
+      description: 'Clients whose extension was filed — track the return before the extended deadline',
+      href: '/extension-followups',
+      icon: '⏳',
+      color: 'text-amber-600',
+      bgColor: 'bg-amber-50 hover:bg-amber-100 border-amber-200'
     }
   ];
 
