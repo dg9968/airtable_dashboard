@@ -111,6 +111,33 @@ bun run packages/server/scripts/backfill-extension-followups.ts             # dr
 bun run packages/server/scripts/backfill-extension-followups.ts --apply
 ```
 
+### `normalize-legacy-billing-statuses.ts`
+Rewrites legacy `billing_records.billing_status` values to their current
+equivalent, driven by a `LEGACY_STATUS_MAP` constant at the top of the file
+(currently just `'Part of Subscription'` -> `'Covered by Bundle'`, the one
+vocabulary change noted on `WIRE_BILLING_STATUSES` in
+`src/db/serializers-subscriptions.ts`). Not cosmetic:
+`BillingStatusBadge.tsx` falls back to `statusConfig['Unbilled']` for any
+unrecognized status, so legacy-valued rows render to staff as "Unbilled" —
+bundle-covered work that looks like it still needs invoicing — and the
+billing page's status dropdown has no option to filter to them. Rows whose
+`amount_charged` is non-zero are reported as `NEEDS REVIEW` and never
+rewritten by default, since a bundle-covered charge should be $0 — pass
+`--clear-amounts` to rewrite those too and zero the amount, which is only
+correct once someone has confirmed the amount was a data-entry mistake rather
+than the status being wrong. Writes run in one transaction, and every
+affected row id is printed so the run output doubles as a reversal record.
+
+Ran 2026-08-02: 91 rows rewritten, then the 2 flagged rows rewritten with
+`--clear-amounts` after confirming their $45.00/$45.01 amounts were entered by
+mistake. No `Part of Subscription` rows remain.
+
+```
+bun run packages/server/scripts/normalize-legacy-billing-statuses.ts                          # dry run
+bun run packages/server/scripts/normalize-legacy-billing-statuses.ts --apply
+bun run packages/server/scripts/normalize-legacy-billing-statuses.ts --clear-amounts --apply  # also zero mistaken amounts
+```
+
 ### `reassign-tickets.ts`
 Reassigns the Processor on specific `corporate_pipeline_tickets` rows — e.g.
 filling in a freshly-recreated batch of tickets after a

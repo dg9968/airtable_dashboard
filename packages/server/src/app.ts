@@ -47,6 +47,7 @@ import healthDbRoutes from './routes/health-db';
 import teamDirectoryRoutes from './routes/team-directory';
 import openTicketsDashboardRoutes from './routes/open-tickets-dashboard';
 import extensionFollowupsRoutes from './routes/extension-followups';
+import billingReconciliationRoutes from './routes/billing-reconciliation';
 
 const app = new Hono();
 
@@ -125,6 +126,7 @@ app.route('/api/tax-notice-notes', taxNoticeNotesRoutes);
 app.route('/api/tax-notice-attachments', taxNoticeAttachmentsRoutes);
 app.route('/api/open-tickets-dashboard', openTicketsDashboardRoutes);
 app.route('/api/extension-followups', extensionFollowupsRoutes);
+app.route('/api/billing-reconciliation', billingReconciliationRoutes);
 
 // 404 handler
 app.notFound((c) => {

@@ -149,6 +149,14 @@ export default function ManageBusiness() {
       icon: '⏳',
       color: 'text-amber-600',
       bgColor: 'bg-amber-50 hover:bg-amber-100 border-amber-200'
+    },
+    {
+      title: 'Billing Reconciliation',
+      description: 'Find work that was completed but never charged, priced, or collected',
+      href: '/billing-reconciliation',
+      icon: '🧾',
+      color: 'text-red-600',
+      bgColor: 'bg-red-50 hover:bg-red-100 border-red-200'
     }
   ];
 

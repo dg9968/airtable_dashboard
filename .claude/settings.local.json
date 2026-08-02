@@ -6,7 +6,15 @@
       "Bash(findstr:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(bun run build:*)"
+      "Bash(bun run build:*)",
+      "Bash(curl -s \"http://localhost:3001/api/billing-reconciliation\")",
+      "Bash(python3 -c ' *)",
+      "Bash(curl -s \"http://localhost:3001/api/billing-reconciliation\" -o recon.json)",
+      "Bash(curl -s -w \"\\\\nHTTP:%{http_code}\\\\n\" \"http://localhost:3001/api/billing-reconciliation\")",
+      "Bash(curl -s -w \"HTTP:%{http_code}\\\\n\" -o /dev/null http://localhost:3001/health)",
+      "Bash(bunx --bun sed -i 's/^\\\\\\(\\\\s*\\\\\\)date: r\\\\.date,$/\\\\1date: toDateOnly\\(r.date\\),/' src/routes/billing-reconciliation.ts)",
+      "Bash(sed -i 's/^\\\\\\(\\\\s*\\\\\\)date: r\\\\.date,$/\\\\1date: toDateOnly\\(r.date\\),/' src/routes/billing-reconciliation.ts)",
+      "Bash(echo \"client-exit:$?\")"
     ],
     "deny": [],
     "ask": []
