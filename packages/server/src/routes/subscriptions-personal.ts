@@ -16,6 +16,7 @@ import {
   subsPersonalFieldsToColumns,
   PERSONAL_VIEW_FILTERS,
 } from '../db/serializers-subscriptions';
+import { blockUnbilledCompletion } from '../lib/terminal-status-guard';
 
 const app = new Hono();
 
@@ -82,6 +83,50 @@ app.post('/', async (c) => {
         error: error instanceof Error ? error.message : 'Failed to create subscription',
         details: error instanceof Error ? error.stack : 'Unknown error',
       },
+      500
+    );
+  }
+});
+
+/**
+ * POST /api/subscriptions-personal/bulk-assign
+ *
+ * Sets the tax preparer on many tickets at once. Body:
+ *   { ticketIds: string[], userId: string | null }   // null unassigns
+ *
+ * No notification is sent — see the matching handler in
+ * subscriptions-corporate.ts for the reasoning. (The personal PATCH has never
+ * notified at all.)
+ *
+ * Registered before the '/:id' routes so the literal path can't be captured
+ * as an id.
+ */
+app.post('/bulk-assign', async (c) => {
+  try {
+    const { ticketIds, userId } = await c.req.json();
+
+    if (!Array.isArray(ticketIds) || ticketIds.length === 0) {
+      return c.json({ success: false, error: 'ticketIds must be a non-empty array' }, 400);
+    }
+    if (userId !== null && typeof userId !== 'string') {
+      return c.json({ success: false, error: 'userId must be a string or null' }, 400);
+    }
+
+    const db = getDb();
+    const updated = await db.transaction(async (tx) => {
+      const rows = await tx
+        .update(personalPipelineTickets)
+        .set({ taxPreparerId: userId })
+        .where(inArray(personalPipelineTickets.id, ticketIds))
+        .returning({ id: personalPipelineTickets.id });
+      return rows.length;
+    });
+
+    return c.json({ success: true, data: { updated, requested: ticketIds.length } });
+  } catch (error) {
+    console.error('Error bulk-assigning personal tickets:', error);
+    return c.json(
+      { success: false, error: error instanceof Error ? error.message : 'Failed to bulk assign' },
       500
     );
   }
@@ -192,6 +237,13 @@ app.patch('/:id', async (c) => {
 
     const db = getDb();
     const values = subsPersonalFieldsToColumns(fields);
+
+    // Work can't be marked done here without a charge on file — see
+    // lib/terminal-status-guard.ts. 'Filed Elsewhere' is intentionally allowed.
+    if ('status' in values) {
+      const blocked = await blockUnbilledCompletion(db, 'personal', id, values.status);
+      if (blocked) return c.json({ success: false, error: blocked }, 409);
+    }
 
     const [row] = await db
       .update(personalPipelineTickets)

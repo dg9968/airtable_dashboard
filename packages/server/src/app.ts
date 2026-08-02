@@ -3,6 +3,7 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
+import { requireAuth } from './middleware/require-auth';
 
 // Import routes
 import documentsRoutes from './routes/documents';
@@ -49,6 +50,7 @@ import openTicketsDashboardRoutes from './routes/open-tickets-dashboard';
 import extensionFollowupsRoutes from './routes/extension-followups';
 import billingReconciliationRoutes from './routes/billing-reconciliation';
 import workloadDashboardRoutes from './routes/workload-dashboard';
+import serviceCompletionRoutes from './routes/service-completion';
 
 const app = new Hono();
 
@@ -79,7 +81,13 @@ app.use('*', cors({
   exposeHeaders: ['Content-Disposition'],
 }));
 
-// Health check (no auth required)
+// Authentication. Registered after cors() so preflight still gets its
+// headers, and before every route below — this server is reachable from the
+// public internet and holds client PII. See middleware/require-auth.ts for
+// the two accepted credentials and the API_AUTH_MODE rollout switch.
+app.use('*', requireAuth());
+
+// Health check (no auth required — see PUBLIC_PATHS in require-auth.ts)
 app.get('/health', (c) => {
   return c.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
@@ -129,6 +137,7 @@ app.route('/api/open-tickets-dashboard', openTicketsDashboardRoutes);
 app.route('/api/extension-followups', extensionFollowupsRoutes);
 app.route('/api/billing-reconciliation', billingReconciliationRoutes);
 app.route('/api/workload-dashboard', workloadDashboardRoutes);
+app.route('/api/service-completion', serviceCompletionRoutes);
 
 // 404 handler
 app.notFound((c) => {

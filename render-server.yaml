@@ -13,7 +13,16 @@ services:
       - key: PORT
         value: 10000
       - key: CLIENT_URL
-        value: https://airtable-dashboard.onrender.com
+        value: https://app.vault1040.com
+      # Shared secret for requests from the Next.js proxy routes. Must match
+      # API_SECRET_KEY on the client service — without it those requests carry
+      # no credential and are rejected by middleware/require-auth.ts.
+      - key: API_SECRET_KEY
+        sync: false  # Set in Render dashboard
+      # Set to "report" for the first deploy: logs what would be rejected
+      # instead of rejecting it. Remove once the log is quiet to enforce.
+      - key: API_AUTH_MODE
+        sync: false
       - key: AIRTABLE_PERSONAL_ACCESS_TOKEN
         sync: false  # Set this in Render dashboard
       - key: AIRTABLE_BASE_ID

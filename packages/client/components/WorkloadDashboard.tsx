@@ -178,23 +178,44 @@ export default function WorkloadDashboard() {
                       </h2>
                       <p className="text-sm text-base-content/70 mt-1">
                         Open tickets with nobody responsible. These appear in no one&apos;s queue,
-                        so nothing prompts anyone to work them.
+                        so nothing prompts anyone to work them. Open a pipeline below to
+                        select tickets and assign them in bulk.
                       </p>
                     </div>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
-                    <div className="rounded-lg border border-base-300 p-3">
-                      <div className="text-xs text-base-content/60 uppercase tracking-wide mb-1">
-                        Corporate
+                    <div className="rounded-lg border border-base-300 p-3 flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <div className="text-xs text-base-content/60 uppercase tracking-wide mb-1">
+                          Corporate
+                        </div>
+                        <SideCell stats={unassigned.corporate} side="corporate" id={null} />
                       </div>
-                      <SideCell stats={unassigned.corporate} side="corporate" id={null} />
+                      {unassigned.corporate.open > 0 && (
+                        <Link
+                          href={pipelineHref('corporate', null)}
+                          className="btn btn-primary btn-sm"
+                        >
+                          Assign these →
+                        </Link>
+                      )}
                     </div>
-                    <div className="rounded-lg border border-base-300 p-3">
-                      <div className="text-xs text-base-content/60 uppercase tracking-wide mb-1">
-                        Personal
+                    <div className="rounded-lg border border-base-300 p-3 flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <div className="text-xs text-base-content/60 uppercase tracking-wide mb-1">
+                          Personal
+                        </div>
+                        <SideCell stats={unassigned.personal} side="personal" id={null} />
                       </div>
-                      <SideCell stats={unassigned.personal} side="personal" id={null} />
+                      {unassigned.personal.open > 0 && (
+                        <Link
+                          href={pipelineHref('personal', null)}
+                          className="btn btn-primary btn-sm"
+                        >
+                          Assign these →
+                        </Link>
+                      )}
                     </div>
                   </div>
 

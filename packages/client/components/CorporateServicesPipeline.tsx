@@ -78,6 +78,9 @@ export default function CorporateServicesPipeline() {
   const [serviceFilter, setServiceFilter] = useState<string>(() => searchParams.get('service') || "");
   const [processors, setProcessors] = useState<Processor[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>("");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkAssignee, setBulkAssignee] = useState<string>("");
+  const [bulkAssigning, setBulkAssigning] = useState(false);
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [selectedCompanyForStatus, setSelectedCompanyForStatus] = useState<string | null>(null);
   const [showAmountModal, setShowAmountModal] = useState(false);
@@ -484,6 +487,62 @@ export default function CorporateServicesPipeline() {
   });
 
   // Sort companies
+  // Bulk assignment. Selection is keyed by ticket id and intentionally
+  // intersected with the current filter below, so narrowing the filters can
+  // never leave invisible rows selected.
+  const visibleIds = filteredCompanies.map((c) => c.id);
+  const selectedVisible = visibleIds.filter((id) => selectedIds.has(id));
+  const allVisibleSelected = visibleIds.length > 0 && selectedVisible.length === visibleIds.length;
+
+  const toggleRowSelection = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAllVisible = () => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allVisibleSelected) visibleIds.forEach((id) => next.delete(id));
+      else visibleIds.forEach((id) => next.add(id));
+      return next;
+    });
+  };
+
+  const handleBulkAssign = async () => {
+    if (selectedVisible.length === 0) return;
+    setBulkAssigning(true);
+    try {
+      const response = await fetch(`/api/subscriptions-corporate/bulk-assign`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ticketIds: selectedVisible,
+          userId: bulkAssignee || null,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Failed to assign");
+
+      // Reflect locally rather than refetching the whole pipeline.
+      const assigned = bulkAssignee ? [bulkAssignee] : [];
+      setPipelineCompanies((prev) =>
+        prev.map((c) => (selectedIds.has(c.id) ? { ...c, processor: assigned } : c))
+      );
+      setSelectedIds(new Set());
+      setBulkAssignee("");
+      alert(`Assigned ${data.data.updated} ticket${data.data.updated === 1 ? "" : "s"}.`);
+    } catch (error) {
+      console.error("Bulk assign failed:", error);
+      alert(error instanceof Error ? error.message : "Failed to assign tickets");
+    } finally {
+      setBulkAssigning(false);
+    }
+  };
+
   const sortedCompanies = [...filteredCompanies].sort((a, b) => {
     if (sortBy === "name") {
       const nameA = a.companyName.toLowerCase();
@@ -798,11 +857,17 @@ export default function CorporateServicesPipeline() {
         requestBody.billingStatus = billingStatus;
       }
 
-      console.log('[CorporateServicesPipeline] Sending POST request to /api/services-rendered');
+      console.log('[CorporateServicesPipeline] Sending POST request to /api/service-completion');
       console.log('[CorporateServicesPipeline] Request body:', requestBody);
 
-      // Create Services Rendered entry (unbilled)
-      const servicesRenderedResponse = await fetch(`/api/services-rendered`, {
+      // One request writes the billing record and marks the ticket
+      // "Complete Service" in a single transaction. These used to be two
+      // independent calls where the status update was non-fatal, which could
+      // leave work billed but still open, or completed with no charge on
+      // file. The ticket is updated, never deleted, so its notes/processor
+      // history and (for bundle-covered work) the client's billing bundle
+      // stay intact; the terminal status just drops it out of this view.
+      const completionResponse = await fetch(`/api/service-completion`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -810,34 +875,15 @@ export default function CorporateServicesPipeline() {
         body: JSON.stringify(requestBody),
       });
 
-      console.log('[CorporateServicesPipeline] Response status:', servicesRenderedResponse.status);
-      console.log('[CorporateServicesPipeline] Response ok:', servicesRenderedResponse.ok);
+      const completionData = await completionResponse.json();
+      console.log('[CorporateServicesPipeline] Response status:', completionResponse.status);
 
-      const servicesRenderedData = await servicesRenderedResponse.json();
-      console.log('[CorporateServicesPipeline] Response data:', servicesRenderedData);
-
-      if (!servicesRenderedResponse.ok) {
-        console.error('[CorporateServicesPipeline] Failed to create service record:', servicesRenderedData);
-        throw new Error(servicesRenderedData.error || "Failed to create service record");
+      if (!completionResponse.ok) {
+        console.error('[CorporateServicesPipeline] Failed to complete service:', completionData);
+        throw new Error(completionData.error || "Failed to complete service");
       }
 
-      console.log('[CorporateServicesPipeline] Service record created successfully:', servicesRenderedData.data?.id);
-
-      // The pipeline ticket itself is left untouched — completing a service
-      // no longer deletes it, so its notes/processor/history and (for
-      // bundle-covered work) the client's billing bundle stay intact. Mark
-      // it Complete Service so it drops out of the active pipeline view.
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-      const statusResponse = await fetch(`${apiUrl}/api/subscriptions-corporate/${companyId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fields: { Status: "Complete Service" } }),
-      });
-      if (!statusResponse.ok) {
-        const statusData = await statusResponse.json();
-        console.error("[CorporateServicesPipeline] Warning: Failed to mark ticket complete:", statusData.error);
-        // Continue even if this fails - the service was still rendered
-      }
+      console.log('[CorporateServicesPipeline] Completed:', completionData.data?.billingRecord?.id);
 
       // Handle follow-up service creation if requested
       let followUpCreated = false;
@@ -1178,6 +1224,49 @@ export default function CorporateServicesPipeline() {
               Pipeline Companies ({sortedCompanies.length})
             </h2>
 
+            {/* Bulk assignment bar — appears only with a selection. Assigning
+                in bulk sends no notification emails, unlike the per-row
+                processor dropdown. */}
+            {selectedVisible.length > 0 && (
+              <div className="alert bg-base-200 mb-4 flex flex-wrap items-center gap-3">
+                <span className="font-medium">
+                  {selectedVisible.length} selected
+                </span>
+                <select
+                  className="select select-bordered select-sm"
+                  value={bulkAssignee}
+                  onChange={(e) => setBulkAssignee(e.target.value)}
+                >
+                  <option value="">Unassign</option>
+                  {processors.map((processor) => (
+                    <option key={processor.id} value={processor.id}>
+                      {processor.name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  className="btn btn-primary btn-sm"
+                  onClick={handleBulkAssign}
+                  disabled={bulkAssigning}
+                >
+                  {bulkAssigning ? (
+                    <span className="loading loading-spinner loading-xs" />
+                  ) : null}
+                  {bulkAssignee ? "Assign" : "Unassign"} {selectedVisible.length}
+                </button>
+                <button
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => setSelectedIds(new Set())}
+                  disabled={bulkAssigning}
+                >
+                  Clear
+                </button>
+                <span className="text-xs text-base-content/60">
+                  No notification emails are sent for bulk assignment.
+                </span>
+              </div>
+            )}
+
             {loading ? (
               <div className="flex justify-center items-center py-12">
                 <span className="loading loading-spinner loading-lg"></span>
@@ -1187,6 +1276,15 @@ export default function CorporateServicesPipeline() {
                 <table className="table table-zebra">
                   <thead>
                     <tr>
+                      <th className="w-8">
+                        <input
+                          type="checkbox"
+                          className="checkbox checkbox-sm"
+                          checked={allVisibleSelected}
+                          onChange={toggleSelectAllVisible}
+                          aria-label="Select all visible tickets"
+                        />
+                      </th>
                       <th>#</th>
                       <th
                         className="cursor-pointer hover:bg-base-200 w-15"
@@ -1217,6 +1315,15 @@ export default function CorporateServicesPipeline() {
                   <tbody>
                     {sortedCompanies.map((company, index) => (
                       <tr key={company.id}>
+                        <td>
+                          <input
+                            type="checkbox"
+                            className="checkbox checkbox-sm"
+                            checked={selectedIds.has(company.id)}
+                            onChange={() => toggleRowSelection(company.id)}
+                            aria-label={`Select ${company.companyName}`}
+                          />
+                        </td>
                         <td>{index + 1}</td>
                         <td>{getPriorityBadge(company.priority || 0)}</td>
                         {serviceFilter !== "Extensions" && (

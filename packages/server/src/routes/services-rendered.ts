@@ -24,6 +24,7 @@ import {
   billingRecordToAirtableRecord,
   WIRE_BILLING_STATUSES,
 } from '../db/serializers-subscriptions';
+import { buildBillingRecordValues, TicketNotFoundError } from '../lib/billing-record';
 
 const app = new Hono();
 
@@ -70,73 +71,24 @@ app.post('/', async (c) => {
 
     const db = getDb();
 
-    let clientName = 'Unknown Client';
-    let serviceType = 'Unknown Service';
-    let processor = 'Unassigned';
-    let bundleItemId: string | null = null;
-
-    if (subscriptionType === 'corporate') {
-      const [ticket] = await db
-        .select()
-        .from(corporatePipelineTickets)
-        .where(eq(corporatePipelineTickets.id, subscriptionId))
-        .limit(1);
-      if (!ticket) {
-        return c.json({ success: false, error: 'Pipeline ticket not found in Subscriptions Corporate' }, 404);
+    let values;
+    try {
+      values = await buildBillingRecordValues(db, {
+        subscriptionId,
+        subscriptionType,
+        serviceDate,
+        amountCharged,
+        notes,
+        billingStatus,
+      });
+    } catch (err) {
+      if (err instanceof TicketNotFoundError) {
+        return c.json({ success: false, error: err.message }, 404);
       }
-      const ctx = await loadSubsCorporateContext(db);
-      const corp = ticket.corporationId ? ctx.corps.get(ticket.corporationId) : undefined;
-      const serviceName = ticket.serviceId ? ctx.serviceNames.get(ticket.serviceId) : undefined;
-      const processorInfo = ticket.processorId ? ctx.users.get(ticket.processorId) : undefined;
-      clientName = corp?.company || 'Unknown Client';
-      serviceType = serviceName || 'Unknown Service';
-      processor = processorInfo?.name || 'Unassigned';
-      bundleItemId = ticket.bundleItemId;
-    } else {
-      const [ticket] = await db
-        .select()
-        .from(personalPipelineTickets)
-        .where(eq(personalPipelineTickets.id, subscriptionId))
-        .limit(1);
-      if (!ticket) {
-        return c.json({ success: false, error: 'Pipeline ticket not found in Subscriptions Personal' }, 404);
-      }
-      const ctx = await loadSubsPersonalContext(db);
-      const person = ticket.personalId ? ctx.persons.get(ticket.personalId) : undefined;
-      const serviceName = ticket.serviceId ? ctx.serviceNames.get(ticket.serviceId) : undefined;
-      const preparer = ticket.taxPreparerId ? ctx.users.get(ticket.taxPreparerId) : undefined;
-      clientName = person?.fullName || 'Unknown Client';
-      serviceType = serviceName || 'Unknown Service';
-      processor = preparer?.name || 'Unassigned';
+      throw err;
     }
 
-    console.log('[Services Rendered API] Extracted values:', { clientName, serviceType, processor, bundleItemId });
-
-    const finalBillingStatus =
-      billingStatus && WIRE_BILLING_STATUSES.includes(billingStatus)
-        ? billingStatus
-        : bundleItemId
-          ? 'Covered by Bundle'
-          : 'Unbilled';
-    // Bundle-covered work is never charged standalone — the bundle's
-    // recurring total already accounts for it.
-    const finalAmount = finalBillingStatus === 'Covered by Bundle' ? null : amountCharged ?? null;
-
-    const [row] = await db
-      .insert(billingRecords)
-      .values({
-        serviceRenderedDate: serviceDate.split('T')[0],
-        billingStatus: finalBillingStatus,
-        clientName,
-        serviceType,
-        processor,
-        clientType: subscriptionType,
-        subscriptionPersonalId: subscriptionType === 'personal' ? subscriptionId : null,
-        subscriptionCorporateId: subscriptionType === 'corporate' ? subscriptionId : null,
-        amountCharged: finalAmount != null ? String(finalAmount) : null,
-        notes: notes || null,
-      })
-      .returning();
+    const [row] = await db.insert(billingRecords).values(values).returning();
 
     const record = billingRecordToAirtableRecord(row);
     return c.json({

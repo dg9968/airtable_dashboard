@@ -16,3 +16,21 @@ export const authUser = pgTable('user', {
   updatedAt: timestamp('updatedAt').notNull(),
   role: text('role'),
 });
+
+// READ-ONLY mirror of the Better Auth "session" table, used by
+// middleware/require-auth.ts to authenticate browser requests that reach this
+// server directly (rather than through a Next.js proxy route, which sends
+// X-API-Key instead). Sessions are database-backed — packages/client/lib/auth.ts
+// configures no JWT/bearer plugin — so validating one is a plain lookup here.
+// Same rules as authUser above: never write to it, never move this file into
+// src/db/schema/.
+export const authSession = pgTable('session', {
+  id: text('id').primaryKey(),
+  expiresAt: timestamp('expiresAt').notNull(),
+  token: text('token').notNull(),
+  createdAt: timestamp('createdAt').notNull(),
+  updatedAt: timestamp('updatedAt').notNull(),
+  ipAddress: text('ipAddress'),
+  userAgent: text('userAgent'),
+  userId: text('userId').notNull(),
+});

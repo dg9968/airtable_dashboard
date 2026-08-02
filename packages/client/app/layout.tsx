@@ -1,4 +1,5 @@
 import { Providers } from './providers'
+import ApiCredentialsProvider from '@/components/ApiCredentialsProvider'
 import ClientLayoutWrapper from '@/components/ClientLayoutWrapper'
 import ClientThemeWrapper from '@/components/ClientThemeWrapper'
 import './globals.css'
@@ -31,6 +32,9 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: `try{var t=localStorage.getItem('app-theme')||'cupcake';document.documentElement.setAttribute('data-theme',t);}catch(e){}` }} />
       </head>
       <body className="min-h-screen">
+        {/* Sends the session cookie on direct calls to the Hono API, which now
+            requires authentication. Mounted before anything that fetches. */}
+        <ApiCredentialsProvider />
         <ClientThemeWrapper>
           <Providers>
             <ClientLayoutWrapper>

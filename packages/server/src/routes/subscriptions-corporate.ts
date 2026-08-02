@@ -7,7 +7,7 @@
  */
 
 import { Hono } from 'hono';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { getDb } from '../db/client';
 import { corporatePipelineTickets, servicesCorporate } from '../db/schema';
 import {
@@ -17,6 +17,7 @@ import {
   CORPORATE_VIEW_FILTERS,
 } from '../db/serializers-subscriptions';
 import { notifyProcessorAssigned } from '../lib/notify-processor-assigned';
+import { blockUnbilledCompletion } from '../lib/terminal-status-guard';
 
 const app = new Hono();
 
@@ -61,6 +62,51 @@ app.post('/', async (c) => {
         error: error instanceof Error ? error.message : 'Failed to create subscription',
         details: error instanceof Error ? error.stack : 'Unknown error',
       },
+      500
+    );
+  }
+});
+
+/**
+ * POST /api/subscriptions-corporate/bulk-assign
+ *
+ * Sets the processor on many tickets at once. Body:
+ *   { ticketIds: string[], userId: string | null }   // null unassigns
+ *
+ * Deliberately does NOT call notifyProcessorAssigned. Assigning a backlog of
+ * hundreds of tickets would send hundreds of individual emails; the same
+ * reasoning is why scripts/reassign-tickets.ts bypasses the notification. The
+ * single-ticket PATCH below still notifies as it always has.
+ *
+ * Registered before the '/:id' routes so the literal path can't be captured
+ * as an id.
+ */
+app.post('/bulk-assign', async (c) => {
+  try {
+    const { ticketIds, userId } = await c.req.json();
+
+    if (!Array.isArray(ticketIds) || ticketIds.length === 0) {
+      return c.json({ success: false, error: 'ticketIds must be a non-empty array' }, 400);
+    }
+    if (userId !== null && typeof userId !== 'string') {
+      return c.json({ success: false, error: 'userId must be a string or null' }, 400);
+    }
+
+    const db = getDb();
+    const updated = await db.transaction(async (tx) => {
+      const rows = await tx
+        .update(corporatePipelineTickets)
+        .set({ processorId: userId })
+        .where(inArray(corporatePipelineTickets.id, ticketIds))
+        .returning({ id: corporatePipelineTickets.id });
+      return rows.length;
+    });
+
+    return c.json({ success: true, data: { updated, requested: ticketIds.length } });
+  } catch (error) {
+    console.error('Error bulk-assigning corporate tickets:', error);
+    return c.json(
+      { success: false, error: error instanceof Error ? error.message : 'Failed to bulk assign' },
       500
     );
   }
@@ -168,6 +214,13 @@ app.patch('/:id', async (c) => {
 
     const db = getDb();
     const values = subsCorporateFieldsToColumns(fields);
+
+    // Work can't be marked done here without a charge on file — see
+    // lib/terminal-status-guard.ts. Use POST /api/service-completion instead.
+    if ('status' in values) {
+      const blocked = await blockUnbilledCompletion(db, 'corporate', id, values.status);
+      if (blocked) return c.json({ success: false, error: blocked }, 409);
+    }
 
     const [existing] = await db
       .select({ processorId: corporatePipelineTickets.processorId })

@@ -61,6 +61,9 @@ export default function PersonalServicesPipeline() {
   const [serviceFilter, setServiceFilter] = useState<string>(() => searchParams.get('service') || "");
   const [taxPreparers, setTaxPreparers] = useState<TaxPreparer[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>("");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkAssignee, setBulkAssignee] = useState<string>("");
+  const [bulkAssigning, setBulkAssigning] = useState(false);
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [selectedClientForStatus, setSelectedClientForStatus] = useState<string | null>(null);
   const [showAmountModal, setShowAmountModal] = useState(false);
@@ -158,7 +161,12 @@ export default function PersonalServicesPipeline() {
         } else if (serviceFilter) {
           url = `${apiUrl}/api/subscriptions-personal?view=${encodeURIComponent(serviceFilter)}`;
         } else {
-          url = `${apiUrl}/api/subscriptions-personal`;
+          // "All Services" must ask for the unfiltered view explicitly. Omitting
+          // ?view makes the server fall back to "Tax Prep Pipeline" (its legacy
+          // default), so this option used to quietly show one service instead of
+          // all of them. 'Grid view' is the null-filter entry in
+          // PERSONAL_VIEW_FILTERS, i.e. every record.
+          url = `${apiUrl}/api/subscriptions-personal?view=${encodeURIComponent('Grid view')}`;
         }
 
         const response = await fetch(url);
@@ -296,6 +304,62 @@ export default function PersonalServicesPipeline() {
   });
 
   // Sort clients
+  // Bulk assignment. Selection is keyed by ticket id and intersected with the
+  // current filter below, so narrowing the filters can never leave invisible
+  // rows selected.
+  const visibleIds = filteredClients.map((c) => c.id);
+  const selectedVisible = visibleIds.filter((id) => selectedIds.has(id));
+  const allVisibleSelected = visibleIds.length > 0 && selectedVisible.length === visibleIds.length;
+
+  const toggleRowSelection = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAllVisible = () => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allVisibleSelected) visibleIds.forEach((id) => next.delete(id));
+      else visibleIds.forEach((id) => next.add(id));
+      return next;
+    });
+  };
+
+  const handleBulkAssign = async () => {
+    if (selectedVisible.length === 0) return;
+    setBulkAssigning(true);
+    try {
+      const response = await fetch(`/api/subscriptions-personal/bulk-assign`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ticketIds: selectedVisible,
+          userId: bulkAssignee || null,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Failed to assign");
+
+      // Reflect locally rather than refetching the whole pipeline.
+      const assigned = bulkAssignee ? [bulkAssignee] : [];
+      setPipelineClients((prev) =>
+        prev.map((c) => (selectedIds.has(c.id) ? { ...c, taxPreparer: assigned } : c))
+      );
+      setSelectedIds(new Set());
+      setBulkAssignee("");
+      alert(`Assigned ${data.data.updated} ticket${data.data.updated === 1 ? "" : "s"}.`);
+    } catch (error) {
+      console.error("Bulk assign failed:", error);
+      alert(error instanceof Error ? error.message : "Failed to assign tickets");
+    } finally {
+      setBulkAssigning(false);
+    }
+  };
+
   const sortedClients = [...filteredClients].sort((a, b) => {
     if (sortBy === "name") {
       const nameA = `${a.firstName} ${a.lastName}`.toLowerCase();
@@ -508,8 +572,14 @@ export default function PersonalServicesPipeline() {
         requestBody.billingStatus = billingStatus;
       }
 
-      // Create Services Rendered entry
-      const servicesRenderedResponse = await fetch(`/api/services-rendered`, {
+      // One request writes the billing record and marks the ticket
+      // "File Return" in a single transaction. These used to be two
+      // independent calls where the status update was non-fatal, which could
+      // leave work billed but still open, or filed with no charge on file.
+      // The ticket is updated, never deleted, so its notes/tax-preparer
+      // history stay intact and it drops out of this view via the status
+      // filter.
+      const completionResponse = await fetch(`/api/service-completion`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -517,26 +587,10 @@ export default function PersonalServicesPipeline() {
         body: JSON.stringify(requestBody),
       });
 
-      const servicesRenderedData = await servicesRenderedResponse.json();
+      const completionData = await completionResponse.json();
 
-      if (!servicesRenderedResponse.ok) {
-        throw new Error(servicesRenderedData.error || "Failed to create service record");
-      }
-
-      // Mark the pipeline ticket as filed instead of deleting it — its
-      // notes/tax-preparer history stay intact, and it drops out of the
-      // active pipeline view via the existing status filter.
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-      const statusResponse = await fetch(`${apiUrl}/api/subscriptions-personal/${clientId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fields: { Status: "File Return" } }),
-      });
-
-      const statusData = await statusResponse.json();
-
-      if (!statusResponse.ok) {
-        console.error("Warning: Failed to mark ticket filed:", statusData.error);
+      if (!completionResponse.ok) {
+        throw new Error(completionData.error || "Failed to complete service");
       }
 
       // Remove from local state
@@ -863,6 +917,48 @@ export default function PersonalServicesPipeline() {
               Pipeline Clients ({sortedClients.length})
             </h2>
 
+            {/* Bulk assignment bar — appears only with a selection. Assigning
+                in bulk sends no notification emails. */}
+            {selectedVisible.length > 0 && (
+              <div className="alert bg-base-200 mb-4 flex flex-wrap items-center gap-3">
+                <span className="font-medium">
+                  {selectedVisible.length} selected
+                </span>
+                <select
+                  className="select select-bordered select-sm"
+                  value={bulkAssignee}
+                  onChange={(e) => setBulkAssignee(e.target.value)}
+                >
+                  <option value="">Unassign</option>
+                  {taxPreparers.map((preparer) => (
+                    <option key={preparer.id} value={preparer.id}>
+                      {preparer.name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  className="btn btn-primary btn-sm"
+                  onClick={handleBulkAssign}
+                  disabled={bulkAssigning}
+                >
+                  {bulkAssigning ? (
+                    <span className="loading loading-spinner loading-xs" />
+                  ) : null}
+                  {bulkAssignee ? "Assign" : "Unassign"} {selectedVisible.length}
+                </button>
+                <button
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => setSelectedIds(new Set())}
+                  disabled={bulkAssigning}
+                >
+                  Clear
+                </button>
+                <span className="text-xs text-base-content/60">
+                  No notification emails are sent for bulk assignment.
+                </span>
+              </div>
+            )}
+
             {loading ? (
               <div className="flex justify-center items-center py-12">
                 <span className="loading loading-spinner loading-lg"></span>
@@ -872,6 +968,15 @@ export default function PersonalServicesPipeline() {
                 <table className="table table-zebra">
                   <thead>
                     <tr>
+                      <th className="w-8">
+                        <input
+                          type="checkbox"
+                          className="checkbox checkbox-sm"
+                          checked={allVisibleSelected}
+                          onChange={toggleSelectAllVisible}
+                          aria-label="Select all visible tickets"
+                        />
+                      </th>
                       <th>#</th>
                       <th>Priority</th>
                       {serviceFilter !== "File Extension" && <th>Status</th>}
@@ -893,6 +998,15 @@ export default function PersonalServicesPipeline() {
                   <tbody>
                     {sortedClients.map((client, index) => (
                       <tr key={client.id}>
+                        <td>
+                          <input
+                            type="checkbox"
+                            className="checkbox checkbox-sm"
+                            checked={selectedIds.has(client.id)}
+                            onChange={() => toggleRowSelection(client.id)}
+                            aria-label={`Select ${client.firstName} ${client.lastName}`}
+                          />
+                        </td>
                         <td>{index + 1}</td>
                         <td>{getPriorityBadge(client.priority || 0)}</td>
                         {serviceFilter !== "File Extension" && (
