@@ -30,7 +30,9 @@
       "Bash(echo \"client-typecheck-exit:$?\")",
       "Bash(xargs echo \"tmp scripts left:\")",
       "Bash(echo \"typecheck-exit:$?\")",
-      "Bash(xargs echo \"tmp scripts:\")"
+      "Bash(xargs echo \"tmp scripts:\")",
+      "mcp__context7__query-docs",
+      "WebFetch(domain:render.com)"
     ],
     "deny": [],
     "ask": []
