@@ -70,7 +70,9 @@ export default function CorporateServicesPipeline() {
   const [sortBy, setSortBy] = useState<"name" | "date" | "priority">("name");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [updating, setUpdating] = useState<string | null>(null);
-  const [processorFilter, setProcessorFilter] = useState<string>("");
+  // ?processor=<userId|unassigned> (e.g. from the Team Workload dashboard)
+  // preselects the processor dropdown, whose option values are user ids.
+  const [processorFilter, setProcessorFilter] = useState<string>(() => searchParams.get('processor') || "");
   // Deep-link support: /corporate-services-pipeline?service=<view> (e.g. from
   // the Open Tickets Dashboard) preselects the service filter dropdown.
   const [serviceFilter, setServiceFilter] = useState<string>(() => searchParams.get('service') || "");

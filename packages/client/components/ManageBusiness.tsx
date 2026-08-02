@@ -157,6 +157,14 @@ export default function ManageBusiness() {
       icon: '🧾',
       color: 'text-red-600',
       bgColor: 'bg-red-50 hover:bg-red-100 border-red-200'
+    },
+    {
+      title: 'Team Workload',
+      description: 'See every open ticket grouped by who is responsible — and what nobody owns',
+      href: '/workload-dashboard',
+      icon: '👥',
+      color: 'text-indigo-600',
+      bgColor: 'bg-indigo-50 hover:bg-indigo-100 border-indigo-200'
     }
   ];
 
