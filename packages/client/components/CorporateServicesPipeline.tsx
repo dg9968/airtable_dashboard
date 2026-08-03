@@ -16,6 +16,16 @@ import {
 } from "@/lib/extensionHelpers";
 import { PIPELINE_IN_PROGRESS_STATUSES, resolvePipelineStatusBadge } from "@/lib/pipelineStatus";
 
+// Legacy Airtable view name -> the services_corporate.name it selects, for the
+// three where they differ (see CORPORATE_VIEW_FILTERS in the server's
+// db/serializers-subscriptions.ts). Only needed to interpret inbound deep
+// links; the filter itself works in service names throughout.
+const VIEW_NAME_TO_SERVICE_NAME: Record<string, string> = {
+  "Monthly Sales Tax": "Sales Tax Monthly",
+  "Quarterly Sales Tax": "Sales Tax Quarterly",
+  Bookkeeping: "Bookkeeping Clients",
+};
+
 interface PipelineCompany {
   id: string;
   corporateId?: string;
@@ -73,9 +83,16 @@ export default function CorporateServicesPipeline() {
   // ?processor=<userId|unassigned> (e.g. from the Team Workload dashboard)
   // preselects the processor dropdown, whose option values are user ids.
   const [processorFilter, setProcessorFilter] = useState<string>(() => searchParams.get('processor') || "");
-  // Deep-link support: /corporate-services-pipeline?service=<view> (e.g. from
-  // the Open Tickets Dashboard) preselects the service filter dropdown.
-  const [serviceFilter, setServiceFilter] = useState<string>(() => searchParams.get('service') || "");
+  // Deep-link support: /corporate-services-pipeline?service=<name> (e.g. from
+  // the Open Tickets Dashboard) preselects the service filter dropdown. That
+  // dashboard still links with legacy Airtable view names, so translate the
+  // three that differ from the service they select. Applied only to the URL
+  // value — a dropdown selection is already a real service name, which is what
+  // keeps the "Bookkeeping" view (meaning "Bookkeeping Clients") distinct from
+  // the service actually named "Bookkeeping".
+  const [serviceFilter, setServiceFilter] = useState<string>(
+    () => VIEW_NAME_TO_SERVICE_NAME[searchParams.get('service') || ""] ?? searchParams.get('service') ?? ""
+  );
   const [processors, setProcessors] = useState<Processor[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -113,20 +130,12 @@ export default function CorporateServicesPipeline() {
   // ticket from the "missing" panel below, without changing serviceFilter.
   const [pipelineRefreshTrigger, setPipelineRefreshTrigger] = useState(0);
 
-  // Available services - these match the view names in Airtable
-  const services = [
-    { name: "Reconciling Banks for Tax Prep", view: "Reconciling Banks for Tax Prep" },
-    { name: "Tax Returns", view: "Tax Returns" },
-    { name: "Payroll", view: "Payroll" },
-    { name: "Annual Report", view: "Annual Report" },
-    { name: "Sales Tax Monthly", view: "Monthly Sales Tax" },
-    { name: "Sales Tax Quarterly", view: "Quarterly Sales Tax" },
-    { name: "Registered Agent", view: "Registered Agent" },
-    { name: "1099 Filing", view: "1099 Filing" },
-    { name: "Corporate Cases", view: "Corporate Cases" },
-    { name: "Extensions", view: "Extensions" },
-    { name: "Bookkeeping", view: "Bookkeeping" }
-  ];
+  // The filter dropdown is driven by the live services_corporate catalog
+  // (loaded into serviceNames below), not a hardcoded list. It used to be a
+  // fixed array of the eleven legacy Airtable view names, which meant any
+  // service added since was impossible to filter to — "PO Box - 1414" and
+  // "Bookkeeping" both had open tickets that no dropdown option could reach.
+  const [serviceNames, setServiceNames] = useState<string[]>([]);
 
   // Follow-up service mappings - easily extensible for future needs
   const SERVICE_FOLLOW_UP_MAPPINGS: Record<string, {
@@ -171,6 +180,13 @@ export default function CorporateServicesPipeline() {
             map[service.name] = service.id;
           });
           setServicesMap(map);
+          // Same fetch also drives the service filter dropdown, so a new
+          // service in the catalog is filterable without a code change.
+          setServiceNames(
+            data.data.services
+              .map((s: { name: string }) => s.name)
+              .sort((a: string, b: string) => a.localeCompare(b))
+          );
         }
       } catch (error) {
         console.error("Failed to fetch services:", error);
@@ -219,7 +235,7 @@ export default function CorporateServicesPipeline() {
     const fetchMissing = async () => {
       try {
         setLoadingMissingBundleClients(true);
-        const response = await fetch(`/api/corporate-billing-bundles/generation-status?view=${encodeURIComponent(serviceFilter)}`);
+        const response = await fetch(`/api/corporate-billing-bundles/generation-status?serviceName=${encodeURIComponent(serviceFilter)}`);
         const data = await response.json();
         if (!isCancelled && data.success) {
           setMissingBundleClients(data.data.missing || []);
@@ -299,11 +315,13 @@ export default function CorporateServicesPipeline() {
           }
         }
 
-        // Build URL with corporate filter first, then service view, or default to all
+        // Build URL with corporate filter first, then service, or default to all.
+        // Filters by exact service name rather than the legacy ?view= alias, so
+        // every service in the catalog is reachable.
         const url = corporateIdFromUrl
           ? `/api/subscriptions-corporate/corporate/${corporateIdFromUrl}`
           : serviceFilter
-          ? `/api/subscriptions-corporate?view=${encodeURIComponent(serviceFilter)}`
+          ? `/api/subscriptions-corporate?serviceName=${encodeURIComponent(serviceFilter)}`
           : `/api/subscriptions-corporate`;
 
         const response = await fetch(url);
@@ -1071,9 +1089,9 @@ export default function CorporateServicesPipeline() {
                   onChange={(e) => setServiceFilter(e.target.value)}
                 >
                   <option value="">All Services</option>
-                  {services.map((service) => (
-                    <option key={service.view} value={service.view}>
-                      {service.name}
+                  {serviceNames.map((name) => (
+                    <option key={name} value={name}>
+                      {name}
                     </option>
                   ))}
                 </select>
@@ -1578,7 +1596,7 @@ export default function CorporateServicesPipeline() {
               </svg>
             </div>
             <div className="stat-title">Services</div>
-            <div className="stat-value text-info">{services.length}</div>
+            <div className="stat-value text-info">{serviceNames.length}</div>
             <div className="stat-desc">Available services</div>
           </div>
         </div>

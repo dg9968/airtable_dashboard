@@ -275,30 +275,13 @@ app.patch('/:id', async (c) => {
   }
 });
 
-/**
- * DELETE /api/subscriptions-personal/:id
- * Delete a subscription record
- */
-app.delete('/:id', async (c) => {
-  try {
-    const id = c.req.param('id');
-
-    await getDb().delete(personalPipelineTickets).where(eq(personalPipelineTickets.id, id));
-
-    return c.json({
-      success: true,
-      message: 'Subscription deleted successfully',
-    });
-  } catch (error) {
-    console.error('Error deleting subscription:', error);
-    return c.json(
-      {
-        success: false,
-        error: error instanceof Error ? error.message : 'Failed to delete subscription',
-      },
-      500
-    );
-  }
-});
+// There is deliberately no DELETE route here. Completing a personal ticket
+// used to delete it — that destroyed the ticket's notes and preparer history
+// and orphaned the billing record that had just been written, which is why
+// some historical billing_records point at ticket ids that no longer exist
+// (see the column comment in db/schema/subscriptions.ts). Work is now closed
+// out via POST /api/service-completion, which sets a terminal status inside
+// the same transaction as the charge. The last caller of the old route was
+// the legacy TaxPrepPipeline component, removed alongside this.
 
 export default app;

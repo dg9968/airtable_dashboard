@@ -119,10 +119,21 @@ app.post('/bulk-assign', async (c) => {
 app.get('/', async (c) => {
   try {
     const view = c.req.query('view');
+    // Filter by an exact services_corporate.name. Preferred over ?view=, which
+    // only understands the eleven legacy Airtable view names and so cannot
+    // reach services added since (PO Box - 1414, Vault Management, ...). It
+    // also avoids a name collision: the legacy view "Bookkeeping" means the
+    // service "Bookkeeping Clients", while a separate service literally named
+    // "Bookkeeping" also exists — ?view= can only ever select the former.
+    const serviceName = c.req.query('serviceName');
     const db = getDb();
 
     // Unknown views fall back to all records (legacy behavior)
-    const filter = view && view in CORPORATE_VIEW_FILTERS ? CORPORATE_VIEW_FILTERS[view] : null;
+    const filter = serviceName
+      ? { serviceName, activeOnly: false }
+      : view && view in CORPORATE_VIEW_FILTERS
+        ? CORPORATE_VIEW_FILTERS[view]
+        : null;
 
     let rows;
     if (filter) {

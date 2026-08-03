@@ -116,19 +116,20 @@ app.get('/generation-status', async (c) => {
   try {
     const period = c.req.query('period') || new Date().toISOString().slice(0, 7);
     const view = c.req.query('view');
+    // Preferred over ?view=, for the same reason as on /api/subscriptions-corporate:
+    // view names only cover the eleven legacy Airtable views.
+    const serviceNameParam = c.req.query('serviceName');
     const db = getDb();
 
     let serviceId: string | undefined;
-    if (view) {
-      const filter = CORPORATE_VIEW_FILTERS[view];
-      if (filter?.serviceName) {
-        const [svc] = await db
-          .select({ id: servicesCorporate.id })
-          .from(servicesCorporate)
-          .where(eq(servicesCorporate.name, filter.serviceName))
-          .limit(1);
-        serviceId = svc?.id;
-      }
+    const targetServiceName = serviceNameParam || (view ? CORPORATE_VIEW_FILTERS[view]?.serviceName : undefined);
+    if (targetServiceName) {
+      const [svc] = await db
+        .select({ id: servicesCorporate.id })
+        .from(servicesCorporate)
+        .where(eq(servicesCorporate.name, targetServiceName))
+        .limit(1);
+      serviceId = svc?.id;
     }
 
     const activeItems = await db
