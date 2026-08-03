@@ -29,7 +29,9 @@ Auth tables owned by `packages/client/scripts/run-migrations.ts`.
 ## Corporation data-maintenance scripts
 
 These three share repoint/scoring helpers from `lib/corporation-merge-helpers.ts`
-(not run directly — it's a library, not a script).
+(not run directly — it's a library, not a script). `cleanup-stale-tickets.ts`
+and `reassign-tickets.ts` likewise share `lib/selection.ts`, which parses the
+numbered-list answers both of them accept (`1,3-5` / `all`).
 
 ### `dedupe-corporations.ts`
 Finds `corporations` rows duplicated by EIN (normalized to digits-only, so
@@ -77,21 +79,47 @@ bun run packages/server/scripts/consolidate-multilocation-corporations.ts --appl
 ```
 
 ### `cleanup-stale-tickets.ts`
-Deletes open `corporate_pipeline_tickets` rows for a given service older than
-a given age (default 10 days) — for when a batch of tickets is being manually
-replaced by a fresh batch and the stale ones would otherwise sit open
-forever. If `--service` isn't passed, prompts interactively with a numbered
-list of every service that currently has at least one corporate pipeline
-ticket. "Open" matches `open-tickets-dashboard.ts`: status is NULL or not the
-corporate terminal status (`Complete Service`). `corporate_pipeline_notes` has
+Deletes open `corporate_pipeline_tickets` rows older than a given age (default
+10 days) — for when a batch of tickets is being manually replaced by a fresh
+batch and the stale ones would otherwise sit open forever. Two ways to choose
+what to delete:
+
+- **By service, across every customer** — `--service="Payroll"`, or several at
+  once with `--service="Payroll,Bookkeeping Clients"`. Without `--service`,
+  prompts with a numbered list of every service that currently has at least one
+  corporate pipeline ticket, and takes a single choice.
+- **Scoped to one customer** — `--company="NOE USA"` (or `--company-id=rec...`,
+  or a bare `--company` to pick the customer from a numbered list of those with
+  open tickets). Without `--service`, prompts with a numbered list of just that
+  customer's services, each showing its open-ticket count and how many pass the
+  age filter, and accepts a **multi-select** (`1,3-5` or `all`) — the "clean up
+  everything we have open for this client" case. `--all-services` skips the
+  prompt and takes all of them.
+
+The multi-select is only offered when scoped to a customer; without one it
+stays a single choice, since deleting a service's tickets across every customer
+is a much broader action to widen by accident. An ambiguous `--company` lists
+the candidates and exits rather than guessing which client was meant.
+
+The age filter applies in **both** modes, so scoping to a customer does not by
+itself mean "every ticket regardless of age" — pass `--days=0` for that. When
+the age filter is what's hiding rows, the report says how many were excluded
+instead of just printing "Nothing to do".
+
+"Open" matches `open-tickets-dashboard.ts`: status is NULL or not the corporate
+terminal status (`Complete Service`). `corporate_pipeline_notes` has
 `ON DELETE SET NULL` on its ticket FK and `billing_records` has no FK at all,
 so deleting a ticket never cascades or fails. Each row deletes in its own
 transaction; `--apply` requires typing `yes` at a single confirmation prompt.
 
 ```
-bun run packages/server/scripts/cleanup-stale-tickets.ts                     # prompts for service, report only, >10 days
+bun run packages/server/scripts/cleanup-stale-tickets.ts                       # prompts for service, report only, >10 days
 bun run packages/server/scripts/cleanup-stale-tickets.ts --apply
 bun run packages/server/scripts/cleanup-stale-tickets.ts --service="Payroll" --days=10 --apply
+bun run packages/server/scripts/cleanup-stale-tickets.ts --service="Payroll,Extensions"
+bun run packages/server/scripts/cleanup-stale-tickets.ts --company="NOE USA" --days=0            # pick services interactively
+bun run packages/server/scripts/cleanup-stale-tickets.ts --company                                # pick the customer too
+bun run packages/server/scripts/cleanup-stale-tickets.ts --company="NOE USA" --all-services --days=0 --apply
 ```
 
 ### `backfill-extension-followups.ts`
@@ -147,8 +175,11 @@ stages (`--stage=cadence,annual-report,tax-returns`, all by default):
    ticket generation behave wrongly. `Annual Report` is `'One-time'`, for which
    `isFilingMonth()` ([../src/lib/billing-cadence.ts](../src/lib/billing-cadence.ts))
    returns false in *every* month, so its January ticket is never generated;
-   `1099 Filing` and `Registered Agent` are NULL, which defaults to Monthly and
-   would produce twelve tickets a year for annual work.
+   `1099 Filing`, `Registered Agent` and `Quickbooks Software` are NULL and
+   `Vault Management` and `PO Box - 1414` are `'Monthly'`, all of which produce
+   twelve tickets a year for work that happens once. Cadence controls ticket
+   generation only, never billing — the dollar amounts on all affected bundle
+   line items are untouched and keep charging monthly.
 2. **annual-report** — adds the missing $4.25/mo `Annual Report` line item to
    25 bundles.
 3. **tax-returns** — adds the missing `Tax Returns` line item ($50/$70/$90 per
@@ -159,7 +190,13 @@ stages (`--stage=cadence,annual-report,tax-returns`, all by default):
 Stages 2 and 3 add **accruals**: a bundle line item's amount is billed every
 month, while ticket generation is gated separately by the service's
 `billing_cycle`. An Annual-cadence line item means "the client pays toward this
-all year, and one ticket generates each January."
+all year, and one ticket generates each January." What that January ticket is
+*for* varies by service — a return filed against the prior tax year, a renewal
+for the year starting, or a contract renegotiation — so its note text comes
+from `ANNUAL_NOTE_BY_SERVICE` in
+[../src/lib/billing-cadence.ts](../src/lib/billing-cadence.ts) rather than from
+the cadence alone. **Add a service there whenever you set it to `Annual`**, or
+it inherits the "Covers tax year N-1" wording that only suits the filing pair.
 
 Stage 1 is a hard prerequisite for stage 2 and the script enforces it — adding
 $4.25/mo while `Annual Report` is still `'One-time'` would bill 25 clients for
@@ -201,6 +238,49 @@ bun run packages/server/scripts/backfill-bundle-accrual-items.ts --apply
 bun run packages/server/scripts/backfill-bundle-accrual-items.ts --stage=cadence --apply
 bun run packages/server/scripts/backfill-bundle-accrual-items.ts --stage=tax-returns --apply
 bun run packages/server/scripts/backfill-bundle-accrual-items.ts --stage=sales-tax --apply
+```
+
+### `merge-corporate-services.ts`
+Merges duplicate `services_corporate` catalog rows: repoints everything that
+references the loser at the keeper, then deletes the loser. The pair list is
+**hardcoded** in `MERGES`, like `consolidate-multilocation-corporations.ts`'s
+`PAIRS` — whether two catalog entries were ever really different services is a
+human judgement, not something to re-derive by name matching.
+
+Repoints `corporate_pipeline_tickets.service_id` (FK, `ON DELETE SET NULL`),
+`corporate_billing_bundle_items.service_id` (FK, `ON DELETE RESTRICT` — so the
+loser genuinely cannot be deleted until these move), and
+`billing_records.service_type`. That last one is a stored text label rather
+than an FK, kept as text by design so it survives a rename — but a *merge*
+means both labels were always the same service, and leaving the old string
+would orphan those records from the catalog, so it is rewritten too.
+
+**Refuses on collision.** `corporate_billing_bundle_items` has a partial unique
+index on `(bundle_id, service_id) WHERE status = 'active'`, so a bundle holding
+an *active* line item for both services would break on repoint — and which
+amount survives is a billing decision. Those bundles are reported and the merge
+stops before writing. One active + one soft-removed is fine, since the index
+only covers active rows. It also refuses if the loser carries catalog fields
+(`price`/`description`/`category`/`billing_cycle`) the keeper lacks, rather than
+discarding them with the row. The whole merge runs in one transaction and every
+repointed row id is printed, so the output is a reversal record.
+
+Note the code side is **not** automatic: service names are matched exactly in
+places like `CorporateClientIntake`'s hardcoded service list, which fails with
+"service not found in Services Corporate table" if left stale. Grep for the
+loser's name and fix those *before* applying.
+
+Ran 2026-08-03 for `Bookkeeping` → `Bookkeeping Clients`: 4 tickets, 3 line
+items and 1 billing record repointed, 1 catalog row deleted. That duplicate was
+why the lone `Bookkeeping` bundle generated an *unassigned* bookkeeping ticket —
+`SERVICES_REQUIRING_PROCESSOR` only listed `Bookkeeping Clients`, so the rule
+never saw it. It also removed the long-standing ambiguity where the legacy view
+named "Bookkeeping" selects the service "Bookkeeping Clients" while a separate
+service literally named "Bookkeeping" also existed.
+
+```
+bun run packages/server/scripts/merge-corporate-services.ts             # dry run
+bun run packages/server/scripts/merge-corporate-services.ts --apply
 ```
 
 ### `reassign-tickets.ts`

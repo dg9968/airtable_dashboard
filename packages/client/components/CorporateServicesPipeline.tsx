@@ -87,9 +87,9 @@ export default function CorporateServicesPipeline() {
   // the Open Tickets Dashboard) preselects the service filter dropdown. That
   // dashboard still links with legacy Airtable view names, so translate the
   // three that differ from the service they select. Applied only to the URL
-  // value — a dropdown selection is already a real service name, which is what
-  // keeps the "Bookkeeping" view (meaning "Bookkeeping Clients") distinct from
-  // the service actually named "Bookkeeping".
+  // value — a dropdown selection is already a real service name. The view
+  // "Bookkeeping" maps to the service "Bookkeeping Clients"; the duplicate
+  // service once named "Bookkeeping" has since been merged into it.
   const [serviceFilter, setServiceFilter] = useState<string>(
     () => VIEW_NAME_TO_SERVICE_NAME[searchParams.get('service') || ""] ?? searchParams.get('service') ?? ""
   );
@@ -133,8 +133,8 @@ export default function CorporateServicesPipeline() {
   // The filter dropdown is driven by the live services_corporate catalog
   // (loaded into serviceNames below), not a hardcoded list. It used to be a
   // fixed array of the eleven legacy Airtable view names, which meant any
-  // service added since was impossible to filter to — "PO Box - 1414" and
-  // "Bookkeeping" both had open tickets that no dropdown option could reach.
+  // service added since was impossible to filter to — "PO Box - 1414" and the
+  // since-merged "Bookkeeping" both had open tickets no dropdown could reach.
   const [serviceNames, setServiceNames] = useState<string[]>([]);
 
   // Follow-up service mappings - easily extensible for future needs

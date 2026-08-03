@@ -6,6 +6,7 @@ import { Hono } from 'hono';
 import { asc } from 'drizzle-orm';
 import { getDb } from '../db/client';
 import { servicesCorporate } from '../db/schema';
+import { requiresProcessor } from '../lib/billing-cadence';
 
 const app = new Hono();
 
@@ -45,7 +46,10 @@ app.get('/', async (c) => {
       price: row.price != null ? Number(row.price) : 0,
       description: row.description || '',
       category: row.category || null,
-      billingCycle: row.billingCycle || null
+      billingCycle: row.billingCycle || null,
+      // Lets the bundle UI mark the standing-processor field mandatory when
+      // adding this service, without duplicating the server's service list.
+      requiresProcessor: requiresProcessor(row.name)
     }));
 
     servicesCache = services;

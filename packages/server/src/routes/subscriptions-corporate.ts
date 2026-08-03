@@ -18,6 +18,7 @@ import {
 } from '../db/serializers-subscriptions';
 import { notifyProcessorAssigned } from '../lib/notify-processor-assigned';
 import { blockUnbilledCompletion } from '../lib/terminal-status-guard';
+import { syncStandingProcessor } from '../lib/standing-processor';
 
 const app = new Hono();
 
@@ -93,16 +94,27 @@ app.post('/bulk-assign', async (c) => {
     }
 
     const db = getDb();
-    const updated = await db.transaction(async (tx) => {
+    const { updated, standingUpdated } = await db.transaction(async (tx) => {
       const rows = await tx
         .update(corporatePipelineTickets)
         .set({ processorId: userId })
         .where(inArray(corporatePipelineTickets.id, ticketIds))
         .returning({ id: corporatePipelineTickets.id });
-      return rows.length;
+      // Same write-back as PATCH /:id — a bulk reassignment of bookkeeping
+      // work has to move the standing bookkeeper too, or next period silently
+      // reverts. In the transaction so a failure leaves neither half applied.
+      const standingUpdated = await syncStandingProcessor(
+        tx as unknown as Parameters<typeof syncStandingProcessor>[0],
+        rows.map((r) => r.id),
+        userId
+      );
+      return { updated: rows.length, standingUpdated };
     });
 
-    return c.json({ success: true, data: { updated, requested: ticketIds.length } });
+    return c.json({
+      success: true,
+      data: { updated, requested: ticketIds.length, standingProcessorsUpdated: standingUpdated },
+    });
   } catch (error) {
     console.error('Error bulk-assigning corporate tickets:', error);
     return c.json(
@@ -121,10 +133,10 @@ app.get('/', async (c) => {
     const view = c.req.query('view');
     // Filter by an exact services_corporate.name. Preferred over ?view=, which
     // only understands the eleven legacy Airtable view names and so cannot
-    // reach services added since (PO Box - 1414, Vault Management, ...). It
-    // also avoids a name collision: the legacy view "Bookkeeping" means the
-    // service "Bookkeeping Clients", while a separate service literally named
-    // "Bookkeeping" also exists — ?view= can only ever select the former.
+    // reach services added since (PO Box - 1414, Vault Management, ...). The
+    // legacy view "Bookkeeping" still means the service "Bookkeeping Clients";
+    // the separate service once literally named "Bookkeeping" has been merged
+    // into it, so that name no longer collides.
     const serviceName = c.req.query('serviceName');
     const db = getDb();
 
@@ -246,6 +258,13 @@ app.patch('/:id', async (c) => {
 
     if (!row) {
       return c.json({ success: false, error: 'Subscription not found' }, 404);
+    }
+
+    // Reassigning a ticket for a service with a standing assignee updates that
+    // standing assignee too, so the next generated period follows the change
+    // instead of reverting. No-ops for everything else.
+    if ('processorId' in values) {
+      await syncStandingProcessor(db, [row.id], row.processorId ?? null);
     }
 
     const ctx = await loadSubsCorporateContext(db);

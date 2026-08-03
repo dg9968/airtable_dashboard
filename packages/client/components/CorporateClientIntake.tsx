@@ -123,7 +123,11 @@ export default function CorporateClientIntake() {
   const services = [
     "Reconciling Banks for Tax Prep",
     "Payroll",
-    "Bookkeeping",
+    // Was "Bookkeeping" until that duplicate catalog row was merged away (see
+    // packages/server/scripts/merge-corporate-services.ts). These names are
+    // matched against services_corporate.name exactly — a stale one fails the
+    // lookup below with "service not found in Services Corporate table".
+    "Bookkeeping Clients",
     "Annual Report",
     "Sales Tax Monthly",
     "Sales Tax Quarterly",

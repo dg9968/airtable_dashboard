@@ -181,6 +181,17 @@ export const corporateBillingBundleItems = pgTable(
       .notNull()
       .references(() => servicesCorporate.id, { onDelete: 'restrict' }),
     amount: numeric('amount', { precision: 10, scale: 2 }).notNull(),
+    // The standing assignee for the recurring work this line item generates —
+    // for Bookkeeping Clients, the client's bookkeeper. Set here rather than
+    // per-ticket because the assignment has to exist *before* generation can
+    // create the ticket, and because bookkeeping benefits from continuity: the
+    // same person learns the business and reconciles it better. generate-tickets
+    // copies this onto each ticket it creates, and reassigning a generated
+    // ticket writes the new processor back here so the next period follows.
+    // Better Auth user id, no FK for the same reason as
+    // corporate_pipeline_tickets.processor_id — the auth table isn't in this
+    // schema. Nullable: most services don't need a standing assignee.
+    processorId: text('processor_id'),
     status: bundleItemStatus('status').notNull().default('active'),
     effectiveDate: text('effective_date'),
     endDate: text('end_date'),

@@ -52,6 +52,7 @@ import { and, asc, eq, inArray, isNull, ne, or } from 'drizzle-orm';
 import * as readline from 'node:readline/promises';
 import * as schema from '../src/db/schema';
 import { authUser } from '../src/db/auth-readonly';
+import { parseSelection } from './lib/selection';
 
 config({ path: resolve(__dirname, '../.env') });
 
@@ -111,38 +112,6 @@ async function promptForService(): Promise<string> {
     process.exit(1);
   }
   return rows[index].name;
-}
-
-// Parses "1,3-5" / "all" into a 0-based Set of indices, bounded by [0, count).
-function parseSelection(input: string, count: number): Set<number> {
-  const trimmed = input.trim().toLowerCase();
-  if (trimmed === 'all') return new Set(Array.from({ length: count }, (_, i) => i));
-
-  const indices = new Set<number>();
-  for (const part of trimmed.split(',').map((p) => p.trim()).filter(Boolean)) {
-    const rangeMatch = part.match(/^(\d+)-(\d+)$/);
-    if (rangeMatch) {
-      const [, startStr, endStr] = rangeMatch;
-      const start = Number(startStr);
-      const end = Number(endStr);
-      for (let n = Math.min(start, end); n <= Math.max(start, end); n++) indices.add(n - 1);
-      continue;
-    }
-    if (/^\d+$/.test(part)) {
-      indices.add(Number(part) - 1);
-      continue;
-    }
-    console.error(`Invalid selection token: "${part}"`);
-    process.exit(1);
-  }
-
-  for (const i of indices) {
-    if (i < 0 || i >= count) {
-      console.error(`Selection out of range: ${i + 1} (valid: 1-${count})`);
-      process.exit(1);
-    }
-  }
-  return indices;
 }
 
 async function promptForTicketSelection(count: number): Promise<Set<number>> {

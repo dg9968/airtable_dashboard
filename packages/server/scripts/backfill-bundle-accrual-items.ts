@@ -78,11 +78,6 @@ config({ path: resolve(__dirname, '../.env') });
  *    single hardcoded constant (January) shared by every Annual service, so
  *    setting this to 'Annual' would generate its ticket in the wrong month.
  *    Needs a per-service filing month first.
- *  - Vault Management / Quickbooks Software / PO Box - 1414: pass-through fees
- *    with no work product, currently generating a ticket every month. There is
- *    no cadence value meaning "bill monthly, never ticket" — 'One-time' is the
- *    closest lever but reads wrong, and would be indistinguishable from the
- *    Annual Report bug this script exists to fix.
  */
 const CADENCE_FIXES: { service: string; from: string | null; to: string; why: string }[] = [
   {
@@ -102,6 +97,29 @@ const CADENCE_FIXES: { service: string; from: string | null; to: string; why: st
     from: null,
     to: 'Annual',
     why: 'null defaults to Monthly — registered agent renews once a year',
+  },
+  // Confirmed 2026-08-03: all three are billed every month, but the only
+  // recurring work is a once-a-year contract renegotiation. Monthly cadence was
+  // generating twelve tickets a year for a task that happens once. The dollar
+  // amounts are untouched — cadence controls ticket generation only, never
+  // billing, so all 46 bundle line items keep charging monthly.
+  {
+    service: 'Vault Management',
+    from: 'Monthly',
+    to: 'Annual',
+    why: 'billed monthly, but the only ticketed work is the annual contract renegotiation',
+  },
+  {
+    service: 'Quickbooks Software',
+    from: null,
+    to: 'Annual',
+    why: 'null defaults to Monthly; billed monthly, but the only ticketed work is the annual contract renegotiation',
+  },
+  {
+    service: 'PO Box - 1414',
+    from: 'Monthly',
+    to: 'Annual',
+    why: 'billed monthly, but the only ticketed work is the annual contract renegotiation',
   },
 ];
 

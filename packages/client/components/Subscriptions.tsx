@@ -7,6 +7,16 @@ interface Service {
   name: string
   price?: number
   description?: string
+  // True for services that cannot generate a ticket without a standing
+  // assignee (bookkeeping). Served by the catalog so this UI never hardcodes
+  // the list — see SERVICES_REQUIRING_PROCESSOR on the server.
+  requiresProcessor?: boolean
+}
+
+interface Processor {
+  id: string
+  name: string
+  email: string
 }
 
 interface BundleItem {
@@ -19,6 +29,11 @@ interface BundleItem {
   effectiveDate: string | null
   endDate: string | null
   notes: string | null
+  // Standing assignee for the recurring work this line generates — the
+  // client's bookkeeper. Copied onto every generated ticket; generation
+  // refuses to run for a requiresProcessor service while this is null.
+  processorId: string | null
+  requiresProcessor: boolean
 }
 
 interface Bundle {
@@ -50,6 +65,10 @@ interface MissingTicketItem {
   amount: number
 }
 
+interface BlockedTicketItem extends MissingTicketItem {
+  processorId: string | null
+}
+
 export default function Subscriptions() {
   const [selectedCustomer, setSelectedCustomer] = useState<CorporateCustomer | null>(null)
   const [customers, setCustomers] = useState<CorporateCustomer[]>([])
@@ -68,6 +87,8 @@ export default function Subscriptions() {
   const customerPickerRef = useRef<HTMLDivElement>(null)
 
   // Add-item form
+  const [processors, setProcessors] = useState<Processor[]>([])
+  const [newItemProcessorId, setNewItemProcessorId] = useState('')
   const [newItemServiceId, setNewItemServiceId] = useState('')
   const [newItemAmount, setNewItemAmount] = useState('')
   const [addingItem, setAddingItem] = useState(false)
@@ -78,6 +99,10 @@ export default function Subscriptions() {
   // nothing else creates next month's ticket automatically, so this makes
   // that gap visible instead of clients silently going un-ticketed.
   const [missingTickets, setMissingTickets] = useState<MissingTicketItem[]>([])
+  // Bundle lines that are due but cannot generate until a bookkeeper is named.
+  // Surfaced separately from `missingTickets` because "Generate All" cannot
+  // clear them — someone has to make a decision per client first.
+  const [blockedTickets, setBlockedTickets] = useState<BlockedTicketItem[]>([])
   const [missingTicketsPeriod, setMissingTicketsPeriod] = useState<string>('')
   const [loadingMissing, setLoadingMissing] = useState(false)
   const [showMissingPanel, setShowMissingPanel] = useState(false)
@@ -87,6 +112,7 @@ export default function Subscriptions() {
   useEffect(() => {
     loadCorporateCustomers()
     loadServices()
+    loadProcessors()
     loadBundledCorporationIds()
     loadMissingTickets()
   }, [])
@@ -156,6 +182,18 @@ export default function Subscriptions() {
     }
   }
 
+  // Same source as the pipeline's processor dropdowns, so the bookkeeper list
+  // and the assignee list can never drift apart.
+  const loadProcessors = async () => {
+    try {
+      const response = await fetch('/api/teams')
+      const data = await response.json()
+      if (data.success) setProcessors(data.data)
+    } catch (err) {
+      console.error('Error loading processors:', err)
+    }
+  }
+
   const loadBundledCorporationIds = async () => {
     try {
       const response = await fetch('/api/corporate-billing-bundles')
@@ -180,6 +218,7 @@ export default function Subscriptions() {
       const data = await response.json()
       if (data.success) {
         setMissingTickets(data.data.missing || [])
+        setBlockedTickets(data.data.blockedNeedingProcessor || [])
         setMissingTicketsPeriod(data.data.period || '')
       }
     } catch (err) {
@@ -331,13 +370,18 @@ export default function Subscriptions() {
       const response = await fetch(`/api/corporate-billing-bundles/${bundle.id}/items`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ serviceId: newItemServiceId, amount: parseFloat(newItemAmount) }),
+        body: JSON.stringify({
+          serviceId: newItemServiceId,
+          amount: parseFloat(newItemAmount),
+          processorId: newItemProcessorId || null,
+        }),
       })
       const data = await response.json()
       if (!response.ok) throw new Error(data.error || 'Failed to add service to bundle')
       setBundle(data.data)
       setNewItemServiceId('')
       setNewItemAmount('')
+      setNewItemProcessorId('')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add service to bundle')
       console.error('Error adding bundle item:', err)
@@ -363,6 +407,26 @@ export default function Subscriptions() {
     }
   }
 
+  // Setting this to '' clears the standing assignee, which for a
+  // requiresProcessor service means the next generation blocks until someone
+  // is chosen again — deliberate, not a silent fallback.
+  const updateItemProcessor = async (itemId: string, processorId: string) => {
+    if (!bundle) return
+    try {
+      const response = await fetch(`/api/corporate-billing-bundles/${bundle.id}/items/${itemId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ processorId: processorId || null }),
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || 'Failed to update assignee')
+      setBundle(data.data)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update assignee')
+      console.error('Error updating bundle item processor:', err)
+    }
+  }
+
   const removeItem = async (itemId: string) => {
     if (!bundle) return
     if (!confirm('Remove this service from the bundle? It will no longer be billed monthly.')) return
@@ -382,6 +446,12 @@ export default function Subscriptions() {
   }
 
   const activeItems = bundle?.items.filter((i) => i.status === 'active') || []
+  const newItemService = services.find((sv) => sv.id === newItemServiceId)
+  // Adding a bookkeeping line without naming the bookkeeper would create a
+  // line item that can never generate a ticket, so the button stays disabled.
+  const newItemNeedsProcessor = Boolean(newItemService?.requiresProcessor)
+  // Active lines that will block this client's next generation.
+  const itemsNeedingProcessor = activeItems.filter((i) => i.requiresProcessor && !i.processorId)
   const bundledServiceIds = new Set(activeItems.map((i) => i.serviceId))
   const availableServices = services.filter((s) => !bundledServiceIds.has(s.id))
 
@@ -429,6 +499,51 @@ export default function Subscriptions() {
 
   return (
     <div className="space-y-6">
+      {/* Blocked-on-assignee summary. Distinct from the needs-generating card
+          below: these lines are due but deliberately refused, because a
+          bookkeeping ticket must never exist unassigned. "Generate All" will
+          not clear them — each needs a person chosen on the client's bundle. */}
+      {!loadingMissing && blockedTickets.length > 0 && (
+        <div className="card bg-error/10 border border-error shadow-xl">
+          <div className="card-body p-4">
+            <h3 className="font-semibold text-sm">
+              {blockedTickets.length} bundle service{blockedTickets.length !== 1 ? 's' : ''} waiting on an
+              assignee
+            </h3>
+            <p className="text-xs text-base-content/70">
+              No {missingTicketsPeriod} ticket is generated for these until someone is named. Pick the client
+              below to set it.
+            </p>
+            <div className="max-h-56 overflow-y-auto mt-1">
+              <table className="table table-xs w-full">
+                <tbody>
+                  {blockedTickets.map((b) => (
+                    <tr key={b.bundleItemId}>
+                      <td>
+                        <button
+                          className="link link-hover text-left font-medium"
+                          onClick={() => {
+                            const match = customers.find((c) => c.id === b.corporationId)
+                            if (match) {
+                              setSelectedCustomer(match)
+                              setCustomerSearchTerm(match.name)
+                            }
+                          }}
+                        >
+                          {b.companyName?.trim()}
+                        </button>
+                      </td>
+                      <td className="text-base-content/70">{b.serviceName}</td>
+                      <td className="text-right">${b.amount.toFixed(2)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Needs-generating summary — a bundle subscription never disappears
           when its ticket is completed, but nothing else creates next
           month's ticket automatically, so this surfaces that gap instead
@@ -636,6 +751,7 @@ export default function Subscriptions() {
                     <tr>
                       <th>Service</th>
                       <th>Monthly Amount</th>
+                      <th>Assigned To</th>
                       <th>Status</th>
                       <th>Actions</th>
                     </tr>
@@ -643,7 +759,7 @@ export default function Subscriptions() {
                   <tbody>
                     {bundle.items.length === 0 && (
                       <tr>
-                        <td colSpan={4} className="text-center py-6 text-base-content/60">
+                        <td colSpan={5} className="text-center py-6 text-base-content/60">
                           No services in this bundle yet — add one below.
                         </td>
                       </tr>
@@ -672,6 +788,40 @@ export default function Subscriptions() {
                           </div>
                         </td>
                         <td>
+                          {/* Only services that need a standing assignee show a
+                              picker; for everything else the ticket is assigned
+                              after generation as usual. */}
+                          {item.requiresProcessor ? (
+                            <div className="flex items-center gap-1">
+                              <select
+                                className={`select select-xs select-bordered w-44 ${
+                                  item.status === 'active' && !item.processorId ? 'select-warning' : ''
+                                }`}
+                                value={item.processorId || ''}
+                                disabled={item.status === 'removed'}
+                                onChange={(e) => updateItemProcessor(item.id, e.target.value)}
+                              >
+                                <option value="">Unassigned —</option>
+                                {processors.map((p) => (
+                                  <option key={p.id} value={p.id}>
+                                    {p.name}
+                                  </option>
+                                ))}
+                              </select>
+                              {item.status === 'active' && !item.processorId && (
+                                <span
+                                  className="text-warning text-xs"
+                                  title="No ticket can be generated for this service until someone is assigned"
+                                >
+                                  ⚠
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-xs text-base-content/40">—</span>
+                          )}
+                        </td>
+                        <td>
                           <span className={`badge ${item.status === 'active' ? 'badge-success' : 'badge-ghost'}`}>
                             {item.status === 'active' ? 'Active' : 'Removed'}
                           </span>
@@ -693,6 +843,12 @@ export default function Subscriptions() {
               <div className="card bg-base-200">
                 <div className="card-body p-4">
                   <h4 className="font-semibold text-sm mb-2">Add Service to Bundle</h4>
+                  {newItemNeedsProcessor && (
+                    <p className="text-xs text-base-content/60 mb-2">
+                      {newItemService?.name} needs a named person before any ticket can be generated — the
+                      same one keeps the client&apos;s books each period.
+                    </p>
+                  )}
                   <div className="flex flex-wrap gap-2 items-end">
                     <div className="form-control">
                       <select
@@ -726,9 +882,30 @@ export default function Subscriptions() {
                         />
                       </div>
                     </div>
+                    {newItemNeedsProcessor && (
+                      <div className="form-control">
+                        <select
+                          className="select select-bordered select-sm w-48"
+                          value={newItemProcessorId}
+                          onChange={(e) => setNewItemProcessorId(e.target.value)}
+                        >
+                          <option value="">Choose a bookkeeper...</option>
+                          {processors.map((pr) => (
+                            <option key={pr.id} value={pr.id}>
+                              {pr.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                     <button
                       className="btn btn-primary btn-sm"
-                      disabled={!newItemServiceId || !newItemAmount || addingItem}
+                      disabled={
+                        !newItemServiceId ||
+                        !newItemAmount ||
+                        addingItem ||
+                        (newItemNeedsProcessor && !newItemProcessorId)
+                      }
                       onClick={addItem}
                     >
                       {addingItem ? <span className="loading loading-spinner loading-xs"></span> : 'Add'}

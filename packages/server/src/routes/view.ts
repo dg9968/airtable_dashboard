@@ -366,6 +366,12 @@ app.patch('/:tableName/:recordId', async (c) => {
  * via this generic route. corporate_pipeline_tickets.certificate_id
  * references this table with ON DELETE SET NULL, so deleting a certificate
  * still in use just clears it from any tickets, never errors.
+ *
+ * The owning corporation's st_certificate_number_ids / st_certificate_values
+ * are plain array columns, not FKs — nothing in the database keeps them in
+ * step — so this strips the deleted certificate from both by position. Without
+ * that, every deletion left a dangling record id in the corporation's link
+ * snapshot, which the serializers re-emit as if the certificate still existed.
  */
 app.delete('/:tableName/:recordId', async (c) => {
   try {
@@ -377,14 +383,44 @@ app.delete('/:tableName/:recordId', async (c) => {
     }
 
     const db = getDb();
-    const [row] = await db
-      .delete(salesTaxCertificates)
-      .where(eq(salesTaxCertificates.id, recordId))
-      .returning();
-    if (!row) {
+    const result = await db.transaction(async (tx) => {
+      const [row] = await tx
+        .delete(salesTaxCertificates)
+        .where(eq(salesTaxCertificates.id, recordId))
+        .returning();
+      if (!row) return null;
+
+      let snapshotCleaned = false;
+      if (row.corporationId) {
+        const [corp] = await tx
+          .select({
+            ids: corporations.stCertificateNumberIds,
+            values: corporations.stCertificateValues,
+          })
+          .from(corporations)
+          .where(eq(corporations.id, row.corporationId));
+
+        const index = corp?.ids?.indexOf(row.id) ?? -1;
+        if (index !== -1) {
+          // Positional removal: the two arrays are parallel, and removing from
+          // `values` by value would drop the wrong entry when a corporation
+          // holds the same certificate number twice.
+          const ids = corp!.ids!.filter((_, i) => i !== index);
+          const values = (corp!.values ?? []).filter((_, i) => i !== index);
+          await tx
+            .update(corporations)
+            .set({ stCertificateNumberIds: ids, stCertificateValues: values })
+            .where(eq(corporations.id, row.corporationId));
+          snapshotCleaned = true;
+        }
+      }
+      return { id: row.id, snapshotCleaned };
+    });
+
+    if (!result) {
       return c.json({ success: false, error: 'Record not found' }, 404);
     }
-    return c.json({ success: true, data: { id: row.id } });
+    return c.json({ success: true, data: result });
   } catch (error) {
     console.error('Error deleting record:', error);
     return c.json(

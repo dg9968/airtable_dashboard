@@ -20,7 +20,7 @@ import {
   corporations,
 } from '../db/schema';
 import { CORPORATE_VIEW_FILTERS } from '../db/serializers-subscriptions';
-import { isFilingMonth, describeCoveredPeriod } from '../lib/billing-cadence';
+import { isFilingMonth, describeCoveredPeriod, requiresProcessor } from '../lib/billing-cadence';
 
 const app = new Hono();
 
@@ -35,6 +35,11 @@ function serializeItem(row: typeof corporateBillingBundleItems.$inferSelect, ser
     effectiveDate: row.effectiveDate,
     endDate: row.endDate,
     notes: row.notes,
+    // Standing assignee for the recurring work (the bookkeeper, for
+    // Bookkeeping Clients). `requiresProcessor` is emitted alongside so the UI
+    // can mark the field mandatory without hardcoding the service list.
+    processorId: row.processorId,
+    requiresProcessor: requiresProcessor(serviceName),
     createdAt: row.createdAt.toISOString(),
   };
 }
@@ -140,6 +145,7 @@ app.get('/generation-status', async (c) => {
         serviceName: servicesCorporate.name,
         serviceBillingCycle: servicesCorporate.billingCycle,
         amount: corporateBillingBundleItems.amount,
+        processorId: corporateBillingBundleItems.processorId,
         corporationId: corporateBillingBundles.corporationId,
         companyName: corporations.company,
       })
@@ -163,7 +169,7 @@ app.get('/generation-status', async (c) => {
       );
     const ticketedSet = new Set(ticketedRows.map((t) => t.bundleItemId));
 
-    const missing = activeItems
+    const due = activeItems
       .filter((item) => isFilingMonth(item.serviceBillingCycle, period) && !ticketedSet.has(item.itemId))
       .map((item) => ({
         bundleId: item.bundleId,
@@ -173,7 +179,15 @@ app.get('/generation-status', async (c) => {
         serviceId: item.serviceId,
         serviceName: item.serviceName,
         amount: item.amount != null ? Number(item.amount) : 0,
+        processorId: item.processorId,
       }));
+
+    // Split rather than filter, so the preview shows exactly what
+    // POST /generate-tickets would do: services that must have a standing
+    // assignee (see SERVICES_REQUIRING_PROCESSOR) are blocked, not created
+    // unassigned, and the caller is told which ones need a person first.
+    const blocked = due.filter((item) => requiresProcessor(item.serviceName) && !item.processorId);
+    const missing = due.filter((item) => !(requiresProcessor(item.serviceName) && !item.processorId));
 
     return c.json({
       success: true,
@@ -182,6 +196,8 @@ app.get('/generation-status', async (c) => {
         totalActiveItems: activeItems.length,
         missingCount: missing.length,
         missing,
+        blockedNeedingProcessorCount: blocked.length,
+        blockedNeedingProcessor: blocked,
       },
     });
   } catch (error) {
@@ -308,7 +324,7 @@ app.patch('/:id', async (c) => {
 app.post('/:id/items', async (c) => {
   try {
     const bundleId = c.req.param('id');
-    const { serviceId, amount, effectiveDate, notes } = await c.req.json();
+    const { serviceId, amount, effectiveDate, notes, processorId } = await c.req.json();
 
     if (!serviceId || amount == null) {
       return c.json({ success: false, error: 'Missing required fields: serviceId, amount' }, 400);
@@ -341,6 +357,10 @@ app.post('/:id/items', async (c) => {
       amount: String(amount),
       effectiveDate: effectiveDate || null,
       notes: notes || null,
+      // Standing assignee for the recurring work — required up front for
+      // services in SERVICES_REQUIRING_PROCESSOR, which otherwise can't
+      // generate a ticket at all.
+      processorId: processorId || null,
     });
 
     const updatedBundle = await loadBundleWithItems(bundleId);
@@ -356,7 +376,8 @@ app.post('/:id/items', async (c) => {
 
 /**
  * PATCH /api/corporate-billing-bundles/:id/items/:itemId
- * Edit a line item's amount/notes, or soft-remove it (status: 'removed').
+ * Edit a line item's amount/notes/standing processor, or soft-remove it
+ * (status: 'removed').
  * Removal is always soft — pipeline tickets and billing records may
  * reference a line item, and its billing history has standalone value.
  */
@@ -367,6 +388,9 @@ app.patch('/:id/items/:itemId', async (c) => {
     const values: Partial<typeof corporateBillingBundleItems.$inferInsert> = {};
     if (body.amount != null) values.amount = String(body.amount);
     if (body.notes !== undefined) values.notes = body.notes;
+    // Explicit null is meaningful here (clear the standing assignee), so this
+    // checks for undefined rather than falsiness.
+    if (body.processorId !== undefined) values.processorId = body.processorId;
     if (body.status !== undefined) {
       values.status = body.status;
       if (body.status === 'removed' && !body.endDate) {
@@ -435,19 +459,38 @@ app.post('/generate-tickets', async (c) => {
     let skipped = 0;
     let skippedCadence = 0;
     const createdTicketIds: string[] = [];
+    // Line items that are due but can't be ticketed until someone is assigned.
+    const blockedNeedingProcessor: { bundleItemId: string; corporationId: string | null; serviceName: string | null }[] =
+      [];
 
     for (const bundle of bundleRows) {
       const items = await db
-        .select({ item: corporateBillingBundleItems, serviceBillingCycle: servicesCorporate.billingCycle })
+        .select({
+          item: corporateBillingBundleItems,
+          serviceBillingCycle: servicesCorporate.billingCycle,
+          serviceName: servicesCorporate.name,
+        })
         .from(corporateBillingBundleItems)
         .leftJoin(servicesCorporate, eq(corporateBillingBundleItems.serviceId, servicesCorporate.id))
         .where(
           and(eq(corporateBillingBundleItems.bundleId, bundle.id), eq(corporateBillingBundleItems.status, 'active'))
         );
 
-      for (const { item, serviceBillingCycle } of items) {
+      for (const { item, serviceBillingCycle, serviceName } of items) {
         if (!isFilingMonth(serviceBillingCycle, period)) {
           skippedCadence++;
+          continue;
+        }
+
+        // Bookkeeping (and anything else in SERVICES_REQUIRING_PROCESSOR) must
+        // have its bookkeeper chosen before the ticket exists — creating it
+        // unassigned and sorting it out later is exactly what this prevents.
+        if (requiresProcessor(serviceName) && !item.processorId) {
+          blockedNeedingProcessor.push({
+            bundleItemId: item.id,
+            corporationId: bundle.corporationId,
+            serviceName,
+          });
           continue;
         }
 
@@ -475,7 +518,11 @@ app.post('/generate-tickets', async (c) => {
             status: 'Active',
             bundleItemId: item.id,
             billingPeriod: period,
-            notes: describeCoveredPeriod(serviceBillingCycle, period),
+            notes: describeCoveredPeriod(serviceBillingCycle, period, serviceName),
+            // Carried from the line item so recurring work keeps the same
+            // person period to period; null for services with no standing
+            // assignee, which are assigned afterwards as before.
+            processorId: item.processorId ?? null,
             dateAssigned: new Date().toISOString().split('T')[0],
           })
           .returning({ id: corporatePipelineTickets.id });
@@ -492,6 +539,8 @@ app.post('/generate-tickets', async (c) => {
         ticketsCreated: created,
         ticketsSkippedExisting: skipped,
         ticketsSkippedCadence: skippedCadence,
+        blockedNeedingProcessorCount: blockedNeedingProcessor.length,
+        blockedNeedingProcessor,
         createdTicketIds,
       },
     });

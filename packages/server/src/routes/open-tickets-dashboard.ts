@@ -28,7 +28,8 @@ const PERSONAL_TERMINAL_STATUSES = ['File Return', 'Filed Elsewhere'];
 // serviceName -> view, built from the same maps the pipeline dropdowns use.
 // Skips null-filter views (no single service, e.g. corporate's "Grid view")
 // and, for corporate, "Bookkeeping Billing" (an activeOnly variant of the
-// same serviceName as "Bookkeeping" — the dropdown only exposes "Bookkeeping").
+// same serviceName as the "Bookkeeping" view — the dropdown only exposes
+// "Bookkeeping", which selects the service "Bookkeeping Clients").
 function buildServiceToViewMap(
   filters: Record<string, { serviceName: string; activeOnly?: boolean } | null>,
   skipViews: string[] = []

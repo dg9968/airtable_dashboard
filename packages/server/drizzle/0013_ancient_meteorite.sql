@@ -1,0 +1,1 @@
+ALTER TABLE "corporate_billing_bundle_items" ADD COLUMN "processor_id" text;
