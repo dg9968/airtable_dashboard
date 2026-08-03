@@ -138,6 +138,71 @@ bun run packages/server/scripts/normalize-legacy-billing-statuses.ts --apply
 bun run packages/server/scripts/normalize-legacy-billing-statuses.ts --clear-amounts --apply  # also zero mistaken amounts
 ```
 
+### `backfill-bundle-accrual-items.ts`
+Reconciles `corporate_billing_bundles` against "Presupuesto para Airtable.xlsm",
+the budget workbook staff maintain by hand, in three independently selectable
+stages (`--stage=cadence,annual-report,tax-returns`, all by default):
+
+1. **cadence** — fixes `services_corporate.billing_cycle` values that make
+   ticket generation behave wrongly. `Annual Report` is `'One-time'`, for which
+   `isFilingMonth()` ([../src/lib/billing-cadence.ts](../src/lib/billing-cadence.ts))
+   returns false in *every* month, so its January ticket is never generated;
+   `1099 Filing` and `Registered Agent` are NULL, which defaults to Monthly and
+   would produce twelve tickets a year for annual work.
+2. **annual-report** — adds the missing $4.25/mo `Annual Report` line item to
+   25 bundles.
+3. **tax-returns** — adds the missing `Tax Returns` line item ($50/$70/$90 per
+   client) to 13 bundles.
+4. **sales-tax** — adds the missing `Sales Tax Monthly` (8 bundles) /
+   `Sales Tax Quarterly` (2 bundles) line item.
+
+Stages 2 and 3 add **accruals**: a bundle line item's amount is billed every
+month, while ticket generation is gated separately by the service's
+`billing_cycle`. An Annual-cadence line item means "the client pays toward this
+all year, and one ticket generates each January."
+
+Stage 1 is a hard prerequisite for stage 2 and the script enforces it — adding
+$4.25/mo while `Annual Report` is still `'One-time'` would bill 25 clients for
+work that could never be ticketed. Running stage 2 without stage 1 reports
+`BLOCKED` and writes nothing; running them together (the default) satisfies it,
+and a dry run previews the combined result.
+
+Sales tax is billed per filing, so the monthly accrual encodes the client's
+filing frequency: $540/yr → **$45.00/mo** is a monthly filer (12 × $45), $180/yr
+→ **$15.00/mo** is a quarterly filer (4 × $45). The workbook titles the column
+"Monthly Sales Tax" for both, which is what hid two quarterly filers (Hedman,
+Yoni) behind the monthly service — Yoni's bundle still carries a removed
+`Sales Tax Monthly` item. Stage 4 therefore picks the service from
+`sales_tax_certificates.frequency`, not from the column title, and multi-location
+clients (Autoclub, General Distributors — two certificates each) accrue
+certificate count × $45. Before writing, it re-derives both the count and the
+frequency from the live table and reports `NEEDS REVIEW` instead of writing if
+either contradicts the planned amount or service.
+
+The per-client lists are **hardcoded** in the script, like
+`consolidate-multilocation-corporations.ts`'s `PAIRS` — a one-time human-confirmed
+reconciliation against one version of a spreadsheet, not a repeatable check.
+Purely additive: only INSERTs line items and UPDATEs the service catalog's
+`billing_cycle`; never edits an existing amount, deletes, or touches tickets or
+`billing_records`. Every row is re-verified against live DB state before writing,
+so it's safe to re-run and safe after someone fixes some by hand — clients are
+skipped and reported if the bundle is no longer active, the item already exists,
+or the service was previously soft-removed from that bundle. Amount conflicts
+(NECESS-IT, Douglas Castellano, Integrity) are reported as `NEEDS REVIEW` and
+never written in either direction. Each stage runs in its own transaction and
+every inserted row id is printed, so the output doubles as a reversal record.
+
+After applying, generate the resulting tickets from the bundle screen or
+`POST /api/corporate-billing-bundles/generate-tickets` with `{ period: "YYYY-01" }`.
+
+```
+bun run packages/server/scripts/backfill-bundle-accrual-items.ts                          # dry run, all stages
+bun run packages/server/scripts/backfill-bundle-accrual-items.ts --apply
+bun run packages/server/scripts/backfill-bundle-accrual-items.ts --stage=cadence --apply
+bun run packages/server/scripts/backfill-bundle-accrual-items.ts --stage=tax-returns --apply
+bun run packages/server/scripts/backfill-bundle-accrual-items.ts --stage=sales-tax --apply
+```
+
 ### `reassign-tickets.ts`
 Reassigns the Processor on specific `corporate_pipeline_tickets` rows — e.g.
 filling in a freshly-recreated batch of tickets after a
