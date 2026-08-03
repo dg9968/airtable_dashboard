@@ -31,29 +31,18 @@ const nextConfig = {
     ],
   },
 
-  // Proxy API requests to Hono server (excluding NextAuth routes)
-  async rewrites() {
-    // In production, don't rewrite - both servers run and client uses NEXT_PUBLIC_API_URL
-    // In development, proxy to local Hono server
-    if (process.env.NODE_ENV === 'production') {
-      return [];
-    }
-
-    return [
-      {
-        source: '/api/personal/:path*',
-        destination: 'http://localhost:3001/api/personal/:path*',
-      },
-      {
-        source: '/api/services-personal/:path*',
-        destination: 'http://localhost:3001/api/services-personal/:path*',
-      },
-      {
-        source: '/api/subscriptions-personal/:path*',
-        destination: 'http://localhost:3001/api/subscriptions-personal/:path*',
-      },
-    ];
-  },
+  // No rewrites: /api/* is served by the route handlers under app/api/, which
+  // proxy to the Hono server and add the X-API-Key that require-auth expects.
+  //
+  // There used to be dev-only rewrites for /api/personal/*,
+  // /api/services-personal/* and /api/subscriptions-personal/* pointing
+  // straight at localhost:3001. Being `afterFiles`, they took precedence over
+  // those paths' dynamic [[...path]] route handlers, so in development the
+  // browser reached Hono directly with no API key while production went
+  // through the proxy — the same URL taking two different code paths, working
+  // in dev only because the session cookie satisfies require-auth's other
+  // accepted credential. The proxy routes cover every one of those paths in
+  // both environments, so the rewrites were redundant as well as divergent.
 };
 
 module.exports = nextConfig;
