@@ -30,6 +30,12 @@ interface QuickAction {
   stats?: string;
 }
 
+interface ToolSection {
+  title: string;
+  description: string;
+  actions: QuickAction[];
+}
+
 export default function ManageBusiness() {
   const { data: session } = authClient.useSession();
   const [stats, setStats] = useState<BusinessStats>({
@@ -91,98 +97,120 @@ export default function ManageBusiness() {
   // corroborate. Tiles whose page has no single headline number (the document
   // managers, which are per-client lookups) carry no pill rather than borrowing
   // an unrelated one.
-  const businessActions: QuickAction[] = [
+  //
+  // The tools are grouped into the three concepts this hub actually covers —
+  // documents, clients, operations — so a user always knows which kind of
+  // work a tile belongs to.
+  const toolSections: ToolSection[] = [
     {
-      title: 'Processor Billing',
-      description: 'View billing by processor, client revenue, and service breakdown',
-      href: '/processor-billing',
-      icon: '💰',
-      color: 'text-green-600',
-      bgColor: 'bg-green-50 hover:bg-green-100 border-green-200',
-      stats: `${stats.activeBookkeepingClients} bookkeeping clients`
+      title: 'Business Operations & Billing',
+      description: 'Revenue, pipelines, and workload across the practice',
+      actions: [
+        {
+          title: 'Processor Billing',
+          description: 'View billing by processor, client revenue, and service breakdown',
+          href: '/processor-billing',
+          icon: '💰',
+          color: 'text-green-600',
+          bgColor: 'bg-green-50 hover:bg-green-100 border-green-200',
+          stats: `${stats.activeBookkeepingClients} bookkeeping clients`
+        },
+        {
+          title: 'Customer Subscriptions',
+          description: 'Manage corporate clients\' recurring monthly billing bundles',
+          href: '/subscriptions',
+          icon: '📋',
+          color: 'text-blue-600',
+          bgColor: 'bg-blue-50 hover:bg-blue-100 border-blue-200',
+          stats: `${formatCurrency(stats.recurringMonthlyRevenue)}/mo recurring`
+        },
+        {
+          title: 'Billing Reconciliation',
+          description: 'Find work that was completed but never charged, priced, or collected',
+          href: '/billing-reconciliation',
+          icon: '🧾',
+          color: 'text-red-600',
+          bgColor: 'bg-red-50 hover:bg-red-100 border-red-200'
+        },
+        {
+          title: 'Open Tickets Dashboard',
+          description: 'See every service\'s open pipeline tickets and how long they\'ve been waiting',
+          href: '/open-tickets-dashboard',
+          icon: '📥',
+          color: 'text-rose-600',
+          bgColor: 'bg-rose-50 hover:bg-rose-100 border-rose-200'
+        },
+        {
+          title: 'Extension Follow-Ups',
+          description: 'Clients whose extension was filed — track the return before the extended deadline',
+          href: '/extension-followups',
+          icon: '⏳',
+          color: 'text-amber-600',
+          bgColor: 'bg-amber-50 hover:bg-amber-100 border-amber-200'
+        },
+        {
+          title: 'Team Workload',
+          description: 'See every open ticket grouped by who is responsible — and what nobody owns',
+          href: '/workload-dashboard',
+          icon: '👥',
+          color: 'text-indigo-600',
+          bgColor: 'bg-indigo-50 hover:bg-indigo-100 border-indigo-200'
+        }
+      ]
     },
     {
-      title: 'Customer Subscriptions',
-      description: 'Manage corporate clients\' recurring monthly billing bundles',
-      href: '/subscriptions',
-      icon: '📋',
-      color: 'text-blue-600',
-      bgColor: 'bg-blue-50 hover:bg-blue-100 border-blue-200',
-      stats: `${formatCurrency(stats.recurringMonthlyRevenue)}/mo recurring`
+      title: 'Document Management',
+      description: 'Store, browse, and process client files',
+      actions: [
+        {
+          title: 'Corporate Documents',
+          description: 'Manage business documents, financial statements, and tax returns',
+          href: '/corporate-document-management',
+          icon: '🏢',
+          color: 'text-purple-600',
+          bgColor: 'bg-purple-50 hover:bg-purple-100 border-purple-200'
+        },
+        {
+          title: 'Personal Documents',
+          description: 'Handle individual client tax documents and personal files',
+          href: '/document-management',
+          icon: '📄',
+          color: 'text-indigo-600',
+          bgColor: 'bg-indigo-50 hover:bg-indigo-100 border-indigo-200'
+        },
+        {
+          title: 'Bank Statements',
+          description: 'Convert bank statements to QuickBooks format',
+          href: '/bank-statement-processing',
+          icon: '🏦',
+          color: 'text-teal-600',
+          bgColor: 'bg-teal-50 hover:bg-teal-100 border-teal-200'
+        }
+      ]
     },
     {
-      title: 'Corporate Documents',
-      description: 'Manage business documents, financial statements, and tax returns',
-      href: '/corporate-document-management',
-      icon: '🏢',
-      color: 'text-purple-600',
-      bgColor: 'bg-purple-50 hover:bg-purple-100 border-purple-200'
-    },
-    {
-      title: 'Personal Documents',
-      description: 'Handle individual client tax documents and personal files',
-      href: '/document-management',
-      icon: '📄',
-      color: 'text-indigo-600',
-      bgColor: 'bg-indigo-50 hover:bg-indigo-100 border-indigo-200'
-    },
-    {
-      title: 'Personal Client Intake',
-      description: 'Onboard new individual tax clients and manage personal information',
-      href: '/client-intake',
-      icon: '👤',
-      color: 'text-orange-600',
-      bgColor: 'bg-orange-50 hover:bg-orange-100 border-orange-200',
-      stats: `${stats.personalClients} personal`
-    },
-    {
-      title: 'Corporate Client Intake',
-      description: 'Onboard new business clients and manage company representatives',
-      href: '/corporate-client-intake',
-      icon: '🏭',
-      color: 'text-cyan-600',
-      bgColor: 'bg-cyan-50 hover:bg-cyan-100 border-cyan-200',
-      stats: `${stats.corporateClients} corporate`
-    },
-    {
-      title: 'Bank Statements',
-      description: 'Convert bank statements to QuickBooks format',
-      href: '/bank-statement-processing',
-      icon: '🏦',
-      color: 'text-teal-600',
-      bgColor: 'bg-teal-50 hover:bg-teal-100 border-teal-200'
-    },
-    {
-      title: 'Open Tickets Dashboard',
-      description: 'See every service\'s open pipeline tickets and how long they\'ve been waiting',
-      href: '/open-tickets-dashboard',
-      icon: '📥',
-      color: 'text-rose-600',
-      bgColor: 'bg-rose-50 hover:bg-rose-100 border-rose-200'
-    },
-    {
-      title: 'Extension Follow-Ups',
-      description: 'Clients whose extension was filed — track the return before the extended deadline',
-      href: '/extension-followups',
-      icon: '⏳',
-      color: 'text-amber-600',
-      bgColor: 'bg-amber-50 hover:bg-amber-100 border-amber-200'
-    },
-    {
-      title: 'Billing Reconciliation',
-      description: 'Find work that was completed but never charged, priced, or collected',
-      href: '/billing-reconciliation',
-      icon: '🧾',
-      color: 'text-red-600',
-      bgColor: 'bg-red-50 hover:bg-red-100 border-red-200'
-    },
-    {
-      title: 'Team Workload',
-      description: 'See every open ticket grouped by who is responsible — and what nobody owns',
-      href: '/workload-dashboard',
-      icon: '👥',
-      color: 'text-indigo-600',
-      bgColor: 'bg-indigo-50 hover:bg-indigo-100 border-indigo-200'
+      title: 'Client Management',
+      description: 'Onboard new clients and maintain who you serve',
+      actions: [
+        {
+          title: 'Personal Client Intake',
+          description: 'Onboard new individual tax clients and manage personal information',
+          href: '/client-intake',
+          icon: '👤',
+          color: 'text-orange-600',
+          bgColor: 'bg-orange-50 hover:bg-orange-100 border-orange-200',
+          stats: `${stats.personalClients} personal`
+        },
+        {
+          title: 'Corporate Client Intake',
+          description: 'Onboard new business clients and manage company representatives',
+          href: '/corporate-client-intake',
+          icon: '🏭',
+          color: 'text-cyan-600',
+          bgColor: 'bg-cyan-50 hover:bg-cyan-100 border-cyan-200',
+          stats: `${stats.corporateClients} corporate`
+        }
+      ]
     }
   ];
 
@@ -282,51 +310,51 @@ export default function ManageBusiness() {
           </div>
         </div>
 
-        {/* Business Tools Grid */}
-        <div className="card bg-base-100 shadow-xl mb-8">
-          <div className="card-body">
-            <h2 className="card-title text-2xl mb-4">Business Tools</h2>
-            <p className="text-base-content/70 mb-6">
-              Quick access to all your business management tools and workflows
-            </p>
+        {/* Tool Sections — one card per concept: documents, clients, operations */}
+        {toolSections.map((section) => (
+          <div key={section.title} className="card bg-base-100 shadow-xl mb-8">
+            <div className="card-body">
+              <h2 className="card-title text-2xl mb-1">{section.title}</h2>
+              <p className="text-base-content/70 mb-6">{section.description}</p>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {businessActions.map((action, index) => (
-                <Link
-                  key={index}
-                  href={action.href}
-                  className={`group block p-6 rounded-xl border-2 transition-all duration-300 transform hover:scale-105 hover:shadow-xl ${action.bgColor}`}
-                >
-                  <div className="flex items-start space-x-4">
-                    <div className="text-4xl group-hover:scale-110 transition-transform duration-300">
-                      {action.icon}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {section.actions.map((action) => (
+                  <Link
+                    key={action.href}
+                    href={action.href}
+                    className={`group block p-6 rounded-xl border-2 transition-all duration-300 transform hover:scale-105 hover:shadow-xl ${action.bgColor}`}
+                  >
+                    <div className="flex items-start space-x-4">
+                      <div className="text-4xl group-hover:scale-110 transition-transform duration-300">
+                        {action.icon}
+                      </div>
+                      <div className="flex-1">
+                        <h3 className={`font-bold text-lg ${action.color} group-hover:opacity-80 transition-colors duration-300`}>
+                          {action.title}
+                        </h3>
+                        <p className="text-sm text-gray-600 mt-2 leading-relaxed">
+                          {action.description}
+                        </p>
+                        {action.stats && (
+                          <div className="mt-3">
+                            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-white shadow-sm border">
+                              {action.stats}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                      <div className={`${action.color} opacity-0 group-hover:opacity-100 transition-opacity duration-300`}>
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </div>
                     </div>
-                    <div className="flex-1">
-                      <h3 className={`font-bold text-lg ${action.color} group-hover:opacity-80 transition-colors duration-300`}>
-                        {action.title}
-                      </h3>
-                      <p className="text-sm text-gray-600 mt-2 leading-relaxed">
-                        {action.description}
-                      </p>
-                      {action.stats && (
-                        <div className="mt-3">
-                          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-white shadow-sm border">
-                            {action.stats}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                    <div className={`${action.color} opacity-0 group-hover:opacity-100 transition-opacity duration-300`}>
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
-                    </div>
-                  </div>
-                </Link>
-              ))}
+                  </Link>
+                ))}
+              </div>
             </div>
           </div>
-        </div>
+        ))}
 
         {/* Quick Stats Overview */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
