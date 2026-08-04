@@ -33,7 +33,11 @@
       "Bash(curl -s -X PATCH http://localhost:3001/api/extensions/7207df94-52b7-48bb-a4c3-528fb99acff9 -H 'Content-Type: application/json' -d '{\"fields\":{\"Extension Status\":\"Filed\"}}')",
       "Bash(curl -s -X PATCH http://localhost:3001/api/extensions-personal/d252c561-00cc-4030-b463-f090f2ef48e5 -H 'Content-Type: application/json' -d '{\"fields\":{\"Extension Status\":\"Filed\",\"Extension Filed Date\":\"2026-03-15\"}}')",
       "Bash(curl -s \"http://localhost:3001/api/extension-followups\")",
-      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\)['data']; print\\('corporate:', len\\(d['corporate']\\)\\); print\\('personal:', len\\(d['personal']\\)\\); print\\('sample corp:', d['corporate'][0]\\); print\\('sample personal:', d['personal'][0]\\)\")"
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\)['data']; print\\('corporate:', len\\(d['corporate']\\)\\); print\\('personal:', len\\(d['personal']\\)\\); print\\('sample corp:', d['corporate'][0]\\); print\\('sample personal:', d['personal'][0]\\)\")",
+      "Bash(grep -rn \"billingRecords\\)\\\\s*$\\\\|update\\(billingRecords\\\\|\\\\.set\\(\" billing-notes.ts service-completion.ts)",
+      "Bash(bun -e ' *)",
+      "Bash(pkill -f \"bun run dev\")",
+      "Bash(pkill -f \"bun.*index.ts\")"
     ],
     "additionalDirectories": [
       "c:\\Users\\danie\\Documents\\airtable-dashboard\\packages\\client\\app\\api\\auth\\[...nextauth]",

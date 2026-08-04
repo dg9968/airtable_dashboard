@@ -36,6 +36,46 @@ interface ToolSection {
   actions: QuickAction[];
 }
 
+type ActivityEvent =
+  | {
+      type: 'new_client';
+      id: string;
+      timestamp: string;
+      clientName: string;
+      clientType: 'corporate' | 'personal';
+    }
+  | {
+      type: 'work_completed';
+      id: string;
+      timestamp: string;
+      clientName: string | null;
+      serviceType: string | null;
+      billingStatus: string | null;
+      amountCharged: number | null;
+    }
+  | {
+      type: 'payment_received';
+      id: string;
+      timestamp: string;
+      clientName: string | null;
+      amountCharged: number | null;
+    };
+
+function formatRelativeTime(timestamp: string) {
+  const date = new Date(timestamp);
+  const diffMs = Date.now() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays < 7) return `${diffDays}d ago`;
+
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
 export default function ManageBusiness() {
   const { data: session } = authClient.useSession();
   const [stats, setStats] = useState<BusinessStats>({
@@ -49,10 +89,31 @@ export default function ManageBusiness() {
     activeBookkeepingClients: 0
   });
   const [loading, setLoading] = useState(true);
+  const [activity, setActivity] = useState<ActivityEvent[]>([]);
+  const [activityLoading, setActivityLoading] = useState(true);
 
   useEffect(() => {
     loadBusinessData();
+    loadRecentActivity();
   }, []);
+
+  const loadRecentActivity = async () => {
+    try {
+      setActivityLoading(true);
+      const response = await fetch('/api/recent-activity');
+      const result = await response.json();
+
+      if (result.success && result.data) {
+        setActivity(result.data.events || []);
+      } else {
+        console.error('Failed to load recent activity:', result.error);
+      }
+    } catch (error) {
+      console.error('Error loading recent activity:', error);
+    } finally {
+      setActivityLoading(false);
+    }
+  };
 
   const loadBusinessData = async () => {
     try {
@@ -214,6 +275,39 @@ export default function ManageBusiness() {
     }
   ];
 
+  // Every event here is backed by a real created_at/receipt_date — there's no
+  // updated_at on any business table to draw on, so this can't show status
+  // transitions, only the three moments a timestamp actually proves happened.
+  const describeActivity = (event: ActivityEvent) => {
+    switch (event.type) {
+      case 'new_client':
+        return {
+          icon: '💼',
+          avatarClass: 'bg-primary text-primary-content',
+          title: event.clientType === 'corporate' ? 'New corporate client onboarded' : 'New personal client onboarded',
+          subtitle: event.clientName,
+        };
+      case 'work_completed':
+        return {
+          icon: '✓',
+          avatarClass: 'bg-success text-success-content',
+          title: `${event.serviceType || 'Service'} completed`,
+          subtitle: [event.clientName, event.amountCharged !== null ? formatCurrency(event.amountCharged) : null]
+            .filter(Boolean)
+            .join(' — ') || 'No client on file',
+        };
+      case 'payment_received':
+        return {
+          icon: '💵',
+          avatarClass: 'bg-accent text-accent-content',
+          title: 'Payment received',
+          subtitle: [event.clientName, event.amountCharged !== null ? formatCurrency(event.amountCharged) : null]
+            .filter(Boolean)
+            .join(' — ') || 'No client on file',
+        };
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-base-200 flex items-center justify-center">
@@ -240,7 +334,7 @@ export default function ManageBusiness() {
               </p>
             </div>
             <button
-              onClick={loadBusinessData}
+              onClick={() => { loadBusinessData(); loadRecentActivity(); }}
               className="btn btn-primary btn-sm"
             >
               <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -362,43 +456,34 @@ export default function ManageBusiness() {
           <div className="card bg-base-100 shadow-xl">
             <div className="card-body">
               <h3 className="card-title">Recent Business Activity</h3>
-              <div className="space-y-3 mt-4">
-                <div className="flex items-center space-x-3 p-3 bg-base-200 rounded-lg">
-                  <div className="avatar placeholder">
-                    <div className="bg-primary text-primary-content rounded-full w-10">
-                      <span className="text-xs">💼</span>
-                    </div>
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-medium text-sm">New corporate client onboarded</p>
-                    <p className="text-xs text-base-content/60">ABC Corporation - 2 hours ago</p>
-                  </div>
+              {activityLoading ? (
+                <div className="flex justify-center py-8">
+                  <span className="loading loading-spinner loading-md"></span>
                 </div>
-
-                <div className="flex items-center space-x-3 p-3 bg-base-200 rounded-lg">
-                  <div className="avatar placeholder">
-                    <div className="bg-success text-success-content rounded-full w-10">
-                      <span className="text-xs">✓</span>
-                    </div>
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-medium text-sm">Tax return completed</p>
-                    <p className="text-xs text-base-content/60">Smith Industries - 5 hours ago</p>
-                  </div>
+              ) : activity.length === 0 ? (
+                <p className="text-sm text-base-content/60 mt-4">No recent activity to show.</p>
+              ) : (
+                <div className="space-y-3 mt-4">
+                  {activity.map((event) => {
+                    const { icon, avatarClass, title, subtitle } = describeActivity(event);
+                    return (
+                      <div key={`${event.type}-${event.id}`} className="flex items-center space-x-3 p-3 bg-base-200 rounded-lg">
+                        <div className="avatar placeholder">
+                          <div className={`${avatarClass} rounded-full w-10`}>
+                            <span className="text-xs">{icon}</span>
+                          </div>
+                        </div>
+                        <div className="flex-1">
+                          <p className="font-medium text-sm">{title}</p>
+                          <p className="text-xs text-base-content/60">
+                            {subtitle} - {formatRelativeTime(event.timestamp)}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-
-                <div className="flex items-center space-x-3 p-3 bg-base-200 rounded-lg">
-                  <div className="avatar placeholder">
-                    <div className="bg-warning text-warning-content rounded-full w-10">
-                      <span className="text-xs">📄</span>
-                    </div>
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-medium text-sm">Documents uploaded</p>
-                    <p className="text-xs text-base-content/60">15 new files - Today</p>
-                  </div>
-                </div>
-              </div>
+              )}
             </div>
           </div>
 
