@@ -8,10 +8,16 @@ interface BusinessStats {
   totalClients: number;
   corporateClients: number;
   personalClients: number;
-  monthlyRevenue: number;
+  /** Contracted recurring billing: sum of active bundle line items. */
+  recurringMonthlyRevenue: number;
+  /** Cash actually received this month (billing_records 'Billed - Paid'). */
+  revenueCollectedThisMonth: number;
+  /** How many payments made up that figure — not how much work was finished. */
+  paymentsThisMonth: number;
+  /** Distinct staff holding at least one open pipeline ticket. */
   activeProcessors: number;
-  tasksCompletedThisMonth: number;
-  monthlyTaskRevenue: number;
+  /** Active 'Bookkeeping Clients' tickets — the rows /processor-billing lists. */
+  activeBookkeepingClients: number;
 }
 
 interface QuickAction {
@@ -30,10 +36,11 @@ export default function ManageBusiness() {
     totalClients: 0,
     corporateClients: 0,
     personalClients: 0,
-    monthlyRevenue: 0,
+    recurringMonthlyRevenue: 0,
+    revenueCollectedThisMonth: 0,
+    paymentsThisMonth: 0,
     activeProcessors: 0,
-    tasksCompletedThisMonth: 0,
-    monthlyTaskRevenue: 0
+    activeBookkeepingClients: 0
   });
   const [loading, setLoading] = useState(true);
 
@@ -45,7 +52,6 @@ export default function ManageBusiness() {
     try {
       setLoading(true);
 
-      // Fetch real business stats from Airtable
       const response = await fetch('/api/business-stats');
       const result = await response.json();
 
@@ -54,10 +60,11 @@ export default function ManageBusiness() {
           totalClients: result.data.totalClients || 0,
           corporateClients: result.data.corporateClients || 0,
           personalClients: result.data.personalClients || 0,
-          monthlyRevenue: result.data.monthlyRevenue || 0,
+          recurringMonthlyRevenue: result.data.recurringMonthlyRevenue || 0,
+          revenueCollectedThisMonth: result.data.revenueCollectedThisMonth || 0,
+          paymentsThisMonth: result.data.paymentsThisMonth || 0,
           activeProcessors: result.data.activeProcessors || 0,
-          tasksCompletedThisMonth: result.data.tasksCompletedThisMonth || 0,
-          monthlyTaskRevenue: result.data.monthlyTaskRevenue || 0
+          activeBookkeepingClients: result.data.activeBookkeepingClients || 0
         });
       } else {
         console.error('Failed to load business stats:', result.error);
@@ -71,6 +78,19 @@ export default function ManageBusiness() {
     }
   };
 
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(amount);
+  };
+
+  // Every `stats` pill below must be a figure the linked page can actually
+  // corroborate. Tiles whose page has no single headline number (the document
+  // managers, which are per-client lookups) carry no pill rather than borrowing
+  // an unrelated one.
   const businessActions: QuickAction[] = [
     {
       title: 'Processor Billing',
@@ -79,7 +99,7 @@ export default function ManageBusiness() {
       icon: '💰',
       color: 'text-green-600',
       bgColor: 'bg-green-50 hover:bg-green-100 border-green-200',
-      stats: `$${stats.monthlyRevenue.toLocaleString()}/mo`
+      stats: `${stats.activeBookkeepingClients} bookkeeping clients`
     },
     {
       title: 'Customer Subscriptions',
@@ -88,7 +108,7 @@ export default function ManageBusiness() {
       icon: '📋',
       color: 'text-blue-600',
       bgColor: 'bg-blue-50 hover:bg-blue-100 border-blue-200',
-      stats: `$${stats.monthlyRevenue.toLocaleString()}/mo`
+      stats: `${formatCurrency(stats.recurringMonthlyRevenue)}/mo recurring`
     },
     {
       title: 'Corporate Documents',
@@ -96,8 +116,7 @@ export default function ManageBusiness() {
       href: '/corporate-document-management',
       icon: '🏢',
       color: 'text-purple-600',
-      bgColor: 'bg-purple-50 hover:bg-purple-100 border-purple-200',
-      stats: `${stats.corporateClients} businesses`
+      bgColor: 'bg-purple-50 hover:bg-purple-100 border-purple-200'
     },
     {
       title: 'Personal Documents',
@@ -105,8 +124,7 @@ export default function ManageBusiness() {
       href: '/document-management',
       icon: '📄',
       color: 'text-indigo-600',
-      bgColor: 'bg-indigo-50 hover:bg-indigo-100 border-indigo-200',
-      stats: `${stats.tasksCompletedThisMonth} completed`
+      bgColor: 'bg-indigo-50 hover:bg-indigo-100 border-indigo-200'
     },
     {
       title: 'Personal Client Intake',
@@ -167,15 +185,6 @@ export default function ManageBusiness() {
       bgColor: 'bg-indigo-50 hover:bg-indigo-100 border-indigo-200'
     }
   ];
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
 
   if (loading) {
     return (
@@ -238,9 +247,9 @@ export default function ManageBusiness() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>
-              <div className="stat-title">Monthly Revenue</div>
-              <div className="stat-value text-secondary">{formatCurrency(stats.monthlyRevenue)}</div>
-              <div className="stat-desc">Recurring monthly billing</div>
+              <div className="stat-title">Recurring Revenue</div>
+              <div className="stat-value text-secondary">{formatCurrency(stats.recurringMonthlyRevenue)}</div>
+              <div className="stat-desc">Contracted per month, all active bundles</div>
             </div>
           </div>
 
@@ -253,7 +262,7 @@ export default function ManageBusiness() {
               </div>
               <div className="stat-title">Active Processors</div>
               <div className="stat-value text-accent">{stats.activeProcessors}</div>
-              <div className="stat-desc">Staff members handling work</div>
+              <div className="stat-desc">Staff with at least one open ticket</div>
             </div>
           </div>
 
@@ -261,12 +270,14 @@ export default function ManageBusiness() {
             <div className="stat">
               <div className="stat-figure text-success">
                 <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
                 </svg>
               </div>
-              <div className="stat-title">Tasks Completed</div>
-              <div className="stat-value text-success">{stats.tasksCompletedThisMonth}</div>
-              <div className="stat-desc">{formatCurrency(stats.monthlyTaskRevenue)} this month</div>
+              <div className="stat-title">Collected This Month</div>
+              <div className="stat-value text-success">{formatCurrency(stats.revenueCollectedThisMonth)}</div>
+              <div className="stat-desc">
+                {stats.paymentsThisMonth} payment{stats.paymentsThisMonth === 1 ? '' : 's'} received
+              </div>
             </div>
           </div>
         </div>

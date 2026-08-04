@@ -108,7 +108,7 @@ client/
 │   ├── api/
 │   │   └── auth/              ← NextAuth routes (local)
 │   ├── dashboard/             ← Pages
-│   ├── airtable-dashboard/
+│   ├── business-management/
 │   ├── bank-statement-processing/
 │   ├── layout.tsx
 │   └── page.tsx

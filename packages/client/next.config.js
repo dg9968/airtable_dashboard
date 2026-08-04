@@ -31,6 +31,19 @@ const nextConfig = {
     ],
   },
 
+  // /airtable-dashboard was renamed to /business-management (the Airtable
+  // backend it was named after was replaced by Postgres in 2026). Kept as a
+  // permanent redirect so existing bookmarks still land somewhere.
+  async redirects() {
+    return [
+      {
+        source: '/airtable-dashboard',
+        destination: '/business-management',
+        permanent: true,
+      },
+    ];
+  },
+
   // No rewrites: /api/* is served by the route handlers under app/api/, which
   // proxy to the Hono server and add the X-API-Key that require-auth expects.
   //

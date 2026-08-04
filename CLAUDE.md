@@ -62,7 +62,7 @@ packages/
 - `/` - Public home page
 - `/dashboard` - Main authenticated dashboard
 - `/admin` - Admin-only section
-- `/airtable-dashboard`, `/document-management` - Staff/Admin only (name is historical; data is Postgres)
+- `/business-management`, `/document-management` - Staff/Admin only (`/business-management` was `/airtable-dashboard` until the rename; `next.config.js` keeps a permanent redirect)
 - `/training-videos` - Public access
 - API routes in `/api/` for backend operations
 

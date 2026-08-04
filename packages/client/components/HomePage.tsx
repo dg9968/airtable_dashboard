@@ -180,11 +180,11 @@ export default function HomePage() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              <Link href="/airtable-dashboard" className="card bg-base-100 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105">
+              <Link href="/business-management" className="card bg-base-100 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105">
                 <div className="card-body items-center text-center">
                   <div className="text-5xl mb-4">📊</div>
-                  <h3 className="card-title text-xl mb-2">Airtable Dashboard</h3>
-                  <p className="text-sm opacity-70">Database overview and analytics</p>
+                  <h3 className="card-title text-xl mb-2">Business Management</h3>
+                  <p className="text-sm opacity-70">Business overview and analytics</p>
                 </div>
               </Link>
 

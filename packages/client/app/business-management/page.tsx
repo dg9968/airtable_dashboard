@@ -3,7 +3,7 @@
 import { useRequireRole } from '@/hooks/useAuth';
 import ManageBusiness from '@/components/ManageBusiness';
 
-export default function AirtableDashboardPage() {
+export default function BusinessManagementPage() {
   const { session, isPending } = useRequireRole(['staff', 'admin']);
 
   if (isPending) {

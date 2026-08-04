@@ -38,7 +38,7 @@ export default function Header() {
             {session && (
               <>
                 <li>
-                  <Link href="/airtable-dashboard">Manage Business</Link>
+                  <Link href="/business-management">Business Management</Link>
                 </li>
                 <li>
                   <Link href="/team-directory">Team Directory</Link>
@@ -97,8 +97,8 @@ export default function Header() {
           {session && (
             <>
               <li>
-                <Link href="/airtable-dashboard" className="btn btn-ghost">
-                  Manage Business
+                <Link href="/business-management" className="btn btn-ghost">
+                  Business Management
                 </Link>
               </li>
               <li>

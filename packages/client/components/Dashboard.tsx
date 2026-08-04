@@ -129,9 +129,9 @@ export default function Dashboard() {
   const getQuickActions = (): QuickAction[] => {
     const baseActions: QuickAction[] = [
       {
-        title: "Airtable Dashboard",
-        description: "View client data and database statistics",
-        href: "/airtable-dashboard",
+        title: "Business Management",
+        description: "View client data and business statistics",
+        href: "/business-management",
         icon: "📊",
         color: "text-blue-600",
         bgColor: "bg-blue-50 hover:bg-blue-100 border-blue-200"

@@ -32,7 +32,7 @@ export default function Footer({ className = '' }: FooterProps) {
 
           {/* Quick Links */}
           <div className="flex flex-wrap items-center justify-center gap-6 text-sm">
-            <a href="/airtable-dashboard" className="link link-hover opacity-70">
+            <a href="/business-management" className="link link-hover opacity-70">
               Dashboard
             </a>
             <a href="/processor-billing" className="link link-hover opacity-70">
