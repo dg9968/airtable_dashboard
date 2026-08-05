@@ -82,7 +82,7 @@ const ANNUAL_NOTE_BY_SERVICE: Record<string, (year: number) => string> = {
   // Billed monthly all year; the once-a-year ticket is to renegotiate terms,
   // not to file anything.
   'Vault Management': (year) => `Annual contract review for ${year}`,
-  'Quickbooks Software': (year) => `Annual contract review for ${year}`,
+  'QuickBooks Online': (year) => `Annual contract review for ${year}`,
   'PO Box - 1414': (year) => `Annual contract review for ${year}`,
 };
 

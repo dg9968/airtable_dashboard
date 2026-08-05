@@ -4,6 +4,7 @@ const PROTECTED_PREFIXES = [
   '/admin',
   '/business-management',
   '/document-management',
+  '/services-catalog',
 ]
 
 // Better Auth sets one of these two cookie names depending on whether the
@@ -32,5 +33,6 @@ export const config = {
     '/admin/:path*',
     '/business-management/:path*',
     '/document-management/:path*',
+    '/services-catalog/:path*',
   ],
 }

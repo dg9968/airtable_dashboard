@@ -3,7 +3,7 @@
  */
 
 import { Hono } from 'hono';
-import { asc } from 'drizzle-orm';
+import { asc, eq } from 'drizzle-orm';
 import { getDb } from '../db/client';
 import { personalServices } from '../db/schema';
 
@@ -18,6 +18,7 @@ app.get('/', async (c) => {
     const rows = await getDb()
       .select()
       .from(personalServices)
+      .where(eq(personalServices.status, 'Active'))
       .orderBy(asc(personalServices.createdAt));
 
     const services = rows.map((row) => ({

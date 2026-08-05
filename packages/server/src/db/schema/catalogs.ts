@@ -2,9 +2,19 @@ import { pgTable, text, integer, numeric, index } from 'drizzle-orm/pg-core';
 import { id, createdAt } from './helpers';
 
 // Airtable "Personal Services" — service catalog for individual clients.
+// Deliberately minimal compared to servicesCorporate: personal clients are
+// billed per-service via billing_records, never bundled/recurring, so there's
+// no price/billing-cycle concept here — see the comment on
+// corporate_billing_bundle_items in subscriptions.ts.
 export const personalServices = pgTable('personal_services', {
   id: id(),
   name: text('name').notNull(),
+  description: text('description'),
+  category: text('category'),
+  // Managed via /api/services-catalog/personal. Archive only, never a hard
+  // delete — services.ts/services-personal.ts/services-cached.ts all filter
+  // to 'Active' for their dropdown consumers.
+  status: text('status').notNull().default('Active'),
   createdAt: createdAt(),
 });
 
@@ -16,6 +26,15 @@ export const servicesCorporate = pgTable('services_corporate', {
   description: text('description'),
   category: text('category'),
   billingCycle: text('billing_cycle'),
+  // Wholesale cost the firm pays a third party per period (e.g. Intuit for
+  // QuickBooks Online) — distinct from `price`, which is what the client pays.
+  vendorCost: numeric('vendor_cost', { precision: 10, scale: 2 }),
+  vendorName: text('vendor_name'),
+  // Managed via /api/services-catalog/corporate. Archive only, never a hard
+  // delete — corporate_billing_bundle_items.service_id is ON DELETE RESTRICT
+  // and bundle items are soft-deleted, so the DB already permanently blocks
+  // hard-deleting a service that's ever been bundled.
+  status: text('status').notNull().default('Active'),
   createdAt: createdAt(),
 });
 

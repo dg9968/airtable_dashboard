@@ -216,6 +216,14 @@ export default function ManageBusiness() {
           icon: '👥',
           color: 'text-indigo-600',
           bgColor: 'bg-indigo-50 hover:bg-indigo-100 border-indigo-200'
+        },
+        {
+          title: 'Services Catalog',
+          description: 'Manage corporate and personal service offerings, pricing, and vendor costs',
+          href: '/services-catalog',
+          icon: '🗂️',
+          color: 'text-lime-600',
+          bgColor: 'bg-lime-50 hover:bg-lime-100 border-lime-200'
         }
       ]
     },

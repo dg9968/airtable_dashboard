@@ -3,7 +3,7 @@
  */
 
 import { Hono } from 'hono';
-import { asc } from 'drizzle-orm';
+import { asc, eq } from 'drizzle-orm';
 import { getDb } from '../db/client';
 import { servicesCorporate } from '../db/schema';
 import { requiresProcessor } from '../lib/billing-cadence';
@@ -38,6 +38,7 @@ app.get('/', async (c) => {
     const rows = await getDb()
       .select()
       .from(servicesCorporate)
+      .where(eq(servicesCorporate.status, 'Active'))
       .orderBy(asc(servicesCorporate.createdAt));
 
     const services = rows.map((row) => ({
@@ -76,13 +77,20 @@ app.get('/', async (c) => {
   }
 });
 
+// Shared with services-catalog.ts, which calls this after every corporate
+// mutation so an edit is reflected immediately instead of waiting out
+// CACHE_DURATION.
+export function clearServicesCache(): void {
+  servicesCache = null;
+  cacheTimestamp = 0;
+}
+
 /**
  * DELETE /api/services-cached
  * Clear the services cache
  */
 app.delete('/', async (c) => {
-  servicesCache = null;
-  cacheTimestamp = 0;
+  clearServicesCache();
 
   return c.json({
     success: true,
